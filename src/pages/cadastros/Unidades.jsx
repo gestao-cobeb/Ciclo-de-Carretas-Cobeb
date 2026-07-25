@@ -35,6 +35,7 @@ export default function Unidades() {
   // campos do formulário
   const [nome,         setNome]         = useState('')
   const [tipo,         setTipo]         = useState('revenda')
+  const [cidade,       setCidade]       = useState('')
   const [endereco,     setEndereco]     = useState('')
   const [latitude,     setLatitude]     = useState('')
   const [longitude,    setLongitude]    = useState('')
@@ -59,14 +60,14 @@ export default function Unidades() {
 
   function abrirNovo() {
     setEditando(null)
-    setNome(''); setTipo('revenda'); setEndereco(''); setLatitude(''); setLongitude('')
+    setNome(''); setTipo('revenda'); setCidade(''); setEndereco(''); setLatitude(''); setLongitude('')
     setRaioGeofence('100'); setCodigoAmbev(''); setErro('')
     setModal(true)
   }
 
   function abrirEditar(u) {
     setEditando(u)
-    setNome(u.nome); setTipo(u.tipo); setEndereco(u.endereco ?? '')
+    setNome(u.nome); setTipo(u.tipo); setCidade(u.cidade ?? ''); setEndereco(u.endereco ?? '')
     setLatitude(u.latitude != null ? String(u.latitude) : '')
     setLongitude(u.longitude != null ? String(u.longitude) : '')
     setRaioGeofence(String(u.raio_geofence ?? 100))
@@ -98,6 +99,7 @@ export default function Unidades() {
     const payload = {
       nome:          nome.trim(),
       tipo,
+      cidade:        cidade.trim(),
       endereco:      endereco.trim() || null,
       latitude:      latitude  !== '' ? parseFloat(latitude)  : null,
       longitude:     longitude !== '' ? parseFloat(longitude) : null,
@@ -215,6 +217,11 @@ export default function Unidades() {
                 <option value="fabrica">Fábrica</option>
               </select>
               {editando && <p className="text-slate-400 text-xs mt-1">O tipo não pode ser alterado após criação.</p>}
+            </Field>
+
+            <Field label="Cidade" required>
+              <input type="text" value={cidade} onChange={e => setCidade(e.target.value)}
+                required placeholder="Ex: PARÁ DE MINAS" className={inputClass} />
             </Field>
 
             <Field label="Endereço">
