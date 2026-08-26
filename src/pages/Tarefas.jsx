@@ -8,6 +8,8 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import EmissaoNRI from './EmissaoNRI'
 
+const uid = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const STATUS_CFG = {
@@ -244,54 +246,58 @@ export default function Tarefas() {
 
   async function abrirNRI(tarefa) {
     setAbrindoNRI(tarefa.id)
+    try {
+      const nriViagemId = tarefa.viagem?.id ?? tarefa.viagem_id
+      const [{ data: peds }, { data: itens }, { data: anos }] = await Promise.all([
+        supabase.from('pedidos').select('*').eq('viagem_id', nriViagemId).order('descricao'),
+        supabase.from('conferencia_itens')
+          .select('pedido_id, qtde_recebida, data_validade')
+          .eq('tarefa_id', tarefa.id)
+          .gt('qtde_recebida', 0),
+        supabase.from('anomalias')
+          .select('pedido_id')
+          .eq('tarefa_id', tarefa.id)
+          .not('pedido_id', 'is', null),
+      ])
 
-    const nriViagemId = tarefa.viagem?.id ?? tarefa.viagem_id
-    const [{ data: peds }, { data: itens }, { data: anos }] = await Promise.all([
-      supabase.from('pedidos').select('*').eq('viagem_id', nriViagemId).order('descricao'),
-      supabase.from('conferencia_itens')
-        .select('pedido_id, qtde_recebida, data_validade')
-        .eq('tarefa_id', tarefa.id)
-        .gt('qtde_recebida', 0),
-      supabase.from('anomalias')
-        .select('pedido_id')
-        .eq('tarefa_id', tarefa.id)
-        .not('pedido_id', 'is', null),
-    ])
+      const pedidos = peds ?? []
+      setPedidos(pedidos)
 
-    const pedidos = peds ?? []
-    setPedidos(pedidos)
+      const pedidoMap   = {}
+      pedidos.forEach(p => { pedidoMap[p.id] = p })
+      const comAnomalia = new Set((anos ?? []).map(a => a.pedido_id))
 
-    // Monta grupos pré-preenchidos excluindo produtos com anomalia
-    const pedidoMap        = {}
-    pedidos.forEach(p => { pedidoMap[p.id] = p })
-    const comAnomalia      = new Set((anos ?? []).map(a => a.pedido_id))
+      const gruposIniciais = (itens ?? [])
+        .filter(it => !comAnomalia.has(it.pedido_id) && pedidoMap[it.pedido_id])
+        .map(it => {
+          const p        = pedidoMap[it.pedido_id]
+          const cxPallet = (p.qtde_pallets > 0) ? p.qtde_skus / p.qtde_pallets : null
+          const qtd      = Number(it.qtde_recebida)
+          return {
+            _id:          uid(),
+            codigo:       p.cod_produto,
+            descricao:    p.descricao,
+            cxPallet,
+            qtdePaletes:  String(qtd),
+            qtdeCaixas:   cxPallet && qtd ? Math.round(qtd * cxPallet) : null,
+            dataValidade: it.data_validade ?? '',
+            curva:        p.curva ?? null,
+            buscando:     false,
+            erroCodigo:   null,
+            erroQtd:      false,
+            erroData:     false,
+          }
+        })
 
-    const gruposIniciais = (itens ?? [])
-      .filter(it => !comAnomalia.has(it.pedido_id) && pedidoMap[it.pedido_id])
-      .map(it => {
-        const p       = pedidoMap[it.pedido_id]
-        const cxPallet = (p.qtde_pallets > 0) ? p.qtde_skus / p.qtde_pallets : null
-        const qtd      = Number(it.qtde_recebida)
-        return {
-          _id:          crypto.randomUUID(),
-          codigo:       p.cod_produto,
-          descricao:    p.descricao,
-          cxPallet,
-          qtdePaletes:  String(qtd),
-          qtdeCaixas:   cxPallet && qtd ? Math.round(qtd * cxPallet) : null,
-          dataValidade: it.data_validade ?? '',
-          curva:        p.curva ?? null,
-          buscando:     false,
-          erroCodigo:   null,
-          erroQtd:      false,
-          erroData:     false,
-        }
-      })
-
-    setGruposNRI(gruposIniciais)
-    setTarefaSel(tarefa)
-    setAbrindoNRI(null)
-    setView('nri')
+      setGruposNRI(gruposIniciais)
+      setTarefaSel(tarefa)
+      setView('nri')
+    } catch (err) {
+      console.error('[abrirNRI] Erro ao carregar dados:', err)
+      alert('Erro ao abrir NRI. Tente novamente.')
+    } finally {
+      setAbrindoNRI(null)
+    }
   }
 
   async function abrirNRIMarketplace(tarefa) {
@@ -333,7 +339,7 @@ export default function Tarefas() {
       pedido_id:           '',
       descricao:           '',
       lote:                '',
-      folderKey:           crypto.randomUUID(),
+      folderKey:           uid(),
       fotos:               [null, null, null, null],
       fotosUrls:           [null, null, null, null],
       uploading:           [false, false, false, false],

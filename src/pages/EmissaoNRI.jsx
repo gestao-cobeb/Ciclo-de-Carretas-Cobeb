@@ -9,9 +9,11 @@ function fmt4Y(iso) {
   return `${d}/${m}/${y}`
 }
 
+const uid = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
+
 function newGrupo() {
   return {
-    _id:          crypto.randomUUID(),
+    _id:          uid(),
     codigo:       '',
     descricao:    null,
     cxPallet:     null,
