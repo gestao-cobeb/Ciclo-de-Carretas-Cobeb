@@ -1,0 +1,22 @@
+# Reconstruído dentro da imagem pelo `npm ci`.
+node_modules/
+
+# O app Android (Capacitor) não entra na imagem web: ele é construído pelo
+# workflow build-apk.yml e distribuído como APK.
+android/
+
+# Saída de build anterior -- a imagem gera a sua.
+dist/
+
+# Segredo. As chaves entram como build args (ver docker-compose.yml), nunca
+# copiadas para dentro da imagem.
+.env
+.env.local
+.env.*.local
+
+.git
+.github
+.vscode
+
+# Só o build web entra; a montagem do banco é feita no Supabase Studio.
+sql/

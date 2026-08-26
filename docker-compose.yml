@@ -1,0 +1,77 @@
+# COBEB Ciclo de Carretas (React) na VM da Cobeb (172.16.3.247), ao lado dos
+# outros sistemas.
+#
+# UM serviço só: o app é estático (HTML/JS/CSS) servido por nginx. O banco é o
+# Supabase, na NUVEM -- por isso não existe container de banco aqui, e por isso
+# esta VM não guarda dado nenhum deste sistema.
+#
+# ⚠ Não confundir com o repositório `cobeb-ciclo-php`: são projetos DIFERENTES,
+# não duas cópias. Aquele é PHP com MariaDB na própria VM, na porta 8130. Este
+# é React com Supabase, na 8140.
+
+services:
+  web:
+    container_name: cobeb-ciclo-react
+    image: cobeb/ciclo-react:latest
+    restart: unless-stopped
+
+    build:
+      context: .
+      # ⚠ AQUI É `args`, E NÃO `environment` -- e a diferença é o sistema
+      # funcionar ou abrir em branco.
+      #
+      # O Vite grava estes valores DENTRO do JavaScript na hora de CONSTRUIR. O
+      # container do nginx entrega arquivo pronto e não lê variável nenhuma:
+      # posto em `environment`, o valor não chega a lugar nenhum e a tela abre
+      # sem conseguir falar com o Supabase.
+      #
+      # Corolário: trocar qualquer um destes exige RECONSTRUIR a imagem
+      # ("Git deploy" no dockhand), não reiniciar o container.
+      args:
+        # `/` porque aqui o app fica na raiz do endereço. O padrão do
+        # vite.config.js é `/Ciclo-de-Carretas-Cobeb/`, que é o caminho do
+        # GitHub Pages -- deixar o padrão faria a página abrir em branco
+        # procurando o JS num subcaminho que não existe.
+        VITE_BASE_URL: ${VITE_BASE_URL:-/}
+        VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:?defina VITE_SUPABASE_URL -- ver .env.docker.example}
+        VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY:?defina VITE_SUPABASE_ANON_KEY -- ver .env.docker.example}
+        # Opcionais: sem elas o código já trata (`?? null`) -- o mapa fica sem
+        # rota traçada e a tela de instalar o app fica sem o link do APK.
+        VITE_ORS_API_KEY: ${VITE_ORS_API_KEY:-}
+        VITE_APK_URL: ${VITE_APK_URL:-}
+        # VITE_SUPABASE_SERVICE_ROLE_KEY NÃO entra -- ver o comentário no
+        # Dockerfile. Ela ignora a segurança por linha do Supabase e iria
+        # dentro do JavaScript que o navegador baixa.
+
+    ports:
+      # Portas ocupadas em 24/08/2026: 8010 estoque, 8020 epi, 8030 alô, 8040
+      # rampa, 8050 capex, 8060 rentrega, 8070 rvendas, 8090 volumediário, 3000
+      # dockhand; 8100/8110/8120 guardadas para os três apps da analista, e
+      # 8130 é o Ciclo PHP.
+      - "${PUBLICAR_EM:-127.0.0.1}:${PORTA_EXTERNA:-8140}:80"
+
+    healthcheck:
+      # A imagem nginx:alpine não tem curl, mas o busybox traz wget.
+      #
+      # `-O /dev/null` porque o que importa é o código de resposta, não o corpo;
+      # sem isso o wget grava o index.html no diretório de trabalho a cada
+      # passada.
+      test: ["CMD", "wget", "-q", "--spider", "-T", "5", "http://127.0.0.1/"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      # Sem limite o log cresce até encher o disco da VM, e o sintoma aparece
+      # como "o sistema parou", não como "faltou espaço".
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  # Nome fixo em vez do automático ("<stack>_default"): com o automático,
+  # renomear o stack no dockhand mudaria o nome da rede em silêncio.
+  default:
+    name: cobeb-ciclo-react-rede
