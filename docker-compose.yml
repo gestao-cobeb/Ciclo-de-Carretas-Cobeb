@@ -15,6 +15,32 @@ services:
     image: cobeb/ciclo-react:latest
     restart: unless-stopped
 
+    # ⚠ SEM ESTA LINHA, MUDANCA DE CODIGO NAO VAI PARA O AR -- E NINGUEM AVISA.
+    #
+    # Medido em 27/08/2026, com tres tentativas de deploy. O "Sync from git" do
+    # dockhand diz, no proprio dialogo:
+    #
+    #     "Containers will only restart if the CONFIGURATION changed."
+    #
+    # E' a semantica do `docker compose up -d`: ele puxa o codigo novo, ve que a
+    # imagem `cobeb/ciclo-react:latest` JA EXISTE e que o compose nao mudou, e
+    # NAO FAZ NADA. Sem erro, sem aviso, sem log. O container fica com o mesmo
+    # uptime e a correcao que voce mesclou continua fora do ar.
+    #
+    # Foi o que aconteceu com o `docker/entrada.sh`: arquivo que vive DENTRO da
+    # imagem, entao mexer nele nao e' "configuracao" para o compose. Tres
+    # deploys, uptime parado em 51 minutos, e o log do container sem uma linha
+    # dizendo por que.
+    #
+    # `pull_policy: build` obriga a reconstruir em vez de reaproveitar. Com o
+    # cache de camadas, quando nada mudou o build termina em segundos e a imagem
+    # sai com o MESMO id -- entao nada reinicia, e a promessa do dialogo passa a
+    # valer de verdade em vez de valer pela metade.
+    #
+    # E' o degrau que faltava na regra que o CLAUDE.md dos outros repos ja tem
+    # ("mesclar nao publica"): aqui nem o Git deploy publicava.
+    pull_policy: build
+
     build:
       context: .
       # ⚠ AQUI É `args`, E NÃO `environment` -- e a diferença é o sistema
