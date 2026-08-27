@@ -36,6 +36,9 @@ jobs:
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
           VITE_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.VITE_SUPABASE_SERVICE_ROLE_KEY }}
           VITE_ORS_API_KEY: ${{ secrets.VITE_ORS_API_KEY }}
+          # Onde o APK pergunta com qual servidor falar. Precisa ser ABSOLUTA:
+          # no aplicativo nativo o `fetch` relativo le' o arquivo empacotado.
+          VITE_CONFIG_URL: ${{ secrets.VITE_CONFIG_URL }}
 
       - name: Capacitor sync
         run: npx cap sync android

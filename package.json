@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node gerar-config.mjs",
     "preview": "vite preview",
-    "build:android": "cross-env VITE_BUILD_TARGET=android vite build && npx cap sync android",
+    "build:android": "cross-env VITE_BUILD_TARGET=android vite build && node gerar-config.mjs && npx cap sync android",
     "cap:open": "npx cap open android",
     "postinstall": "patch-package"
   },

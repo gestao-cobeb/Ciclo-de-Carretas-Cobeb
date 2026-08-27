@@ -39,9 +39,26 @@ services:
         # rota traçada e a tela de instalar o app fica sem o link do APK.
         VITE_ORS_API_KEY: ${VITE_ORS_API_KEY:-}
         VITE_APK_URL: ${VITE_APK_URL:-}
+        # Onde o APLICATIVO NATIVO pergunta com qual servidor falar. Vazia no
+        # navegador (ele pergunta ao proprio endereco que o serviu); no APK ela
+        # PRECISA ser absoluta, senao o `fetch` le' o arquivo empacotado dentro
+        # do app. Ver `src/lib/config.js`.
+        VITE_CONFIG_URL: ${VITE_CONFIG_URL:-}
         # VITE_SUPABASE_SERVICE_ROLE_KEY NÃO entra -- ver o comentário no
         # Dockerfile. Ela ignora a segurança por linha do Supabase e iria
         # dentro do JavaScript que o navegador baixa.
+
+    # ⚠ ESTE arquivo NAO e' de build -- e' o unico que se troca sem reconstruir.
+    #
+    # Ele diz ao aplicativo com qual servidor falar. Sem o volume, ele viria de
+    # dentro da imagem e trocar de servidor exigiria "Git deploy". Com ele,
+    # trocar e' editar um arquivo na VM e recarregar a pagina -- que e' o que
+    # torna a migracao para o Supabase da rede reversivel em segundos.
+    #
+    # `:ro` porque o container so' le'. Sem o arquivo no host, o compose criaria
+    # uma PASTA com esse nome e o nginx serviria um diretorio no lugar do JSON.
+    volumes:
+      - ${CONFIG_JSON:-./config.json}:/usr/share/nginx/html/config.json:ro
 
     ports:
       # Portas ocupadas em 24/08/2026: 8010 estoque, 8020 epi, 8030 alô, 8040
