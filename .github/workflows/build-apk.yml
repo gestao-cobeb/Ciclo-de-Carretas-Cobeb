@@ -85,10 +85,34 @@ jobs:
           KEYSTORE_KEY_ALIAS: ${{ secrets.KEYSTORE_ALIAS || 'cobebciclo' }}
           KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
 
+      # DOIS arquivos com o MESMO conteudo, e o segundo existe por um motivo so':
+      # o nome dele nao muda.
+      #
+      # O link que o motorista ve' na tela de instalar sai de `VITE_APK_URL`, que
+      # e' variavel de BUILD do site -- ela e' gravada dentro do JavaScript na
+      # hora de construir a imagem. Apontada para o arquivo com a versao no nome
+      # (`cobeb-ciclo-v1.0.27.apk`), cada APK novo exigiria: editar a variavel no
+      # dockhand, reconstruir a imagem do site e publicar de novo. Esquecer um
+      # desses passos deixa o botao baixando a versao ANTERIOR, sem erro nenhum
+      # na tela -- o motorista instala, o app abre, e ele fica na versao velha
+      # achando que atualizou.
+      #
+      # Ja' aconteceu: o pacote publicado em 02/07/2026 apontava para a v1.0.20,
+      # e num repositorio que nem e' mais o de producao.
+      #
+      # Com o nome fixo, o GitHub oferece um endereco PERMANENTE que sempre cai
+      # na release mais nova:
+      #
+      #   https://github.com/gestao-cobeb/Ciclo-de-Carretas-Cobeb/releases/latest/download/cobeb-ciclo.apk
+      #
+      # Ele so' funciona se o nome do arquivo for IGUAL em todas as releases --
+      # por isso a copia. A versionada continua sendo publicada: e' ela que diz,
+      # na lista de releases, o que cada uma contem.
       - name: Rename APK
         run: |
           mv android/app/build/outputs/apk/release/app-release.apk \
              cobeb-ciclo-${{ github.ref_name }}.apk
+          cp cobeb-ciclo-${{ github.ref_name }}.apk cobeb-ciclo.apk
 
       - name: Create GitHub Release & upload APK
         uses: softprops/action-gh-release@v2
@@ -103,4 +127,10 @@ jobs:
             1. Baixe o arquivo `cobeb-ciclo-${{ github.ref_name }}.apk`
             2. Se já tem o app instalado, instale por cima (sem desinstalar)
             3. Permita "Instalar de fontes desconhecidas" se solicitado
-          files: cobeb-ciclo-${{ github.ref_name }}.apk
+
+            **Link fixo para os motoristas** (sempre a versão mais nova, não
+            precisa ser trocado a cada release):
+            <https://github.com/gestao-cobeb/Ciclo-de-Carretas-Cobeb/releases/latest/download/cobeb-ciclo.apk>
+          files: |
+            cobeb-ciclo-${{ github.ref_name }}.apk
+            cobeb-ciclo.apk
