@@ -24,6 +24,40 @@ if (!url || !key) {
   process.exit(1)
 }
 
+/**
+ * O APK PRECISA de um endereço absoluto — e sem ele a falha é invisível.
+ *
+ * No navegador, `fetch("config.json")` cai no servidor que serviu a página, que
+ * é o que se quer. No aplicativo nativo, NÃO: o WebView serve os arquivos de
+ * dentro do próprio pacote, então o `fetch` relativo lê o `config.json`
+ * EMPACOTADO — exatamente a constante de compilação que este mecanismo existe
+ * para tirar do caminho.
+ *
+ * Sem `VITE_CONFIG_URL`, o app do motorista fica preso ao servidor gravado no
+ * APK e **ninguém vê**: a tela abre, o login funciona, e tudo parece normal.
+ * O defeito só aparece no dia da virada, e aparece do pior jeito possível —
+ * um caminhão gravando no banco novo e outro no antigo, sem nada na tela
+ * dizendo qual é qual.
+ *
+ * Por isso o build do Android PARA aqui. Faltar a variável é problema de
+ * configuração; descobrir isso depois de o APK estar na mão dos motoristas é
+ * problema de dado.
+ */
+if (process.env.VITE_BUILD_TARGET === "android") {
+  const alvo = process.env.VITE_CONFIG_URL ?? ""
+  if (!alvo.startsWith("http")) {
+    console.error(
+      "\n[gerar-config] Build do ANDROID sem VITE_CONFIG_URL absoluta.\n" +
+      `               Valor recebido: ${alvo ? `"${alvo}"` : "(vazio)"}\n` +
+      "               Ela diz ao APK a que endereco perguntar com qual servidor\n" +
+      "               falar, e precisa comecar com http. Sem ela o aplicativo le\n" +
+      "               o config.json EMPACOTADO e fica preso ao servidor antigo,\n" +
+      "               sem nenhum sinal na tela.\n" +
+      "               Defina o secret VITE_CONFIG_URL no repositorio.\n")
+    process.exit(1)
+  }
+}
+
 if (!existsSync("dist")) mkdirSync("dist", { recursive: true })
 writeFileSync("dist/config.json", JSON.stringify({
   _leia: "Diz ao aplicativo com qual servidor ele fala. Editar e recarregar troca de "
