@@ -34,7 +34,8 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.VITE_SUPABASE_SERVICE_ROLE_KEY }}
+          # A SERVICE ROLE nao entra aqui -- ver o build-apk.yml e o
+          # `supabaseAdmin.js` apagado neste mesmo commit.
           VITE_BASE_URL: /Ciclo-de-Carretas-Cobeb/
           VITE_APK_URL: ${{ secrets.VITE_APK_URL }}
           VITE_ORS_API_KEY: ${{ secrets.VITE_ORS_API_KEY }}

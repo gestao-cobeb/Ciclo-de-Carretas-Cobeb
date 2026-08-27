@@ -34,7 +34,9 @@ jobs:
           VITE_BUILD_TARGET: android
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.VITE_SUPABASE_SERVICE_ROLE_KEY }}
+          # A SERVICE ROLE nao entra aqui. Ver o `supabaseAdmin.js` apagado
+          # neste mesmo commit: variavel VITE_* vai INTEIRA para dentro do
+          # arquivo que o motorista instala, e essa chave ignora o RLS.
           VITE_ORS_API_KEY: ${{ secrets.VITE_ORS_API_KEY }}
           # Onde o APK pergunta com qual servidor falar. Precisa ser ABSOLUTA:
           # no aplicativo nativo o `fetch` relativo le' o arquivo empacotado.
@@ -43,27 +45,32 @@ jobs:
       - name: Capacitor sync
         run: npx cap sync android
 
+      # O keystore e' a IDENTIDADE do aplicativo: o Android so' aceita uma
+      # atualizacao assinada com a mesma chave. Perde-la significa que nenhum
+      # motorista consegue atualizar -- so' desinstalando e instalando de novo.
+      #
+      # Por isso NAO ha' plano B que fabrica uma chave nova. O que havia aqui
+      # gerava um keystore e imprimia o base64 dele como `::notice::` -- e num
+      # repositorio PUBLICO o log da execucao e' publico, entao a chave privada
+      # de assinatura da COBEB seria publicada. Faltar o secret e' um problema
+      # de configuracao: para a esteira e diz o que fazer.
       - name: Prepare keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "Usando keystore salvo (KEYSTORE_BASE64)"
-            node -e "require('fs').writeFileSync('android/cobeb-release.jks', Buffer.from(process.env.KEYSTORE_BASE64, 'base64'))"
-          else
-            echo "Gerando novo keystore e imprimindo base64 para salvar como secret..."
-            keytool -genkeypair \
-              -keystore android/cobeb-release.jks \
-              -storetype PKCS12 \
-              -storepass Cobeb2026Ciclo \
-              -alias cobebciclo \
-              -keypass Cobeb2026Ciclo \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=COBEB Ciclo de Carretas, OU=Transportes, O=COBEB, L=Brasil, ST=Brasil, C=BR"
-            echo "::notice title=SALVE COMO SECRET KEYSTORE_BASE64::$(base64 -w 0 android/cobeb-release.jks)"
+          faltando=""
+          [ -z "$KEYSTORE_BASE64" ] && faltando="$faltando KEYSTORE_BASE64"
+          [ -z "$KEYSTORE_PASSWORD" ] && faltando="$faltando KEYSTORE_PASSWORD"
+          if [ -n "$faltando" ]; then
+            echo "::error title=Falta secret::Sem$faltando o APK nao pode ser assinado com a chave da COBEB."
+            echo "Cadastre em Settings > Secrets and variables > Actions." >&2
+            echo "NAO gere um keystore novo: chave diferente = nenhum motorista" >&2
+            echo "consegue atualizar o app instalado." >&2
+            exit 1
           fi
+          node -e "require('fs').writeFileSync('android/cobeb-release.jks', Buffer.from(process.env.KEYSTORE_BASE64, 'base64'))"
+          echo "Keystore restaurado do secret."
 
       - name: Build signed APK
         working-directory: android
@@ -72,9 +79,11 @@ jobs:
           ./gradlew assembleRelease
         env:
           KEYSTORE_FILE: ../cobeb-release.jks
-          KEYSTORE_STORE_PASSWORD: Cobeb2026Ciclo
-          KEYSTORE_KEY_ALIAS: cobebciclo
-          KEYSTORE_KEY_PASSWORD: Cobeb2026Ciclo
+          # A senha vem do cofre. Escrita aqui, ela ficava legivel por qualquer
+          # pessoa na internet (o repositorio e' publico) e no historico do git.
+          KEYSTORE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_KEY_ALIAS: ${{ secrets.KEYSTORE_ALIAS || 'cobebciclo' }}
+          KEYSTORE_KEY_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
 
       - name: Rename APK
         run: |
