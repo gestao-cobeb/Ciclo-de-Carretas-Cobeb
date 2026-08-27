@@ -39,9 +39,30 @@ services:
         # rota traçada e a tela de instalar o app fica sem o link do APK.
         VITE_ORS_API_KEY: ${VITE_ORS_API_KEY:-}
         VITE_APK_URL: ${VITE_APK_URL:-}
+        # Onde o APLICATIVO NATIVO pergunta com qual servidor falar. Vazia no
+        # navegador (ele pergunta ao proprio endereco que o serviu); no APK ela
+        # PRECISA ser absoluta, senao o `fetch` le' o arquivo empacotado dentro
+        # do app. Ver `src/lib/config.js`.
+        VITE_CONFIG_URL: ${VITE_CONFIG_URL:-}
         # VITE_SUPABASE_SERVICE_ROLE_KEY NÃO entra -- ver o comentário no
         # Dockerfile. Ela ignora a segurança por linha do Supabase e iria
         # dentro do JavaScript que o navegador baixa.
+
+    # ⚠ AS UNICAS variaveis deste stack que sao de EXECUCAO, nao de build.
+    #
+    # Deixe as duas VAZIAS e nada muda: o app usa o endereco que o build gravou.
+    # Preencha as duas e o container reescreve o `config.json` na subida,
+    # apontando para outro servidor -- sem reconstruir imagem nenhuma.
+    #
+    # E' isto que torna a migracao para o Supabase da rede reversivel: virar e'
+    # preencher e reiniciar; voltar e' apagar e reiniciar. Ver docker/entrada.sh.
+    #
+    # Uma sem a outra e' ignorado de proposito, e o container diz isso na
+    # subida: endereco novo com chave velha falha na autenticacao e manda
+    # procurar o problema no lugar errado.
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
 
     ports:
       # Portas ocupadas em 24/08/2026: 8010 estoque, 8020 epi, 8030 alô, 8040

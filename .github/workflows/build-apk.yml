@@ -38,6 +38,9 @@ jobs:
           # neste mesmo commit: variavel VITE_* vai INTEIRA para dentro do
           # arquivo que o motorista instala, e essa chave ignora o RLS.
           VITE_ORS_API_KEY: ${{ secrets.VITE_ORS_API_KEY }}
+          # Onde o APK pergunta com qual servidor falar. Precisa ser ABSOLUTA:
+          # no aplicativo nativo o `fetch` relativo le' o arquivo empacotado.
+          VITE_CONFIG_URL: ${{ secrets.VITE_CONFIG_URL }}
 
       - name: Capacitor sync
         run: npx cap sync android

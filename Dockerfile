@@ -71,4 +71,11 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
+# O `config.json` ja' veio pronto do build. Este script so' o REESCREVE quando
+# houver SUPABASE_URL/SUPABASE_ANON_KEY no ambiente -- e' o que permite trocar
+# de servidor sem reconstruir a imagem. Ver docker/entrada.sh.
+COPY docker/entrada.sh /entrada.sh
+RUN chmod +x /entrada.sh
+
 EXPOSE 80
+ENTRYPOINT ["/entrada.sh"]

@@ -1,6 +1,7 @@
 import { useRef, useEffect, useCallback } from 'react'
 import { registerPlugin } from '@capacitor/core'
 import { supabase } from '../lib/supabase'
+import { config } from '../lib/config'
 
 // Plugin nativo próprio do app — independente do WebView, com START_STICKY
 const CobebGps = registerPlugin('CobebGps')
@@ -95,9 +96,14 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
       //    do WebView, com START_STICKY, WakeLock e timer de 30s próprios.
       try {
         const { data: { session } } = await supabase.auth.getSession()
+        // Do `config()`, e nao de `import.meta.env`: o servico nativo guarda o
+        // endereco no aparelho e continua usando-o depois que o Android o
+        // reinicia. Se ele nascesse com o valor de compilacao, o celular
+        // seguiria gravando no servidor antigo depois da migracao -- com o
+        // aplicativo funcionando e nada denunciando.
         await CobebGps.startTracking({
-          supabaseUrl:   import.meta.env.VITE_SUPABASE_URL,
-          supabaseKey:   import.meta.env.VITE_SUPABASE_ANON_KEY,
+          supabaseUrl:   config().supabaseUrl,
+          supabaseKey:   config().supabaseAnonKey,
           accessToken:   session?.access_token  ?? '',
           refreshToken:  session?.refresh_token ?? '',
           viagemId:      viagemIdRef.current,
