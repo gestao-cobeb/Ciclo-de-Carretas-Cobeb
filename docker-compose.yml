@@ -48,17 +48,21 @@ services:
         # Dockerfile. Ela ignora a segurança por linha do Supabase e iria
         # dentro do JavaScript que o navegador baixa.
 
-    # ⚠ ESTE arquivo NAO e' de build -- e' o unico que se troca sem reconstruir.
+    # ⚠ AS UNICAS variaveis deste stack que sao de EXECUCAO, nao de build.
     #
-    # Ele diz ao aplicativo com qual servidor falar. Sem o volume, ele viria de
-    # dentro da imagem e trocar de servidor exigiria "Git deploy". Com ele,
-    # trocar e' editar um arquivo na VM e recarregar a pagina -- que e' o que
-    # torna a migracao para o Supabase da rede reversivel em segundos.
+    # Deixe as duas VAZIAS e nada muda: o app usa o endereco que o build gravou.
+    # Preencha as duas e o container reescreve o `config.json` na subida,
+    # apontando para outro servidor -- sem reconstruir imagem nenhuma.
     #
-    # `:ro` porque o container so' le'. Sem o arquivo no host, o compose criaria
-    # uma PASTA com esse nome e o nginx serviria um diretorio no lugar do JSON.
-    volumes:
-      - ${CONFIG_JSON:-./config.json}:/usr/share/nginx/html/config.json:ro
+    # E' isto que torna a migracao para o Supabase da rede reversivel: virar e'
+    # preencher e reiniciar; voltar e' apagar e reiniciar. Ver docker/entrada.sh.
+    #
+    # Uma sem a outra e' ignorado de proposito, e o container diz isso na
+    # subida: endereco novo com chave velha falha na autenticacao e manda
+    # procurar o problema no lugar errado.
+    environment:
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
 
     ports:
       # Portas ocupadas em 24/08/2026: 8010 estoque, 8020 epi, 8030 alô, 8040
