@@ -52,4 +52,19 @@ else
   echo "[config] servidor pelo arquivo do build"
 fi
 
-exec nginx -g 'daemon off;'
+# ⚠ Devolve o controle ao entrypoint DA IMAGEM, e não direto ao `nginx`.
+#
+# A imagem oficial do nginx tem o próprio `/docker-entrypoint.sh`, que roda os
+# scripts de `/docker-entrypoint.d/` antes de subir: o IPv6 por padrão, o
+# resolver local, o `envsubst` nos templates e o ajuste do número de workers
+# pela CPU do container.
+#
+# Chamando `exec nginx` direto, tudo isso deixa de acontecer -- e não aparece
+# como erro em lugar nenhum: o site sobe, responde, e roda com a configuração
+# de fábrica em vez da ajustada. Foi o que o log de 27/08/2026 mostrou pela
+# ausência.
+#
+# O `if` é para o caso de o `CMD` vir vazio: a imagem base já traz
+# `CMD ["nginx", "-g", "daemon off;"]`, e este entrypoint recebe isso em `$@`.
+if [ "$#" -eq 0 ]; then set -- nginx -g "daemon off;"; fi
+exec /docker-entrypoint.sh "$@"
