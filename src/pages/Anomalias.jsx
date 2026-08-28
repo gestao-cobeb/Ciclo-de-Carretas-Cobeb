@@ -1,13 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { AlertTriangle, RefreshCw, MapPin, X, Trash2, Factory } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { assinarFotos, caminhoDaFoto } from '../lib/fotos'
 import AdminLayout from '../components/AdminLayout'
-
-function urlToStoragePath(url) {
-  const marker = '/anomalias-fotos/'
-  const idx = url?.indexOf(marker)
-  return idx >= 0 ? url.slice(idx + marker.length) : null
-}
 
 function formatTs(iso) {
   if (!iso) return '—'
@@ -29,6 +24,14 @@ export default function Anomalias() {
   const [loading,       setLoading]       = useState(true)
   const [fotoAmpliada,  setFotoAmpliada]  = useState(null)
   const [modalExcluir,  setModalExcluir]  = useState(null) // anomalia object
+  /**
+   * `valor guardado -> URL assinada`.
+   *
+   * O bucket é privado: o que está no banco não abre sozinho. A assinatura vale
+   * uma hora e é refeita a cada carga da lista (que já recarrega de 30 em 30
+   * segundos), então a tela nunca chega a segurar um link vencido.
+   */
+  const [fotoUrl,       setFotoUrl]       = useState(new Map())
   const [excluindo,     setExcluindo]     = useState(false)
 
   useEffect(() => { load() }, [])
@@ -75,6 +78,9 @@ export default function Anomalias() {
       ...a,
       placa_cavalo: placacMap[a.tarefa?.viagem_id] ?? null,
     })))
+    // As assinaturas de TODAS as fotos da lista, numa chamada só. Ver
+    // `assinarFotos` -- uma requisição por miniatura viraria uma saraivada.
+    setFotoUrl(await assinarFotos(lista.flatMap(a => a.fotos ?? [])))
     setUnidades(uns ?? [])
     setTodasPlacas((cavalos ?? []).map(c => c.placa).filter(Boolean))
     if (!silent) setLoading(false)
@@ -97,7 +103,7 @@ export default function Anomalias() {
     setExcluindo(true)
 
     // Remove fotos do storage
-    const paths = (ano.fotos ?? []).map(urlToStoragePath).filter(Boolean)
+    const paths = (ano.fotos ?? []).map(caminhoDaFoto).filter(Boolean)
     if (paths.length) {
       await supabase.storage.from('anomalias-fotos').remove(paths)
     }
@@ -286,15 +292,37 @@ export default function Anomalias() {
                 {/* Photos */}
                 {ano.fotos?.length > 0 && (
                   <div className="flex gap-3 px-4 py-3">
-                    {ano.fotos.map((url, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setFotoAmpliada(url)}
-                        className="w-20 h-20 rounded-xl overflow-hidden border border-cobeb-border shrink-0 hover:border-cobeb-blue/40 transition-colors"
-                      >
-                        <img src={url} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
-                      </button>
-                    ))}
+                    {ano.fotos.map((guardada, i) => {
+                      /**
+                       * Sem assinatura a miniatura NÃO é desenhada.
+                       *
+                       * Um `<img>` com `src` vazio ou vencido rende o ícone de
+                       * imagem quebrada, que se lê como "a foto sumiu" -- e o
+                       * que aconteceu foi outra coisa (o link expirou, o
+                       * arquivo foi apagado, a rede caiu). O quadro com o traço
+                       * diz o que se sabe: não deu para abrir esta.
+                       */
+                      const url = fotoUrl.get(guardada)
+                      if (!url) return (
+                        <div
+                          key={i}
+                          title="não consegui abrir esta foto"
+                          className="w-20 h-20 rounded-xl border border-dashed border-cobeb-border shrink-0
+                                     flex items-center justify-center text-cobeb-text/40 text-xs"
+                        >
+                          —
+                        </div>
+                      )
+                      return (
+                        <button
+                          key={i}
+                          onClick={() => setFotoAmpliada(url)}
+                          className="w-20 h-20 rounded-xl overflow-hidden border border-cobeb-border shrink-0 hover:border-cobeb-blue/40 transition-colors"
+                        >
+                          <img src={url} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" />
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </div>

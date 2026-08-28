@@ -4,6 +4,13 @@
 -- Executar no Supabase Studio > SQL Editor
 -- ================================================================
 
+-- ⚠ SUPERADO PELO `054_fechar_fotos_anomalias.sql` (27/08/2026).
+--
+-- O bucket deixou de ser público: quem tinha a URL abria a foto sem login. Este
+-- script continua aqui porque é o histórico das políticas de escrita, mas o
+-- `ON CONFLICT DO UPDATE SET public = true` logo abaixo REABRIRIA o bucket em
+-- silêncio. NÃO REEXECUTAR.
+
 -- Garante que o bucket existe e está configurado como público
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
@@ -44,6 +51,7 @@ CREATE POLICY "conferentes update fotos anomalias"
     AND public.is_conferente()
   );
 
+-- ⚠ REVOGADA pelo `054`. Era o que abria a foto para quem não tem login.
 -- Leitura pública (bucket já é public=true, mas política explícita garante)
 CREATE POLICY "publico le fotos anomalias"
   ON storage.objects FOR SELECT TO public

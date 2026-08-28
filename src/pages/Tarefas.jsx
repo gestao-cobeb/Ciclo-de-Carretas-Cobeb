@@ -410,10 +410,20 @@ export default function Tarefas() {
       return
     }
 
-    const { data: { publicUrl } } = supabase.storage.from('anomalias-fotos').getPublicUrl(path)
+    /**
+     * Guarda o CAMINHO, e não mais a URL pública.
+     *
+     * O bucket passou a ser privado (ver `sql/054` e `src/lib/fotos.js`), então
+     * `getPublicUrl` devolveria um endereço que não abre. Guardar um endereço
+     * que dá erro quando alguém o cola é pista falsa: manda a investigação
+     * começar no lugar errado.
+     *
+     * As anomalias antigas continuam com a URL inteira gravada, e `caminhoDaFoto`
+     * lê as duas formas -- nenhuma migração de dados foi necessária.
+     */
     setAnomaliaForm(f => {
       if (!f) return f
-      const fotosUrls = [...f.fotosUrls]; fotosUrls[idx] = publicUrl
+      const fotosUrls = [...f.fotosUrls]; fotosUrls[idx] = path
       const uploading = [...f.uploading]; uploading[idx] = false
       return { ...f, fotosUrls, uploading }
     })
