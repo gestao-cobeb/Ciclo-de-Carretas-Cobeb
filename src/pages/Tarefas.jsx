@@ -190,7 +190,7 @@ export default function Tarefas() {
       return
     }
     const [{ data: peds }, { data: itens }, { data: anos }] = await Promise.all([
-      supabase.from('pedidos').select('*').eq('viagem_id', viagemId).order('descricao'),
+      supabase.from('pedidos').select('*').eq('viagem_id', viagemId).neq('status', 'cancelado').order('descricao'),
       supabase.from('conferencia_itens').select('*').eq('tarefa_id', tarefa.id),
       supabase.from('anomalias')
         .select('*, pedido:pedidos(descricao, cod_produto)')
@@ -249,7 +249,7 @@ export default function Tarefas() {
     try {
       const nriViagemId = tarefa.viagem?.id ?? tarefa.viagem_id
       const [{ data: peds }, { data: itens }, { data: anos }] = await Promise.all([
-        supabase.from('pedidos').select('*').eq('viagem_id', nriViagemId).order('descricao'),
+        supabase.from('pedidos').select('*').eq('viagem_id', nriViagemId).neq('status', 'cancelado').order('descricao'),
         supabase.from('conferencia_itens')
           .select('pedido_id, qtde_recebida, data_validade')
           .eq('tarefa_id', tarefa.id)

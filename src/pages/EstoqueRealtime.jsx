@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw } from 'lucide-react'
+import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw, ArrowLeftRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import MapaRealtime from './MapaRealtime'
@@ -263,7 +263,16 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
   const [showRollback, setShowRollback] = useState(false)
   const [adminLoading, setAdminLoading] = useState(false)
 
-  const podeReverter = isAdminTotal && ['na_fabrica', 'retornando'].includes(viagem.status)
+  // Estado de substituição de produto
+  const [substituindo,     setSubstituindo]     = useState(null)  // id do pedido sendo substituído
+  const [subCodigo,        setSubCodigo]        = useState('')
+  const [subDescricao,     setSubDescricao]     = useState('')
+  const [subQtde,          setSubQtde]          = useState('')
+  const [subBuscando,      setSubBuscando]      = useState(false)
+  const [subNaoEncontrado, setSubNaoEncontrado] = useState(false)
+
+  const podeReverter    = isAdminTotal && ['na_fabrica', 'retornando'].includes(viagem.status)
+  const podeSubstituir  = isAdminTotal && ['iniciada', 'em_transito', 'na_fabrica'].includes(viagem.status)
 
   async function salvarHorario() {
     setAdminLoading(true)
@@ -286,6 +295,55 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
     setAdminLoading(false)
     if (error) { alert('Erro ao reverter: ' + error.message); return }
     setShowRollback(false)
+    onRefresh?.()
+  }
+
+  function abrirSubstituicao(itemId) {
+    setSubstituindo(itemId)
+    setSubCodigo('')
+    setSubDescricao('')
+    setSubQtde('')
+    setSubBuscando(false)
+    setSubNaoEncontrado(false)
+  }
+
+  function fecharSubstituicao() {
+    setSubstituindo(null)
+    setSubNaoEncontrado(false)
+  }
+
+  async function buscarDescricaoProduto(codigo) {
+    if (!codigo.trim()) return
+    setSubBuscando(true)
+    setSubDescricao('')
+    setSubNaoEncontrado(false)
+    const { data } = await supabase
+      .from('pedidos')
+      .select('descricao')
+      .eq('cod_produto', codigo.trim())
+      .limit(1)
+      .maybeSingle()
+    setSubBuscando(false)
+    if (data?.descricao) {
+      setSubDescricao(data.descricao)
+      setSubNaoEncontrado(false)
+    } else {
+      setSubNaoEncontrado(true)
+    }
+  }
+
+  async function confirmarSubstituicao() {
+    if (!substituindo || !subCodigo.trim() || !subDescricao.trim() || !subQtde) return
+    setAdminLoading(true)
+    const { error } = await supabase.rpc('admin_substituir_produto', {
+      p_item_id:          substituindo,
+      p_cod_produto_novo: subCodigo.trim(),
+      p_descricao_nova:   subDescricao.trim(),
+      p_qtde_pallets:     Number(subQtde),
+    })
+    setAdminLoading(false)
+    if (error) { alert('Erro ao substituir produto: ' + error.message); return }
+    fecharSubstituicao()
     onRefresh?.()
   }
 
@@ -454,21 +512,128 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
               </div>
               <div className="divide-y divide-cobeb-border/30">
                 {produtos.map((p, i) => (
-                  <div key={i} className="px-4 py-2.5 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="text-cobeb-text text-xs font-medium">{p.descricao}</p>
-                      {p.embalagem && (
-                        <p className="text-slate-400 text-[10px] mt-0.5">{p.embalagem}</p>
-                      )}
+                  <div key={p.id ?? i}>
+                    {/* Linha do produto */}
+                    <div className="px-4 py-2.5 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-cobeb-text text-xs font-medium">{p.descricao}</p>
+                        {p.embalagem && (
+                          <p className="text-slate-400 text-[10px] mt-0.5">{p.embalagem}</p>
+                        )}
+                      </div>
+                      <div className="flex items-start gap-2 shrink-0">
+                        <div className="text-right">
+                          <p className="text-cobeb-text text-xs font-semibold">
+                            {Number(p.qtde_pallets).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt
+                          </p>
+                          <p className="text-slate-400 text-[10px]">
+                            {Number(p.qtde_skus).toLocaleString('pt-BR')} cx
+                          </p>
+                        </div>
+                        {podeSubstituir && p.id && substituindo !== p.id && (
+                          <span
+                            role="button"
+                            tabIndex={0}
+                            title="Substituir produto"
+                            onClick={() => abrirSubstituicao(p.id)}
+                            onKeyDown={e => e.key === 'Enter' && abrirSubstituicao(p.id)}
+                            className="mt-0.5 cursor-pointer text-slate-300 hover:text-orange-400 transition-colors"
+                          >
+                            <ArrowLeftRight size={11} />
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-cobeb-text text-xs font-semibold">
-                        {Number(p.qtde_pallets).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt
-                      </p>
-                      <p className="text-slate-400 text-[10px]">
-                        {Number(p.qtde_skus).toLocaleString('pt-BR')} cx
-                      </p>
-                    </div>
+
+                    {/* Formulário de substituição (inline) */}
+                    {substituindo === p.id && (
+                      <div className="px-4 pb-3.5 bg-orange-50/70 border-t border-orange-100">
+                        <p className="text-[9px] font-bold text-orange-500 uppercase tracking-widest pt-2 mb-2.5">
+                          ↳ Substituir produto
+                        </p>
+                        <div className="space-y-2">
+                          {/* Busca por código */}
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              placeholder="Código do produto"
+                              value={subCodigo}
+                              onChange={e => {
+                                setSubCodigo(e.target.value)
+                                setSubDescricao('')
+                                setSubNaoEncontrado(false)
+                              }}
+                              onKeyDown={e => e.key === 'Enter' && buscarDescricaoProduto(subCodigo)}
+                              className="flex-1 text-[11px] border border-orange-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-orange-400 bg-white min-w-0"
+                            />
+                            <button
+                              onClick={() => buscarDescricaoProduto(subCodigo)}
+                              disabled={!subCodigo.trim() || subBuscando}
+                              className="flex items-center gap-1 text-[11px] font-semibold text-white bg-orange-400 hover:bg-orange-500 disabled:opacity-40 px-2.5 py-1.5 rounded-lg transition-colors shrink-0"
+                            >
+                              {subBuscando
+                                ? <div className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+                                : 'Buscar'}
+                            </button>
+                          </div>
+
+                          {/* Aviso produto não encontrado */}
+                          {subNaoEncontrado && (
+                            <p className="text-[10px] text-orange-600 flex items-center gap-1">
+                              <AlertTriangle size={9} />
+                              Não encontrado no cadastro — preencha a descrição manualmente.
+                            </p>
+                          )}
+
+                          {/* Campo de descrição */}
+                          {(subDescricao !== '' || subNaoEncontrado) && (
+                            <input
+                              type="text"
+                              placeholder="Descrição do produto"
+                              value={subDescricao}
+                              onChange={e => setSubDescricao(e.target.value)}
+                              className="w-full text-[11px] border border-orange-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-orange-400 bg-white"
+                            />
+                          )}
+
+                          {/* Quantidade de paletes */}
+                          {(subDescricao !== '' || subNaoEncontrado) && (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number"
+                                min="0.5"
+                                step="0.5"
+                                placeholder="Paletes"
+                                value={subQtde}
+                                onChange={e => setSubQtde(e.target.value)}
+                                className="w-28 text-[11px] border border-orange-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-orange-400 bg-white"
+                              />
+                              <span className="text-[10px] text-slate-400">paletes</span>
+                            </div>
+                          )}
+
+                          {/* Botões de ação */}
+                          <div className="flex gap-2 pt-0.5">
+                            <button
+                              onClick={confirmarSubstituicao}
+                              disabled={adminLoading || !subCodigo.trim() || !subDescricao.trim() || !subQtde}
+                              className="flex items-center gap-1.5 text-[11px] font-semibold text-white bg-orange-500 hover:bg-orange-600 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors"
+                            >
+                              {adminLoading
+                                ? <div className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+                                : <Check size={11} />}
+                              Confirmar substituição
+                            </button>
+                            <button
+                              onClick={fecharSubstituicao}
+                              className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors px-2 py-1.5"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

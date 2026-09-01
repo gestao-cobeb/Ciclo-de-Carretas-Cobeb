@@ -171,7 +171,7 @@ export default function Viagem() {
 
     if (v) {
       setViagemAtiva(v); cacheViagem(v)
-      const { data: peds } = await supabase.from('pedidos').select('*').eq('viagem_id', v.id)
+      const { data: peds } = await supabase.from('pedidos').select('*').eq('viagem_id', v.id).neq('status', 'cancelado')
       setPedidosDaViagem(peds ?? [])
 
       const { data: agend } = await supabase

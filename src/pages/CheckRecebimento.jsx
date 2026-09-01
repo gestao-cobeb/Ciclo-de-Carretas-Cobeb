@@ -87,6 +87,7 @@ export default function CheckRecebimento() {
         ? supabase.from('pedidos')
             .select('id, cod_produto, descricao, embalagem, qtde_pallets, qtde_skus, fabrica, numero_pedido, viagem_id')
             .in('viagem_id', viagemIds)
+            .neq('status', 'cancelado')
         : { data: [] },
       supabase.from('conferencia_itens')
         .select('id, tarefa_id, pedido_id, qtde_recebida, data_validade')
