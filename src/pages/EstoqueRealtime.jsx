@@ -515,26 +515,37 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
                 </p>
               </div>
               <div className="divide-y divide-cobeb-border/30">
-                {produtos.map((p, i) => (
+                {produtos.map((p, i) => {
+                  const cancelado = p.status === 'cancelado'
+                  return (
                   <div key={p.id ?? i}>
                     {/* Linha do produto */}
-                    <div className="px-4 py-2.5 flex items-start justify-between gap-3">
+                    <div className={`px-4 py-2.5 flex items-start justify-between gap-3 ${cancelado ? 'bg-red-50/60' : ''}`}>
                       <div className="min-w-0">
-                        <p className="text-cobeb-text text-xs font-medium">{p.descricao}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {cancelado && (
+                            <span className="text-[9px] font-bold text-red-500 border border-red-300 bg-red-50 px-1.5 py-0.5 rounded-full uppercase tracking-wide shrink-0">
+                              Cancelado
+                            </span>
+                          )}
+                          <p className={`text-xs font-medium ${cancelado ? 'text-red-400 line-through' : 'text-cobeb-text'}`}>
+                            {p.descricao}
+                          </p>
+                        </div>
                         {p.embalagem && (
-                          <p className="text-slate-400 text-[10px] mt-0.5">{p.embalagem}</p>
+                          <p className={`text-[10px] mt-0.5 ${cancelado ? 'text-red-300' : 'text-slate-400'}`}>{p.embalagem}</p>
                         )}
                       </div>
                       <div className="flex items-start gap-2 shrink-0">
                         <div className="text-right">
-                          <p className="text-cobeb-text text-xs font-semibold">
+                          <p className={`text-xs font-semibold ${cancelado ? 'text-red-400' : 'text-cobeb-text'}`}>
                             {Number(p.qtde_pallets).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt
                           </p>
-                          <p className="text-slate-400 text-[10px]">
+                          <p className={`text-[10px] ${cancelado ? 'text-red-300' : 'text-slate-400'}`}>
                             {Number(p.qtde_skus).toLocaleString('pt-BR')} cx
                           </p>
                         </div>
-                        {podeSubstituir && p.id && substituindo !== p.id && (
+                        {podeSubstituir && p.id && !cancelado && substituindo !== p.id && (
                           <span
                             role="button"
                             tabIndex={0}
@@ -639,7 +650,8 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
                       </div>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </>
           ) : (
