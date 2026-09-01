@@ -318,10 +318,9 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
     setSubDescricao('')
     setSubNaoEncontrado(false)
     const { data } = await supabase
-      .from('pedidos')
+      .from('produtos_catalogo')
       .select('descricao')
-      .eq('cod_produto', codigo.trim())
-      .limit(1)
+      .eq('codigo', codigo.trim())
       .maybeSingle()
     setSubBuscando(false)
     if (data?.descricao) {
