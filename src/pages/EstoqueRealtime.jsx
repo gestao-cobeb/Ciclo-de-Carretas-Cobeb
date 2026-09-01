@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home } from 'lucide-react'
+import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import MapaRealtime from './MapaRealtime'
@@ -137,6 +137,8 @@ export default function EstoqueRealtime({ adminMode = false }) {
               viagem={v}
               expanded={expanded.has(v.id)}
               onToggle={() => toggleExpand(v.id)}
+              isAdminTotal={isAdminTotal}
+              onRefresh={() => loadData(true)}
             />
           ))}
         </div>
@@ -252,9 +254,40 @@ export default function EstoqueRealtime({ adminMode = false }) {
 
 // ── Card de viagem ────────────────────────────────────────────────────────────
 
-function ViagemCard({ viagem, expanded, onToggle }) {
-  const cfg     = STATUS_CFG[viagem.status] ?? STATUS_CFG.iniciada
+function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
+  const cfg      = STATUS_CFG[viagem.status] ?? STATUS_CFG.iniciada
   const produtos = viagem.produtos ?? []
+
+  const [editHorario,  setEditHorario]  = useState(false)
+  const [novoHorario,  setNovoHorario]  = useState('')
+  const [showRollback, setShowRollback] = useState(false)
+  const [adminLoading, setAdminLoading] = useState(false)
+
+  const podeReverter = isAdminTotal && ['na_fabrica', 'retornando'].includes(viagem.status)
+
+  async function salvarHorario() {
+    setAdminLoading(true)
+    const { error } = await supabase.rpc('admin_atualizar_horario_agendado', {
+      p_viagem_id:    viagem.id,
+      p_novo_horario: novoHorario,
+    })
+    setAdminLoading(false)
+    if (error) { alert('Erro ao salvar horário: ' + error.message); return }
+    setEditHorario(false)
+    onRefresh?.()
+  }
+
+  async function confirmarRollback(targetStatus) {
+    setAdminLoading(true)
+    const { error } = await supabase.rpc('admin_reverter_status_viagem', {
+      p_viagem_id:     viagem.id,
+      p_target_status: targetStatus,
+    })
+    setAdminLoading(false)
+    if (error) { alert('Erro ao reverter: ' + error.message); return }
+    setShowRollback(false)
+    onRefresh?.()
+  }
 
   return (
     <div className={`bg-white rounded-2xl border border-cobeb-border overflow-hidden border-l-4 ${cfg.border} shadow-sm`}>
@@ -329,6 +362,21 @@ function ViagemCard({ viagem, expanded, onToggle }) {
               <span className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
                 <Building2 size={9} />
                 Fáb. {viagem.horario_agendado}
+                {isAdminTotal && !editHorario && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={e => {
+                      e.stopPropagation()
+                      setNovoHorario(viagem.horario_agendado)
+                      setEditHorario(true)
+                    }}
+                    className="ml-0.5 cursor-pointer text-blue-400 hover:text-blue-600 transition-colors leading-none"
+                    title="Editar horário fábrica"
+                  >
+                    <Pencil size={8} />
+                  </span>
+                )}
               </span>
             )}
             {viagem.agendamento_bloco && (
@@ -362,9 +410,41 @@ function ViagemCard({ viagem, expanded, onToggle }) {
         })()}
       </button>
 
-      {/* Produtos (expandido) */}
+      {/* Edição inline de horário fábrica (admin) */}
+      {editHorario && (
+        <div className="px-4 py-2.5 flex items-center gap-2 bg-blue-50/60 border-t border-blue-100">
+          <Building2 size={11} className="text-blue-500 shrink-0" />
+          <span className="text-[11px] font-semibold text-blue-600 whitespace-nowrap shrink-0">Horário Fáb.</span>
+          <input
+            type="time"
+            value={novoHorario}
+            onChange={e => setNovoHorario(e.target.value)}
+            className="text-[11px] border border-blue-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-cobeb-blue [color-scheme:light] bg-white min-w-0 flex-1"
+            autoFocus
+          />
+          <button
+            onClick={salvarHorario}
+            disabled={adminLoading || !novoHorario}
+            className="flex items-center gap-1 text-[11px] font-semibold text-white bg-green-500 hover:bg-green-600 disabled:opacity-50 px-2.5 py-1 rounded-lg transition-colors shrink-0"
+          >
+            {adminLoading
+              ? <div className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+              : <Check size={11} />}
+            Salvar
+          </button>
+          <button
+            onClick={() => { setEditHorario(false); setNovoHorario('') }}
+            className="text-slate-400 hover:text-slate-600 transition-colors p-1 shrink-0"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
+      {/* Expanded: produtos + painel admin */}
       {expanded && (
         <div className="border-t border-cobeb-border/40">
+          {/* Lista de produtos */}
           {produtos.length > 0 ? (
             <>
               <div className="px-4 py-2 bg-[#EBF5FF]">
@@ -396,6 +476,90 @@ function ViagemCard({ viagem, expanded, onToggle }) {
           ) : (
             <div className="px-4 py-4 text-center">
               <p className="text-slate-400 text-xs">Produtos não vinculados ao pedido ainda</p>
+            </div>
+          )}
+
+          {/* Painel admin: horário (quando nulo) + rollback de fase */}
+          {isAdminTotal && (
+            <div className="border-t border-cobeb-border/30">
+              <div className="px-4 py-2 bg-slate-50/80">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Admin</p>
+              </div>
+              <div className="px-4 py-3 space-y-3">
+
+                {/* Opção de definir horário quando ainda não existe */}
+                {!viagem.horario_agendado && !editHorario && (
+                  <button
+                    onClick={() => { setNovoHorario(''); setEditHorario(true) }}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-500 hover:text-blue-700 transition-colors"
+                  >
+                    <Pencil size={11} />
+                    Definir horário fábrica
+                  </button>
+                )}
+
+                {/* Rollback de fase */}
+                {podeReverter && (
+                  !showRollback ? (
+                    <button
+                      onClick={() => setShowRollback(true)}
+                      className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 hover:text-slate-700 transition-colors"
+                    >
+                      <RotateCcw size={11} />
+                      Reverter fase da viagem
+                    </button>
+                  ) : (
+                    <div className="space-y-2.5">
+                      <div className="flex items-start gap-1.5 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2">
+                        <AlertTriangle size={11} className="text-yellow-500 shrink-0 mt-0.5" />
+                        <p className="text-[10px] text-yellow-700 leading-relaxed">
+                          Se o GPS do motorista estiver ativo, o geofence pode desfazer esta alteração automaticamente na próxima atualização de posição (~30s).
+                        </p>
+                      </div>
+                      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
+                        Reverter para:
+                      </p>
+                      <div className="flex gap-2 flex-wrap">
+                        {viagem.status === 'retornando' && (
+                          <button
+                            onClick={() => confirmarRollback('na_fabrica')}
+                            disabled={adminLoading}
+                            className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-50"
+                          >
+                            {adminLoading
+                              ? <div className="w-3 h-3 border border-blue-400/40 border-t-blue-500 rounded-full animate-spin" />
+                              : <RotateCcw size={10} />}
+                            Na Fábrica
+                          </button>
+                        )}
+                        <button
+                          onClick={() => confirmarRollback('em_transito')}
+                          disabled={adminLoading}
+                          className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl hover:bg-slate-200 transition-colors disabled:opacity-50"
+                        >
+                          {adminLoading
+                            ? <div className="w-3 h-3 border border-slate-400/40 border-t-slate-500 rounded-full animate-spin" />
+                            : <RotateCcw size={10} />}
+                          Em Rota
+                        </button>
+                        <button
+                          onClick={() => setShowRollback(false)}
+                          className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors px-2 py-1.5"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  )
+                )}
+
+                {/* Mensagem quando nenhuma ação admin está disponível */}
+                {!podeReverter && viagem.horario_agendado && (
+                  <p className="text-[10px] text-slate-400">
+                    Clique no ✏ ao lado do horário para editá-lo.
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>

@@ -75,7 +75,8 @@ export default function Viagem() {
   // rastreamento
   const [fabricasAlvo,     setFabricasAlvo]     = useState([])
   const [aceitouNavegador, setAceitouNavegador] = useState(false)
-  const statusRef = useRef(null)
+  const statusRef  = useRef(null)
+  const channelRef = useRef(null)
 
   // módulo 6
   const [tarefaStatus,   setTarefaStatus]   = useState(null) // null | 'pendente' | 'em_andamento' | 'concluida'
@@ -126,7 +127,10 @@ export default function Viagem() {
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
 
-  useEffect(() => { init() }, [])
+  useEffect(() => {
+    init()
+    return () => { if (channelRef.current) supabase.removeChannel(channelRef.current) }
+  }, [])
 
   // Polling: enquanto motorista aguarda conferência/portaria, verifica a cada 30s
   useEffect(() => {
@@ -190,6 +194,33 @@ export default function Viagem() {
       }
 
       setView('active')
+
+      // Realtime: recebe ajustes feitos pelo admin (horário e rollback de status)
+      if (channelRef.current) supabase.removeChannel(channelRef.current)
+      channelRef.current = supabase
+        .channel(`viagem-driver-${v.id}`)
+        .on(
+          'postgres_changes',
+          { event: 'UPDATE', schema: 'public', table: 'viagens', filter: `id=eq.${v.id}` },
+          (payload) => {
+            const row = payload.new
+            if (!row || row.id !== v.id) return
+            setViagemAtiva(prev => {
+              if (!prev) return prev
+              const patch = {}
+              if (row.horario_agendado !== prev.horario_agendado)
+                patch.horario_agendado = row.horario_agendado
+              if (row.status && row.status !== prev.status)
+                patch.status = row.status
+              if (row.dt_chegada_fabrica !== prev.dt_chegada_fabrica)
+                patch.dt_chegada_fabrica = row.dt_chegada_fabrica
+              if (row.dt_saida_fabrica !== prev.dt_saida_fabrica)
+                patch.dt_saida_fabrica = row.dt_saida_fabrica
+              return Object.keys(patch).length ? { ...prev, ...patch } : prev
+            })
+          }
+        )
+        .subscribe()
     } else {
       const cached = getCachedViagem()
       if (cached && !navigator.onLine) { setViagemAtiva(cached); setView('active') }
