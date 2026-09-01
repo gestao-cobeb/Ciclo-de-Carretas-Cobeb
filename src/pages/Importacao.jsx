@@ -102,7 +102,11 @@ export default function Importacao() {
       if ((p.importado_em ?? '') > (b.importado_em ?? '')) b.importado_em = p.importado_em
     })
 
-    setBases(Object.values(map).sort((a, b) => (b.data_puxada ?? '').localeCompare(a.data_puxada ?? '')))
+    setBases(
+      Object.values(map)
+        .filter(b => b.livres > 0 && b.arquivo_origem !== 'SUBSTITUICAO_ADMIN')
+        .sort((a, b) => (b.data_puxada ?? '').localeCompare(a.data_puxada ?? ''))
+    )
     setUnidades(unis ?? [])
 
     // Agrupa catálogos de produtos por arquivo_origem
