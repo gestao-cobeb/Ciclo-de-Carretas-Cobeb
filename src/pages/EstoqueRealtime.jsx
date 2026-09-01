@@ -382,6 +382,11 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
+            {viagem.tem_substituicao && (
+              <span className="text-[10px] font-semibold px-2 py-1 rounded-full border bg-orange-50 text-orange-600 border-orange-200 whitespace-nowrap">
+                BO vinculado
+              </span>
+            )}
             <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full border whitespace-nowrap ${cfg.badge}`}>
               {cfg.label}
             </span>
