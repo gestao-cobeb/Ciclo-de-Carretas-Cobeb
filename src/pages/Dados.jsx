@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { X } from 'lucide-react'
+import { X, FileDown } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import AdminLayout from '../components/AdminLayout'
 import { supabase } from '../lib/supabase'
 
@@ -35,7 +36,7 @@ const COLS = [
   { label: 'Data Viagem',        key: 'data_viagem',          min: 90  },
   { label: 'Carreta',            key: 'carreta',              min: 90  },
   { label: 'Cavalo',             key: 'cavalo',               min: 90  },
-  { label: 'Pedido',             key: 'pedido',               min: 110 },
+  { label: 'NF',                  key: 'nf',                   min: 100 },
   { label: 'Fábrica',            key: 'fabrica',              min: 160 },
   { label: 'Revenda (CD)',       key: 'revenda',              min: 150 },
   { label: 'Saída Revenda',      key: 'dt_saida_revenda',     min: 128 },
@@ -72,7 +73,7 @@ function cellValue(row, key) {
     case 'data_viagem':        return fmtDate(row.dt_saida_revenda)
     case 'carreta':            return row.carreta?.placa  ?? '—'
     case 'cavalo':             return row.cavalo?.placa   ?? '—'
-    case 'pedido':             return row._pedidos
+    case 'nf':                 return row._nf
     case 'fabrica':            return row._fabricas
     case 'revenda':            return row.unidade?.nome   ?? '—'
     case 'dt_saida_revenda':   return fmtTs(row.dt_saida_revenda)
@@ -151,7 +152,7 @@ export default function Dados() {
         .in('viagem_id', viagemIds),
       supabase
         .from('tarefas')
-        .select('viagem_id, dt_inicio_conferencia, dt_fim_conferencia')
+        .select('viagem_id, numero_nf, dt_inicio_conferencia, dt_fim_conferencia')
         .in('viagem_id', viagemIds),
       supabase
         .from('portaria_atendimentos')
@@ -182,15 +183,17 @@ export default function Dados() {
     })
 
     const tarefaMap  = {}
-    ;(tarefas ?? []).forEach(t => { tarefaMap[t.viagem_id] = t })
+    ;(tarefas ?? []).forEach(t => {
+      if (!tarefaMap[t.viagem_id]) tarefaMap[t.viagem_id] = t
+    })
 
     const portariaMap = {}
     ;(portarias ?? []).forEach(p => { portariaMap[p.viagem_id] = p })
 
     const mapped = (viagens ?? []).map(v => ({
       ...v,
-      _pedidos:  (pedMap[v.id]?.numeros ?? []).map(n => `#${n}`).join(' · ') || '—',
-      _fabricas: [...(pedMap[v.id]?.fabricas ?? new Set())].join(' · ')        || '—',
+      _nf:       tarefaMap[v.id]?.numero_nf ?? '—',
+      _fabricas: [...(pedMap[v.id]?.fabricas ?? new Set())].join(' · ') || '—',
       _tarefa:   tarefaMap[v.id]   ?? {},
       _portaria: portariaMap[v.id] ?? {},
     }))
@@ -216,6 +219,21 @@ export default function Dados() {
     setFiltroUnidade('')
     setFiltroDataDe('')
     setFiltroDataAte('')
+  }
+
+  function exportarXlsx() {
+    const header = COLS.map(c => c.label)
+    const dataRows = rowsFiltradas.map(row => COLS.map(col => {
+      const v = cellValue(row, col.key)
+      return v === '—' ? '' : v
+    }))
+    const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows])
+    const colWidths = COLS.map(col => ({ wch: Math.max(col.label.length, 12) }))
+    ws['!cols'] = colWidths
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Dados')
+    const date = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    XLSX.writeFile(wb, `COBEB_Dados_${date}.xlsx`)
   }
 
   return (
@@ -271,12 +289,23 @@ export default function Dados() {
           )}
         </div>
 
-        {/* ── Contagem ─────────────────────────────────────────────────────── */}
-        <p className="text-slate-400 text-xs">
-          {loading
-            ? 'Carregando...'
-            : `${rowsFiltradas.length} viagem${rowsFiltradas.length !== 1 ? 's' : ''}`}
-        </p>
+        {/* ── Contagem + Exportar ──────────────────────────────────────────── */}
+        <div className="flex items-center justify-between">
+          <p className="text-slate-400 text-xs">
+            {loading
+              ? 'Carregando...'
+              : `${rowsFiltradas.length} viagem${rowsFiltradas.length !== 1 ? 's' : ''}`}
+          </p>
+          {!loading && rowsFiltradas.length > 0 && (
+            <button
+              onClick={exportarXlsx}
+              className="flex items-center gap-1.5 text-xs font-semibold text-cobeb-navy border border-cobeb-border bg-white rounded-xl px-3 py-1.5 hover:bg-cobeb-navy hover:text-white transition-colors"
+            >
+              <FileDown size={13} />
+              Exportar .xlsx
+            </button>
+          )}
+        </div>
 
         {/* ── Tabela ───────────────────────────────────────────────────────── */}
         {loading ? (
