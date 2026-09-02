@@ -17,6 +17,7 @@ import PortariaAdmin from './pages/PortariaAdmin'
 import SeletorModulo from './pages/SeletorModulo'
 import EstoqueRealtime from './pages/EstoqueRealtime'
 import AdminLayout from './components/AdminLayout'
+import Dados from './pages/Dados'
 
 const PERFIL_ROTA = {
   admin:      '/dashboard',
@@ -32,6 +33,7 @@ const MODO_ROTA = {
   conferente: '/tarefas',
   portaria:   '/portaria',
   empilheira: '/estoque',
+  dados:      '/dados',
 }
 
 function Spinner() {
@@ -104,6 +106,9 @@ function AppRoutes() {
       />
       <Route path="/painel-realtime"
         element={<ProtectedRoute allowedRoles={['admin']}><AdminLayout title="Painel Tempo Real"><EstoqueRealtime adminMode /></AdminLayout></ProtectedRoute>}
+      />
+      <Route path="/dados"
+        element={<ProtectedRoute allowedRoles={['admin']}><Dados /></ProtectedRoute>}
       />
 
       <Route path="/"  element={<Navigate to={home} replace />} />

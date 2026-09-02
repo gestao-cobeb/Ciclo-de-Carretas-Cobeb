@@ -1,5 +1,5 @@
 ﻿import { useNavigate, useLocation } from 'react-router-dom'
-import { LayoutDashboard, Users, LogOut, Package, AlertTriangle, History, ClipboardCheck, Database, DoorOpen, LayoutGrid, Monitor } from 'lucide-react'
+import { LayoutDashboard, Users, LogOut, Package, AlertTriangle, History, ClipboardCheck, Database, DoorOpen, LayoutGrid, Monitor, Table2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function AdminLayout({ title, children }) {
@@ -23,6 +23,7 @@ export default function AdminLayout({ title, children }) {
     { path: '/historico',         icon: History,         label: 'Histórico' },
     ...(!isAdminTotal ? [
       { path: '/painel-realtime', icon: Monitor, label: 'Tempo Real' },
+      { path: '/dados',           icon: Table2,  label: 'Dados'     },
     ] : []),
     ...(isAdminTotal ? [
       { path: '/importacao', icon: Database, label: 'Importar' },

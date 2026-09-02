@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi } from 'lucide-react'
+import { LayoutDashboard, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -59,6 +59,17 @@ const MODULOS = [
     borda:  'border-orange-500/30',
     texto:  'text-orange-600',
     fundo:  'bg-orange-500/5 hover:bg-orange-500/10',
+  },
+  {
+    key:    'dados',
+    rota:   '/dados',
+    label:  'Dados',
+    desc:   'Tabelas e consultas de dados operacionais',
+    Icon:   Table2,
+    cor:    'bg-teal-600',
+    borda:  'border-teal-600/30',
+    texto:  'text-teal-700',
+    fundo:  'bg-teal-600/5 hover:bg-teal-600/10',
   },
 ]
 
