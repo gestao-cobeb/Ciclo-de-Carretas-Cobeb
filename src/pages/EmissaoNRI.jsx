@@ -127,7 +127,7 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
     try {
       if (!validar()) return
 
-      const totalNRIs = grupos.reduce((s, gr) => s + Number(gr.qtdePaletes) * 3, 0)
+      const totalNRIs = grupos.reduce((s, gr) => s + Math.ceil(Number(gr.qtdePaletes)) * 3, 0)
       const { data: primeiro, error } = await supabase.rpc('get_next_nri_batch', { p_quantidade: totalNRIs })
       if (error) throw error
 
@@ -141,7 +141,7 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
       const allNRIs = []
       let num = primeiro
       for (const gr of grupos) {
-        for (let p = 0; p < Number(gr.qtdePaletes); p++) {
+        for (let p = 0; p < Math.ceil(Number(gr.qtdePaletes)); p++) {
           for (let n = 0; n < 3; n++) {
             allNRIs.push({ numero: num++, codigo: gr.codigo, descricao: gr.descricao, dataValidade: gr.dataValidade, curva: gr.curva ?? '' })
           }
@@ -184,7 +184,7 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
     }
   }
 
-  const totalNRIs   = grupos.reduce((s, gr) => s + (Number(gr.qtdePaletes) > 0 ? Number(gr.qtdePaletes) * 3 : 0), 0)
+  const totalNRIs   = grupos.reduce((s, gr) => s + (Number(gr.qtdePaletes) > 0 ? Math.ceil(Number(gr.qtdePaletes)) * 3 : 0), 0)
   const totalFolhas = Math.ceil(totalNRIs / 3)
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -317,7 +317,7 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
                           </div>
                           {gr.qtdePaletes && Number(gr.qtdePaletes) > 0 && (
                             <p className="text-cobeb-navy text-[11px] font-semibold">
-                              = {gr.qtdePaletes} plt → {Number(gr.qtdePaletes) * 3} NRIs
+                              = {Math.ceil(Number(gr.qtdePaletes))} plt → {Math.ceil(Number(gr.qtdePaletes)) * 3} NRIs
                             </p>
                           )}
                           {!gr.cxPallet && gr.qtdaCxInput && (
@@ -330,7 +330,7 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
                             className={`w-24 bg-[#EBF5FF] border rounded-xl px-3 py-2.5 text-xs text-right text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors ${gr.erroQtd ? 'border-red-400' : 'border-cobeb-border'}`} />
                           <span className="text-slate-500 text-xs">plt</span>
                           {gr.qtdeCaixas !== null && <span className="text-slate-400 text-xs">= {gr.qtdeCaixas.toLocaleString('pt-BR')} cx</span>}
-                          {gr.qtdePaletes && Number(gr.qtdePaletes) > 0 && <span className="text-cobeb-navy/60 text-[10px] ml-auto">→ {Number(gr.qtdePaletes) * 3} NRIs</span>}
+                          {gr.qtdePaletes && Number(gr.qtdePaletes) > 0 && <span className="text-cobeb-navy/60 text-[10px] ml-auto">→ {Math.ceil(Number(gr.qtdePaletes)) * 3} NRIs</span>}
                         </div>
                       )}
                       {gr.erroQtd && <p className="text-red-400 text-[10px] mt-1">Informe uma quantidade válida</p>}
