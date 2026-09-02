@@ -275,7 +275,7 @@ export default function Tarefas() {
           const qtd      = Number(it.qtde_recebida)
           return {
             _id:          uid(),
-            codigo:       p.cod_produto,
+            codigo:       p.cod_produto ?? '',
             descricao:    p.descricao,
             cxPallet,
             qtdePaletes:  String(qtd),

@@ -111,7 +111,7 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
     setErrCab(ec)
     const gruposV = grupos.map(gr => ({
       ...gr,
-      erroCodigo: !gr.codigo.trim() ? 'Obrigatório' : (!gr.descricao ? (gr.erroCodigo || 'Busque o produto') : null),
+      erroCodigo: !(gr.codigo ?? '').trim() ? 'Obrigatório' : (!gr.descricao ? (gr.erroCodigo || 'Busque o produto') : null),
       erroQtd:    !gr.qtdePaletes || Number(gr.qtdePaletes) <= 0,
       erroData:   !gr.dataValidade,
     }))
@@ -122,19 +122,21 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
   // ─── Geração do PDF ─────────────────────────────────────────────────────────
 
   async function gerarPDF() {
-    if (!validar()) return
     setGerando(true)
     setPdfUrl(null)
     try {
+      if (!validar()) return
+
       const totalNRIs = grupos.reduce((s, gr) => s + Number(gr.qtdePaletes) * 3, 0)
       const { data: primeiro, error } = await supabase.rpc('get_next_nri_batch', { p_quantidade: totalNRIs })
       if (error) throw error
 
-      await supabase.from('nri_emissoes').insert({
-        tarefa_id: tarefa.id, numero_nf: tarefa.numero_nf ?? null,
+      const { error: errInsert } = await supabase.from('nri_emissoes').insert({
+        tarefa_id: tarefa.id, numero_nf: tarefa.numero_nf ?? '',
         operador: cab.operador.trim(), conferente: cab.conferente.trim(), turno: cab.turno,
         total_nris: totalNRIs, primeiro_numero: primeiro, ultimo_numero: primeiro + totalNRIs - 1,
       })
+      if (errInsert) throw errInsert
 
       const allNRIs = []
       let num = primeiro
