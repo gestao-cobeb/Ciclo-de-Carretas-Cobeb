@@ -197,7 +197,9 @@ export default function Admins() {
                   </div>
                 </div>
                 <div className="flex gap-1.5 shrink-0">
-                  <ActionBtn onClick={() => abrirEditar(a)}><Pencil size={14} /></ActionBtn>
+                  {a.email !== 'admin@cobeb.com.br' && (
+                    <ActionBtn onClick={() => abrirEditar(a)}><Pencil size={14} /></ActionBtn>
+                  )}
                   <ActionBtn
                     onClick={() => toggleAtivo(a)}
                     disabled={a.id === meProfile?.id}
