@@ -135,6 +135,16 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
         tarefa_id: tarefa.id, numero_nf: tarefa.numero_nf ?? '',
         operador: cab.operador.trim(), conferente: cab.conferente.trim(), turno: cab.turno,
         total_nris: totalNRIs, primeiro_numero: primeiro, ultimo_numero: primeiro + totalNRIs - 1,
+        ...(isMarketplace(tarefa) ? {
+          itens: grupos.map(gr => ({
+            codigo:       gr.codigo,
+            descricao:    gr.descricao ?? null,
+            qtdePaletes:  Number(gr.qtdePaletes),
+            qtdeCaixas:   gr.qtdeCaixas ?? null,
+            dataValidade: gr.dataValidade,
+            curva:        gr.curva ?? null,
+          })),
+        } : {}),
       })
       if (errInsert) throw errInsert
 

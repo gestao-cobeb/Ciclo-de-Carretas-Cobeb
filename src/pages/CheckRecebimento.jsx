@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { ClipboardCheck, Search, X, ChevronDown, ChevronUp, RefreshCw, Download, FileText } from 'lucide-react'
+import { ClipboardCheck, Search, X, ChevronDown, ChevronUp, RefreshCw, Download, FileText, ShoppingCart } from 'lucide-react'
 import AdminLayout from '../components/AdminLayout'
 import { supabase } from '../lib/supabase'
 import { gerarNRIPdf } from '../lib/nriPdf'
@@ -189,7 +189,57 @@ export default function CheckRecebimento() {
         }
       })
 
-    setGrupos(result)
+    // ── Marketplace: tarefas com NRI emitida (qualquer status) ──────────────
+    const { data: marketRaw } = await supabase
+      .from('tarefas')
+      .select('id, numero_nf, status, unidade_id, tipo, placa_cavalo, placa_carreta, unidade:unidades(id, nome, cidade, codigo)')
+      .eq('tipo', 'marketplace')
+      .order('created_at', { ascending: false })
+
+    const marketIds = (marketRaw ?? []).map(t => t.id)
+    const { data: marketNris } = marketIds.length > 0
+      ? await supabase.from('nri_emissoes').select('*').in('tarefa_id', marketIds).order('created_at', { ascending: false })
+      : { data: [] }
+
+    const seenMarket = new Set()
+    const marketEmissoes = (marketNris ?? []).filter(e => {
+      if (seenMarket.has(e.tarefa_id)) return false
+      seenMarket.add(e.tarefa_id)
+      return true
+    })
+
+    const marketGrupos = marketEmissoes.map(emissao => {
+      const tarefa = (marketRaw ?? []).find(t => t.id === emissao.tarefa_id)
+      if (!tarefa) return null
+      return {
+        id:                 tarefa.id,
+        numero_nf:          tarefa.numero_nf,
+        status:             tarefa.status,
+        unidade_id:         tarefa.unidade_id,
+        unidade:            tarefa.unidade,
+        viagem_id:          null,
+        placa_carreta:      tarefa.placa_carreta ?? null,
+        placa_cavalo:       tarefa.placa_cavalo  ?? null,
+        motorista:          null,
+        data:               emissao.created_at.split('T')[0],
+        fabricas:           [],
+        produtos:           [],
+        totalPrevPal:       0,
+        totalRecPal:        0,
+        conferidoCount:     0,
+        totalProd:          0,
+        temDivergencia:     false,
+        temQualidade:       false,
+        temInversao:        false,
+        substituteByPedido: {},
+        nriEmissao:         emissao,
+        isMarketplace:      true,
+        marketItens:        emissao.itens ?? null,
+      }
+    }).filter(Boolean)
+
+    const allGrupos = [...result, ...marketGrupos].sort((a, b) => (b.data ?? '').localeCompare(a.data ?? ''))
+    setGrupos(allGrupos)
     setUnidades(unis ?? [])
     if (!silent) setLoading(false)
   }
@@ -222,6 +272,35 @@ export default function CheckRecebimento() {
     if (!emissao) return
     setBaixandoNRI(g.id)
     try {
+      // ── Marketplace: reconstruir NRI a partir dos itens gravados ────────────
+      if (g.isMarketplace) {
+        const storedItens = g.marketItens ?? []
+        const allNRIs = []
+        let num = emissao.primeiro_numero
+        if (storedItens.length > 0) {
+          for (const item of storedItens) {
+            const qtd = Math.ceil(Number(item.qtdePaletes))
+            for (let p = 0; p < qtd; p++) {
+              for (let n = 0; n < 3; n++) {
+                allNRIs.push({ numero: num++, codigo: item.codigo ?? '', descricao: item.descricao ?? '', dataValidade: item.dataValidade ?? '', curva: item.curva ?? '' })
+              }
+            }
+          }
+        } else {
+          for (let i = 0; i < emissao.total_nris; i++) {
+            allNRIs.push({ numero: emissao.primeiro_numero + i, codigo: '', descricao: 'Item não registrado', dataValidade: '', curva: '' })
+          }
+        }
+        const emissaoDate     = new Date(emissao.created_at)
+        const dataRecebimento = emissaoDate.toLocaleDateString('pt-BR')
+        const horaEmissao     = emissaoDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+        const dateStr         = emissao.created_at.slice(0, 10).replace(/-/g, '')
+        const filename        = `NRI_${g.numero_nf ?? 'MKT'}_${dateStr}.pdf`
+        const doc = gerarNRIPdf({ allNRIs, cabecalho: { operador: emissao.operador, conferente: emissao.conferente, turno: emissao.turno }, placaCarreta: g.placa_carreta ?? '', placaCavalo: g.placa_cavalo ?? '', numeroNF: g.numero_nf ?? '', motorista: '', origem: 'Marketplace', dataRecebimento, horaEmissao, filename })
+        window.open(doc.output('bloburl'), '_blank')
+        return
+      }
+
       // Produtos conferidos normalmente
       const { data: itens } = await supabase
         .from('conferencia_itens')
@@ -394,7 +473,11 @@ export default function CheckRecebimento() {
                         <span className="text-cobeb-yellow font-semibold text-sm shrink-0">
                           {g.numero_nf ? `NF ${g.numero_nf}` : '—'}
                         </span>
-                        {concluida ? (
+                        {g.isMarketplace ? (
+                          <span className="text-[10px] font-semibold bg-cobeb-yellow/20 text-cobeb-yellow border border-cobeb-yellow/40 px-2 py-0.5 rounded-full shrink-0 flex items-center gap-1">
+                            <ShoppingCart size={9} />Marketplace
+                          </span>
+                        ) : concluida ? (
                           <span className="text-[10px] font-semibold bg-green-500/15 text-green-400 border border-green-500/30 px-2 py-0.5 rounded-full shrink-0">
                             Concluída
                           </span>
@@ -447,11 +530,21 @@ export default function CheckRecebimento() {
 
                     {/* Linha 3: progresso */}
                     <div className="flex items-center gap-2 mt-1.5 text-[10px] text-slate-500">
-                      <span>{g.conferidoCount}/{g.totalProd} prod. conferidos</span>
-                      <span>·</span>
-                      <span>Prev. {g.totalPrevPal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal</span>
-                      <span>·</span>
-                      <span>Rec. {g.totalRecPal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal</span>
+                      {g.isMarketplace ? (
+                        <>
+                          <span>{g.nriEmissao?.total_nris ?? 0} NRIs emitidas</span>
+                          <span>·</span>
+                          <span>Nº {g.nriEmissao?.primeiro_numero}–{g.nriEmissao?.ultimo_numero}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>{g.conferidoCount}/{g.totalProd} prod. conferidos</span>
+                          <span>·</span>
+                          <span>Prev. {g.totalPrevPal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal</span>
+                          <span>·</span>
+                          <span>Rec. {g.totalRecPal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal</span>
+                        </>
+                      )}
                     </div>
                   </button>
 
@@ -461,10 +554,37 @@ export default function CheckRecebimento() {
                       {/* Sub-header */}
                       <div className="grid px-4 py-2 bg-[#EBF5FF]" style={{ gridTemplateColumns: '1fr auto' }}>
                         <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest">Produto</span>
-                        <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest text-right">Prev / Rec / Val.</span>
+                        <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-widest text-right">
+                          {g.isMarketplace ? 'Pal / Val.' : 'Prev / Rec / Val.'}
+                        </span>
                       </div>
 
-                      {g.produtos.map((p, i) => {
+                      {g.isMarketplace ? (
+                        // ── Marketplace: itens da NRI ──────────────────────────────────────────
+                        g.marketItens && g.marketItens.length > 0 ? (
+                          g.marketItens.map((item, i) => (
+                            <div key={i} className={`grid items-start gap-x-3 px-4 py-2.5 ${i < g.marketItens.length - 1 ? 'border-b border-cobeb-border/30' : ''}`} style={{ gridTemplateColumns: '1fr auto' }}>
+                              <div className="min-w-0">
+                                <p className="text-cobeb-text text-xs font-medium truncate">{item.descricao ?? '—'}</p>
+                                <span className="text-slate-500 text-[10px] font-mono">{item.codigo}</span>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-xs font-semibold text-cobeb-text">
+                                  {Number(item.qtdePaletes).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal
+                                </p>
+                                {item.qtdeCaixas != null && <p className="text-[10px] text-slate-500">{Number(item.qtdeCaixas).toLocaleString('pt-BR')} cx</p>}
+                                {item.dataValidade && <p className="text-[10px] text-slate-500">Val: {ptDate(item.dataValidade)}</p>}
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="px-4 py-5 text-center">
+                            <p className="text-slate-400 text-xs italic">Itens não disponíveis neste lançamento</p>
+                          </div>
+                        )
+                      ) : (
+                        // ── Normal: produtos do pedido ─────────────────────────────────────────
+                        g.produtos.map((p, i) => {
                         const rec      = p.item?.qtde_recebida
                         const val      = p.item?.data_validade
                         const prevPal  = Number(p.qtde_pallets)
@@ -526,21 +646,35 @@ export default function CheckRecebimento() {
                             )}
                           </div>
                         )
-                      })}
+                      })
+                      )}
 
                       {/* Totais */}
                       <div className="grid items-center gap-x-3 px-4 py-2.5 bg-[#EBF5FF]" style={{ gridTemplateColumns: '1fr auto' }}>
-                        <span className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest">
-                          Total ({g.totalProd} produtos)
-                        </span>
-                        <div className="text-right">
-                          <span className="text-slate-500 text-[10px]">
-                            Prev: {g.totalPrevPal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal
-                          </span>
-                          <span className={`text-xs font-bold ml-2 ${g.totalRecPal === g.totalPrevPal ? 'text-green-500' : 'text-cobeb-yellow'}`}>
-                            Rec: {g.totalRecPal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal
-                          </span>
-                        </div>
+                        {g.isMarketplace ? (
+                          <>
+                            <span className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest">
+                              Total ({(g.marketItens ?? []).length} produto{(g.marketItens ?? []).length !== 1 ? 's' : ''} · {g.nriEmissao?.total_nris ?? 0} NRIs)
+                            </span>
+                            <span className="text-cobeb-yellow text-xs font-bold text-right">
+                              {(g.marketItens ?? []).reduce((s, item) => s + Number(item.qtdePaletes || 0), 0).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-slate-500 text-[10px] font-semibold uppercase tracking-widest">
+                              Total ({g.totalProd} produtos)
+                            </span>
+                            <div className="text-right">
+                              <span className="text-slate-500 text-[10px]">
+                                Prev: {g.totalPrevPal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal
+                              </span>
+                              <span className={`text-xs font-bold ml-2 ${g.totalRecPal === g.totalPrevPal ? 'text-green-500' : 'text-cobeb-yellow'}`}>
+                                Rec: {g.totalRecPal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal
+                              </span>
+                            </div>
+                          </>
+                        )}
                       </div>
 
                       {/* NRI */}
