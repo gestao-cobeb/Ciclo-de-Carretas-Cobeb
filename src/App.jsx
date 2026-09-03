@@ -33,8 +33,9 @@ const MODO_ROTA = {
   conferente: '/tarefas',
   portaria:   '/portaria',
   empilheira: '/estoque',
-  dados:      '/dados',
-  cadastros:  '/cadastros',
+  dados:       '/dados',
+  cadastros:   '/cadastros',
+  importacao:  '/importacao',
 }
 
 function Spinner() {
@@ -97,7 +98,7 @@ function AppRoutes() {
         element={<ProtectedRoute allowedRoles={['portaria']}><PortariaPage /></ProtectedRoute>}
       />
       <Route path="/importacao"
-        element={<ProtectedRoute allowedRoles={['admin']} requireAdminTotal><Importacao /></ProtectedRoute>}
+        element={<ProtectedRoute allowedRoles={['admin']}><Importacao /></ProtectedRoute>}
       />
       <Route path="/portaria-admin"
         element={<ProtectedRoute allowedRoles={['admin']}><PortariaAdmin /></ProtectedRoute>}

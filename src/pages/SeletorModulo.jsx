@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users } from 'lucide-react'
+import { LayoutDashboard, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -81,6 +81,17 @@ export const MODULOS = [
     borda:  'border-slate-600/30',
     texto:  'text-slate-700',
     fundo:  'bg-slate-600/5 hover:bg-slate-600/10',
+  },
+  {
+    key:    'importacao',
+    rota:   '/importacao',
+    label:  'Importação',
+    desc:   'Importar BASE e catálogo de produtos Ambev',
+    Icon:   FileSpreadsheet,
+    cor:    'bg-green-700',
+    borda:  'border-green-700/30',
+    texto:  'text-green-800',
+    fundo:  'bg-green-700/5 hover:bg-green-700/10',
   },
 ]
 
