@@ -20,7 +20,7 @@ const TABS_BASE = [
   { id: 'empilhadeiras', label: 'Empilhadeiras', icon: Forklift,     adminTotal: false },
   { id: 'carretas',      label: 'Carretas',      icon: Truck,        adminTotal: false },
   { id: 'cavalos',       label: 'Cavalos',       icon: Tractor,      adminTotal: false },
-  { id: 'admins',        label: 'Usuários',      icon: Shield,       adminTotal: false },
+  { id: 'admins',        label: 'Usuários',      icon: Shield,       adminTotal: true  },
   { id: 'unidades',      label: 'Unidades',      icon: Building2,    adminTotal: true  },
   { id: 'grade',         label: 'Grade',         icon: LayoutGrid,   adminTotal: true  },
 ]
