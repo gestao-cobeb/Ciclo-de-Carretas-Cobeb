@@ -95,7 +95,8 @@ export default function EstoqueRealtime({ adminMode = false }) {
     if (!silent) setLoading(true)
     const { data, error } = await supabase.rpc('get_painel_viagens')
     if (!error && data) {
-      const filtrado = isAdminTotal
+      const todasUnidades = profile?.todas_unidades === true
+      const filtrado = (isAdminTotal || todasUnidades)
         ? data
         : data.filter(v => v.unidade_descarga_id === profile?.unidade_id)
       setViagens(filtrado)

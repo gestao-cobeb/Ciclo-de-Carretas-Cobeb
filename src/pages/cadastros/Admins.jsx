@@ -33,7 +33,7 @@ export default function Admins() {
     setLoading(true)
     const [{ data: admins }, { data: unids }] = await Promise.all([
       supabase.from('profiles')
-        .select('id, nome, email, ativo, acesso_total, modulos_permitidos, grade_permitida, unidade:unidades(id, nome, cidade)')
+        .select('id, nome, email, ativo, acesso_total, modulos_permitidos, grade_permitida, todas_unidades, unidade:unidades(id, nome, cidade)')
         .eq('perfil', 'admin').order('nome'),
       supabase.from('unidades').select('id, nome, cidade').eq('ativo', true).order('nome'),
     ])
@@ -47,7 +47,7 @@ export default function Admins() {
   const abrirNovo = () => {
     setEditando(null); setNome(''); setEmail('')
     setAcessoTotal(false); setModulosPermitidos([]); setGradePermitida(false)
-    setUnidadeId(unidades[0]?.id || '')
+    setUnidadeId('')
     setSenha(gerarSenha()); setErro(''); setSenhaCriada(''); setCopiado(false)
     setModal(true)
   }
@@ -56,7 +56,7 @@ export default function Admins() {
     setEditando(a); setNome(a.nome); setEmail(a.email)
     setAcessoTotal(a.acesso_total); setModulosPermitidos(a.modulos_permitidos || [])
     setGradePermitida(a.grade_permitida || false)
-    setUnidadeId(a.unidade?.id || unidades[0]?.id || '')
+    setUnidadeId(a.todas_unidades ? '__todas__' : (a.unidade?.id || ''))
     setSenha(''); setErro(''); setSenhaCriada(''); setCopiado(false)
     setModal(true)
   }
@@ -72,15 +72,16 @@ export default function Admins() {
 
   const salvar = async (e) => {
     e.preventDefault()
-    if (!acessoTotal && !unidadeId) { setErro('Selecione uma unidade.'); return }
+    if (!acessoTotal && !unidadeId) { setErro('Selecione uma unidade ou "Todas as unidades".'); return }
     setSalvando(true); setErro('')
 
     if (editando) {
       const { error } = await supabase.from('profiles').update({
         nome, acesso_total: acessoTotal,
-        unidade_id: acessoTotal ? null : unidadeId,
+        unidade_id:         acessoTotal ? null : (unidadeId === '__todas__' ? null : unidadeId || null),
+        todas_unidades:     acessoTotal ? false : unidadeId === '__todas__',
         modulos_permitidos: acessoTotal ? null : modulosPermitidos,
-        grade_permitida: acessoTotal ? false : gradePermitida,
+        grade_permitida:    acessoTotal ? false : gradePermitida,
       }).eq('id', editando.id)
       if (error) setErro(error.message)
       else { await carregar(); fechar() }
@@ -92,11 +93,12 @@ export default function Admins() {
 
       const { error: profileErr } = await supabase.from('profiles').insert({
         id: userId, nome, email, perfil: 'admin',
-        acesso_total: acessoTotal,
-        unidade_id: acessoTotal ? null : unidadeId,
+        acesso_total:       acessoTotal,
+        unidade_id:         acessoTotal ? null : (unidadeId === '__todas__' ? null : unidadeId || null),
+        todas_unidades:     acessoTotal ? false : unidadeId === '__todas__',
         modulos_permitidos: acessoTotal ? null : modulosPermitidos,
-        grade_permitida: acessoTotal ? false : gradePermitida,
-        primeiro_acesso: true,
+        grade_permitida:    acessoTotal ? false : gradePermitida,
+        primeiro_acesso:    true,
       })
       if (profileErr) { setErro(profileErr.message); setSalvando(false); return }
 
@@ -188,7 +190,7 @@ export default function Admins() {
                       </span>
                     ) : (
                       <span className="flex items-center gap-1 text-[11px] bg-white border border-gray-200 text-slate-500 px-2 py-0.5 rounded-full">
-                        <MapPin size={10} /> {a.unidade?.nome || 'Sem unidade'}
+                        <MapPin size={10} /> {a.todas_unidades ? 'Todas as unidades' : (a.unidade?.nome || 'Sem unidade')}
                       </span>
                     )}
                     <span className={`text-[11px] px-2 py-0.5 rounded-full font-medium border ${
@@ -324,6 +326,8 @@ export default function Admins() {
               {!acessoTotal && (
                 <Field label="Unidade" required>
                   <select value={unidadeId} onChange={e => setUnidadeId(e.target.value)} className={selectClass}>
+                    <option value="">— Selecionar —</option>
+                    <option value="__todas__">Todas as unidades</option>
                     {unidades.map(u => (
                       <option key={u.id} value={u.id}>{u.nome} — {u.cidade}</option>
                     ))}
