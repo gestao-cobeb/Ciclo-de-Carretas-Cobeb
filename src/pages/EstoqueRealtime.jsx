@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw, ArrowLeftRight } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -215,7 +215,7 @@ export default function EstoqueRealtime({ adminMode = false }) {
           >
             <RefreshCw size={16} />
           </button>
-          {profile?.acesso_total && (
+          {profile?.perfil === 'admin' && (
             <button
               onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
               className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
@@ -235,7 +235,7 @@ export default function EstoqueRealtime({ adminMode = false }) {
       </header>
 
       <main className="flex-1 overflow-y-auto pb-6">
-        {profile?.perfil === 'admin' && (
+        {profile?.acesso_total && (
           <div className="px-4 pt-4 max-w-lg mx-auto">
             <button
               onClick={() => setView('mapa')}

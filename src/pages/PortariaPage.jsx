@@ -169,7 +169,7 @@ export default function PortariaPage() {
           <button onClick={carregar} className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10" title="Atualizar">
             <RefreshCw size={16} />
           </button>
-          {profile?.acesso_total && (
+          {profile?.perfil === 'admin' && (
             <button onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
               className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
               title="Trocar Módulo">

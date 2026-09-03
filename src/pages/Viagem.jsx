@@ -480,7 +480,7 @@ export default function Viagem() {
         </div>
         <div className="flex items-center gap-3">
           {!isOnline && <WifiOff size={16} className="text-yellow-300" />}
-          {profile?.acesso_total && (
+          {profile?.perfil === 'admin' && (
             <button onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
               className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
               title="Trocar Módulo">
