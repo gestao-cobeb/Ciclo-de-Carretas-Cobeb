@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw, ArrowLeftRight } from 'lucide-react'
+import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw, ArrowLeftRight, MapPin } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import MapaRealtime from './MapaRealtime'
@@ -57,7 +57,17 @@ export default function EstoqueRealtime({ adminMode = false }) {
   const [expanded,   setExpanded]   = useState(new Set())
   const [lastUpdate, setLastUpdate] = useState(null)
   const [view,       setView]       = useState('lista')
+  const [unidades,   setUnidades]   = useState([])
   const channelRef = useRef(null)
+
+  useEffect(() => {
+    supabase.from('unidades')
+      .select('id, nome')
+      .eq('tipo', 'revenda')
+      .eq('ativo', true)
+      .order('nome')
+      .then(({ data }) => setUnidades(data ?? []))
+  }, [])
 
   useEffect(() => {
     loadData()
@@ -139,6 +149,7 @@ export default function EstoqueRealtime({ adminMode = false }) {
               onToggle={() => toggleExpand(v.id)}
               isAdminTotal={isAdminTotal}
               onRefresh={() => loadData(true)}
+              unidades={unidades}
             />
           ))}
         </div>
@@ -254,7 +265,7 @@ export default function EstoqueRealtime({ adminMode = false }) {
 
 // ── Card de viagem ────────────────────────────────────────────────────────────
 
-function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
+function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unidades = [] }) {
   const cfg      = STATUS_CFG[viagem.status] ?? STATUS_CFG.iniciada
   const produtos = viagem.produtos ?? []
 
@@ -262,6 +273,10 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
   const [novoHorario,  setNovoHorario]  = useState('')
   const [showRollback, setShowRollback] = useState(false)
   const [adminLoading, setAdminLoading] = useState(false)
+
+  const [editDestino,   setEditDestino]   = useState(false)
+  const [novaDest,      setNovaDest]      = useState('')
+  const [savingDestino, setSavingDestino] = useState(false)
 
   // Estado de substituição de produto
   const [substituindo,     setSubstituindo]     = useState(null)  // id do pedido sendo substituído
@@ -273,6 +288,26 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
 
   const podeReverter    = isAdminTotal && ['na_fabrica', 'retornando'].includes(viagem.status)
   const podeSubstituir  = isAdminTotal && ['iniciada', 'em_transito', 'na_fabrica'].includes(viagem.status)
+
+  async function salvarDestino() {
+    if (!novaDest || novaDest === viagem.unidade_descarga_id) return
+    setSavingDestino(true)
+    const { error } = await supabase
+      .from('viagens')
+      .update({ unidade_descarga_id: novaDest })
+      .eq('id', viagem.id)
+    if (error) { alert('Erro ao redirecionar: ' + error.message); setSavingDestino(false); return }
+    if (viagem.agendamento_id) {
+      await supabase
+        .from('agendamentos')
+        .update({ status: 'cancelado' })
+        .eq('id', viagem.agendamento_id)
+    }
+    setSavingDestino(false)
+    setEditDestino(false)
+    setNovaDest('')
+    onRefresh?.()
+  }
 
   async function salvarHorario() {
     setAdminLoading(true)
@@ -455,6 +490,31 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
           </div>
         )}
 
+        {/* Linha 4: Destino */}
+        {viagem.unidade_descarga_nome && (
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+              <MapPin size={9} />
+              {viagem.unidade_descarga_nome}
+              {isAdminTotal && !editDestino && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={e => {
+                    e.stopPropagation()
+                    setNovaDest(viagem.unidade_descarga_id)
+                    setEditDestino(true)
+                  }}
+                  className="ml-0.5 cursor-pointer text-slate-400 hover:text-slate-600 transition-colors leading-none"
+                  title="Redirecionar destino"
+                >
+                  <Pencil size={8} />
+                </span>
+              )}
+            </span>
+          </div>
+        )}
+
         {/* Indicador de etapas */}
         <StepIndicator step={cfg.step} />
 
@@ -496,6 +556,41 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh }) {
           </button>
           <button
             onClick={() => { setEditHorario(false); setNovoHorario('') }}
+            className="text-slate-400 hover:text-slate-600 transition-colors p-1 shrink-0"
+          >
+            <X size={12} />
+          </button>
+        </div>
+      )}
+
+      {/* Edição inline de destino (admin total) */}
+      {editDestino && (
+        <div className="px-4 py-2.5 flex items-center gap-2 bg-slate-50/80 border-t border-slate-100">
+          <MapPin size={11} className="text-slate-500 shrink-0" />
+          <span className="text-[11px] font-semibold text-slate-600 whitespace-nowrap shrink-0">Destino</span>
+          <select
+            value={novaDest}
+            onChange={e => setNovaDest(e.target.value)}
+            className="text-[11px] border border-slate-300 rounded-lg px-2 py-1 focus:outline-none focus:ring-1 focus:ring-cobeb-blue bg-white flex-1 min-w-0"
+            autoFocus
+          >
+            <option value="">— Selecionar —</option>
+            {unidades.map(u => (
+              <option key={u.id} value={u.id}>{u.nome}</option>
+            ))}
+          </select>
+          <button
+            onClick={salvarDestino}
+            disabled={savingDestino || !novaDest || novaDest === viagem.unidade_descarga_id}
+            className="flex items-center gap-1 text-[11px] font-semibold text-white bg-green-500 hover:bg-green-600 disabled:opacity-50 px-2.5 py-1 rounded-lg transition-colors shrink-0"
+          >
+            {savingDestino
+              ? <div className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+              : <Check size={11} />}
+            Salvar
+          </button>
+          <button
+            onClick={() => { setEditDestino(false); setNovaDest('') }}
             className="text-slate-400 hover:text-slate-600 transition-colors p-1 shrink-0"
           >
             <X size={12} />
