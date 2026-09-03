@@ -22,7 +22,7 @@ const TABS_BASE = [
   { id: 'cavalos',       label: 'Cavalos',       icon: Tractor,      adminTotal: false },
   { id: 'admins',        label: 'Usuários',      icon: Shield,       adminTotal: true  },
   { id: 'unidades',      label: 'Unidades',      icon: Building2,    adminTotal: true  },
-  { id: 'grade',         label: 'Grade',         icon: LayoutGrid,   adminTotal: true  },
+  { id: 'grade',         label: 'Grade',         icon: LayoutGrid,   adminTotal: false },
 ]
 
 export default function Cadastros() {
