@@ -21,6 +21,7 @@ export default function Admins() {
   const [email, setEmail] = useState('')
   const [acessoTotal, setAcessoTotal] = useState(false)
   const [modulosPermitidos, setModulosPermitidos] = useState([])
+  const [gradePermitida, setGradePermitida] = useState(false)
   const [unidadeId, setUnidadeId] = useState('')
   const [senha, setSenha] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -32,7 +33,7 @@ export default function Admins() {
     setLoading(true)
     const [{ data: admins }, { data: unids }] = await Promise.all([
       supabase.from('profiles')
-        .select('id, nome, email, ativo, acesso_total, modulos_permitidos, unidade:unidades(id, nome, cidade)')
+        .select('id, nome, email, ativo, acesso_total, modulos_permitidos, grade_permitida, unidade:unidades(id, nome, cidade)')
         .eq('perfil', 'admin').order('nome'),
       supabase.from('unidades').select('id, nome, cidade').eq('ativo', true).order('nome'),
     ])
@@ -45,7 +46,8 @@ export default function Admins() {
 
   const abrirNovo = () => {
     setEditando(null); setNome(''); setEmail('')
-    setAcessoTotal(false); setModulosPermitidos([]); setUnidadeId(unidades[0]?.id || '')
+    setAcessoTotal(false); setModulosPermitidos([]); setGradePermitida(false)
+    setUnidadeId(unidades[0]?.id || '')
     setSenha(gerarSenha()); setErro(''); setSenhaCriada(''); setCopiado(false)
     setModal(true)
   }
@@ -53,6 +55,7 @@ export default function Admins() {
   const abrirEditar = (a) => {
     setEditando(a); setNome(a.nome); setEmail(a.email)
     setAcessoTotal(a.acesso_total); setModulosPermitidos(a.modulos_permitidos || [])
+    setGradePermitida(a.grade_permitida || false)
     setUnidadeId(a.unidade?.id || unidades[0]?.id || '')
     setSenha(''); setErro(''); setSenhaCriada(''); setCopiado(false)
     setModal(true)
@@ -77,6 +80,7 @@ export default function Admins() {
         nome, acesso_total: acessoTotal,
         unidade_id: acessoTotal ? null : unidadeId,
         modulos_permitidos: acessoTotal ? null : modulosPermitidos,
+        grade_permitida: acessoTotal ? false : gradePermitida,
       }).eq('id', editando.id)
       if (error) setErro(error.message)
       else { await carregar(); fechar() }
@@ -91,6 +95,7 @@ export default function Admins() {
         acesso_total: acessoTotal,
         unidade_id: acessoTotal ? null : unidadeId,
         modulos_permitidos: acessoTotal ? null : modulosPermitidos,
+        grade_permitida: acessoTotal ? false : gradePermitida,
         primeiro_acesso: true,
       })
       if (profileErr) { setErro(profileErr.message); setSalvando(false); return }
@@ -288,6 +293,31 @@ export default function Admins() {
                   </div>
                 )}
               </div>
+
+              {/* Permissão de Grade — visível só quando módulo Cadastros está marcado */}
+              {!acessoTotal && modulosPermitidos.includes('cadastros') && (
+                <div>
+                  <p className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-2">
+                    Permissões dentro de Cadastros
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setGradePermitida(v => !v)}
+                    className={`flex items-center gap-2 w-full px-3 py-2.5 rounded-xl border text-left text-xs font-medium transition-colors ${
+                      gradePermitida
+                        ? 'bg-cobeb-navy/10 border-cobeb-navy text-cobeb-navy'
+                        : 'bg-[#EBF5FF] border-cobeb-border text-slate-500'
+                    }`}
+                  >
+                    <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                      gradePermitida ? 'bg-cobeb-navy border-cobeb-navy' : 'border-cobeb-border bg-white'
+                    }`}>
+                      {gradePermitida && <CheckCircle size={11} className="text-white" />}
+                    </span>
+                    Editar Grade de Horários
+                  </button>
+                </div>
+              )}
 
               {!acessoTotal && (
                 <Field label="Unidade" required>

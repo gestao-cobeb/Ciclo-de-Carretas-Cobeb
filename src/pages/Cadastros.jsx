@@ -22,13 +22,17 @@ const TABS_BASE = [
   { id: 'cavalos',       label: 'Cavalos',       icon: Tractor,      adminTotal: false },
   { id: 'admins',        label: 'Usuários',      icon: Shield,       adminTotal: true  },
   { id: 'unidades',      label: 'Unidades',      icon: Building2,    adminTotal: true  },
-  { id: 'grade',         label: 'Grade',         icon: LayoutGrid,   adminTotal: false },
+  { id: 'grade',         label: 'Grade',         icon: LayoutGrid,   adminTotal: false, gradeOnly: true },
 ]
 
 export default function Cadastros() {
   const { profile } = useAuth()
   const isAdminTotal = profile?.acesso_total === true
-  const TABS = TABS_BASE.filter(t => !t.adminTotal || isAdminTotal)
+  const TABS = TABS_BASE.filter(t => {
+    if (t.adminTotal) return isAdminTotal
+    if (t.gradeOnly)  return isAdminTotal || profile?.grade_permitida === true
+    return true
+  })
   const [abaAtiva, setAbaAtiva] = useState('motoristas')
 
   return (
