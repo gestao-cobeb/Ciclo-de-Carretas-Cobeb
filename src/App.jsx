@@ -52,7 +52,7 @@ function AppRoutes() {
 
   let home = '/login'
   if (profile) {
-    if (profile.acesso_total) {
+    if (profile.perfil === 'admin') {
       home = modoVisao ? (MODO_ROTA[modoVisao] ?? '/selecionar-modulo') : '/selecionar-modulo'
     } else {
       home = PERFIL_ROTA[profile.perfil] ?? '/login'

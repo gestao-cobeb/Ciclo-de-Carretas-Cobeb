@@ -1,10 +1,10 @@
 ﻿import { useState, useEffect } from 'react'
 import { Plus, Search, Pencil, Power, Copy, CheckCircle, Shield, MapPin, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-
 import { useAuth } from '../../contexts/AuthContext'
 import Modal from '../../components/Modal'
 import { Field, inputClass, selectClass, gerarSenha } from '../../lib/form'
+import { MODULOS } from '../SeletorModulo'
 
 export default function Admins() {
   const { profile: meProfile } = useAuth()
@@ -20,6 +20,7 @@ export default function Admins() {
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
   const [acessoTotal, setAcessoTotal] = useState(false)
+  const [modulosPermitidos, setModulosPermitidos] = useState([])
   const [unidadeId, setUnidadeId] = useState('')
   const [senha, setSenha] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -31,7 +32,7 @@ export default function Admins() {
     setLoading(true)
     const [{ data: admins }, { data: unids }] = await Promise.all([
       supabase.from('profiles')
-        .select('id, nome, email, ativo, acesso_total, unidade:unidades(id, nome, cidade)')
+        .select('id, nome, email, ativo, acesso_total, modulos_permitidos, unidade:unidades(id, nome, cidade)')
         .eq('perfil', 'admin').order('nome'),
       supabase.from('unidades').select('id, nome, cidade').eq('ativo', true).order('nome'),
     ])
@@ -44,16 +45,23 @@ export default function Admins() {
 
   const abrirNovo = () => {
     setEditando(null); setNome(''); setEmail('')
-    setAcessoTotal(false); setUnidadeId(unidades[0]?.id || '')
+    setAcessoTotal(false); setModulosPermitidos([]); setUnidadeId(unidades[0]?.id || '')
     setSenha(gerarSenha()); setErro(''); setSenhaCriada(''); setCopiado(false)
     setModal(true)
   }
 
   const abrirEditar = (a) => {
     setEditando(a); setNome(a.nome); setEmail(a.email)
-    setAcessoTotal(a.acesso_total); setUnidadeId(a.unidade?.id || unidades[0]?.id || '')
+    setAcessoTotal(a.acesso_total); setModulosPermitidos(a.modulos_permitidos || [])
+    setUnidadeId(a.unidade?.id || unidades[0]?.id || '')
     setSenha(''); setErro(''); setSenhaCriada(''); setCopiado(false)
     setModal(true)
+  }
+
+  const toggleModulo = (key) => {
+    setModulosPermitidos(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    )
   }
 
   const fechar = () => { setModal(false); setEditando(null); setSenhaCriada('') }
@@ -68,6 +76,7 @@ export default function Admins() {
       const { error } = await supabase.from('profiles').update({
         nome, acesso_total: acessoTotal,
         unidade_id: acessoTotal ? null : unidadeId,
+        modulos_permitidos: acessoTotal ? null : modulosPermitidos,
       }).eq('id', editando.id)
       if (error) setErro(error.message)
       else { await carregar(); fechar() }
@@ -81,6 +90,7 @@ export default function Admins() {
         id: userId, nome, email, perfil: 'admin',
         acesso_total: acessoTotal,
         unidade_id: acessoTotal ? null : unidadeId,
+        modulos_permitidos: acessoTotal ? null : modulosPermitidos,
         primeiro_acesso: true,
       })
       if (profileErr) { setErro(profileErr.message); setSalvando(false); return }
@@ -239,6 +249,43 @@ export default function Admins() {
                 </div>
                 {acessoTotal && (
                   <p className="text-cobeb-yellow/70 text-xs mt-1.5">⚠ Acesso total permite criar e gerenciar todos os cadastros.</p>
+                )}
+              </div>
+
+              {/* Módulos autorizados */}
+              <div>
+                <p className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-2">
+                  Módulos autorizados
+                </p>
+                {acessoTotal ? (
+                  <p className="text-slate-400 text-xs bg-[#EBF5FF] border border-cobeb-border rounded-xl px-4 py-3">
+                    Acesso total tem todos os módulos automaticamente.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {MODULOS.map(m => {
+                      const checked = modulosPermitidos.includes(m.key)
+                      return (
+                        <button
+                          key={m.key}
+                          type="button"
+                          onClick={() => toggleModulo(m.key)}
+                          className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left text-xs font-medium transition-colors ${
+                            checked
+                              ? 'bg-cobeb-navy/10 border-cobeb-navy text-cobeb-navy'
+                              : 'bg-[#EBF5FF] border-cobeb-border text-slate-500'
+                          }`}
+                        >
+                          <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                            checked ? 'bg-cobeb-navy border-cobeb-navy' : 'border-cobeb-border bg-white'
+                          }`}>
+                            {checked && <CheckCircle size={11} className="text-white" />}
+                          </span>
+                          {m.label}
+                        </button>
+                      )
+                    })}
+                  </div>
                 )}
               </div>
 

@@ -15,8 +15,8 @@ export default function ProtectedRoute({ children, allowedRoles, requireAdminTot
   if (loading) return null
   if (!user)   return <Navigate to="/login" replace />
 
-  // Admin total: passa em qualquer rota enquanto tiver um modo selecionado
-  if (profile?.acesso_total) {
+  // Qualquer admin (total ou leitura): passa se tiver modo selecionado
+  if (profile?.perfil === 'admin') {
     if (!modoVisao) return <Navigate to="/selecionar-modulo" replace />
     return children
   }

@@ -4,7 +4,7 @@ import { LayoutDashboard, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, T
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
-const MODULOS = [
+export const MODULOS = [
   {
     key:    'admin',
     rota:   '/dashboard',
@@ -122,13 +122,18 @@ export default function SeletorModulo() {
     )
   }
 
-  if (!user || !profile?.acesso_total) return <Navigate to="/login" replace />
+  if (!user || profile?.perfil !== 'admin') return <Navigate to="/login" replace />
 
   // Se já tem modo, redireciona
   if (modoVisao) {
     const mod = MODULOS.find(m => m.key === modoVisao)
     return <Navigate to={mod?.rota ?? '/dashboard'} replace />
   }
+
+  // Módulos visíveis: acesso_total vê todos; leitura vê apenas os autorizados
+  const modulosVisiveis = profile.acesso_total
+    ? MODULOS
+    : MODULOS.filter(m => profile.modulos_permitidos?.includes(m.key))
 
   function entrar(modulo) {
     setModoVisao(modulo.key)
@@ -170,35 +175,50 @@ export default function SeletorModulo() {
             <p className="text-slate-500 text-sm mt-0.5">Selecione o módulo de acesso</p>
           </div>
 
+          {/* Sem módulos autorizados */}
+          {modulosVisiveis.length === 0 && (
+            <div className="bg-white border border-cobeb-border rounded-2xl p-6 text-center">
+              <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
+                <Shield size={22} className="text-slate-400" />
+              </div>
+              <p className="text-cobeb-text font-semibold text-sm">Nenhum módulo disponível</p>
+              <p className="text-slate-500 text-xs mt-1 leading-relaxed">
+                Contate o administrador para liberar o acesso aos módulos.
+              </p>
+            </div>
+          )}
+
           {/* Cards de módulo */}
-          <div className="grid grid-cols-2 gap-3">
-            {MODULOS.map(mod => {
-              const { Icon } = mod
-              const isRealtime = mod.key === 'empilheira'
-              const sinal = isRealtime && sinalLastSeen !== undefined ? sinalGPS(sinalLastSeen) : null
-              return (
-                <button
-                  key={mod.key}
-                  onClick={() => entrar(mod)}
-                  className={`${mod.fundo} border ${mod.borda} rounded-2xl p-4 text-left flex flex-col gap-3 transition-all active:scale-95`}
-                >
-                  <div className={`w-10 h-10 rounded-xl ${mod.cor} flex items-center justify-center shadow-sm`}>
-                    <Icon size={20} className="text-white" />
-                  </div>
-                  <div>
-                    <p className={`text-sm font-bold ${mod.texto}`}>{mod.label}</p>
-                    <p className="text-slate-500 text-[10px] leading-snug mt-0.5">{mod.desc}</p>
-                  </div>
-                  {isRealtime && sinal && (
-                    <div className={`flex items-center gap-1.5 border-t border-orange-500/20 pt-2 -mt-1`}>
-                      <Wifi size={12} className={sinal.cor} />
-                      <span className={`text-[10px] font-semibold ${sinal.cor}`}>{sinal.label}</span>
+          {modulosVisiveis.length > 0 && (
+            <div className="grid grid-cols-2 gap-3">
+              {modulosVisiveis.map(mod => {
+                const { Icon } = mod
+                const isRealtime = mod.key === 'empilheira'
+                const sinal = isRealtime && sinalLastSeen !== undefined ? sinalGPS(sinalLastSeen) : null
+                return (
+                  <button
+                    key={mod.key}
+                    onClick={() => entrar(mod)}
+                    className={`${mod.fundo} border ${mod.borda} rounded-2xl p-4 text-left flex flex-col gap-3 transition-all active:scale-95`}
+                  >
+                    <div className={`w-10 h-10 rounded-xl ${mod.cor} flex items-center justify-center shadow-sm`}>
+                      <Icon size={20} className="text-white" />
                     </div>
-                  )}
-                </button>
-              )
-            })}
-          </div>
+                    <div>
+                      <p className={`text-sm font-bold ${mod.texto}`}>{mod.label}</p>
+                      <p className="text-slate-500 text-[10px] leading-snug mt-0.5">{mod.desc}</p>
+                    </div>
+                    {isRealtime && sinal && (
+                      <div className="flex items-center gap-1.5 border-t border-orange-500/20 pt-2 -mt-1">
+                        <Wifi size={12} className={sinal.cor} />
+                        <span className={`text-[10px] font-semibold ${sinal.cor}`}>{sinal.label}</span>
+                      </div>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          )}
         </div>
       </main>
     </div>
