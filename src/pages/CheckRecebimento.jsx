@@ -73,11 +73,6 @@ export default function CheckRecebimento() {
       .order('created_at', { ascending: false })
 
     const lista = tarefas ?? []
-    if (!lista.length) {
-      setGrupos([])
-      if (!silent) setLoading(false)
-      return
-    }
 
     const tarefaIds = lista.map(t => t.id)
     const viagemIds = [...new Set(lista.map(t => t.viagem_id).filter(Boolean))]
@@ -89,22 +84,28 @@ export default function CheckRecebimento() {
             .in('viagem_id', viagemIds)
             .neq('status', 'cancelado')
         : { data: [] },
-      supabase.from('conferencia_itens')
-        .select('id, tarefa_id, pedido_id, qtde_recebida, data_validade')
-        .in('tarefa_id', tarefaIds),
+      tarefaIds.length
+        ? supabase.from('conferencia_itens')
+            .select('id, tarefa_id, pedido_id, qtde_recebida, data_validade')
+            .in('tarefa_id', tarefaIds)
+        : { data: [] },
       viagemIds.length
         ? supabase.from('viagens')
             .select('id, dt_chegada_revenda, carreta:carretas(placa), cavalo:cavalos(placa), motorista:profiles(nome)')
             .in('id', viagemIds)
         : { data: [] },
       supabase.from('unidades').select('id, nome, cidade, codigo').order('nome'),
-      supabase.from('nri_emissoes')
-        .select('*')
-        .in('tarefa_id', tarefaIds)
-        .order('created_at', { ascending: false }),
-      supabase.from('anomalias')
-        .select('id, tarefa_id, pedido_id, tipo, substituto_codigo, substituto_descricao, substituto_qtde_pallets, substituto_qtde_caixas, substituto_data_validade')
-        .in('tarefa_id', tarefaIds),
+      tarefaIds.length
+        ? supabase.from('nri_emissoes')
+            .select('*')
+            .in('tarefa_id', tarefaIds)
+            .order('created_at', { ascending: false })
+        : { data: [] },
+      tarefaIds.length
+        ? supabase.from('anomalias')
+            .select('id, tarefa_id, pedido_id, tipo, substituto_codigo, substituto_descricao, substituto_qtde_pallets, substituto_qtde_caixas, substituto_data_validade')
+            .in('tarefa_id', tarefaIds)
+        : { data: [] },
     ])
 
     // Mapas de lookup
