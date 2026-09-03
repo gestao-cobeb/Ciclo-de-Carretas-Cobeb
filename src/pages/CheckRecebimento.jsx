@@ -323,7 +323,7 @@ export default function CheckRecebimento() {
 
       // Itens regulares
       for (const item of (itens ?? [])) {
-        const qtd = Number(item.qtde_recebida)
+        const qtd = Math.ceil(Number(item.qtde_recebida))
         for (let p = 0; p < qtd; p++) {
           for (let n = 0; n < 3; n++) {
             allNRIs.push({
@@ -339,7 +339,7 @@ export default function CheckRecebimento() {
 
       // Produtos substitutos (inversão)
       for (const inv of (inversoes ?? [])) {
-        const qtd = Number(inv.substituto_qtde_pallets)
+        const qtd = Math.ceil(Number(inv.substituto_qtde_pallets))
         for (let p = 0; p < qtd; p++) {
           for (let n = 0; n < 3; n++) {
             allNRIs.push({
