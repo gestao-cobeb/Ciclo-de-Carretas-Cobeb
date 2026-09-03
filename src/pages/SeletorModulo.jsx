@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2 } from 'lucide-react'
+import { LayoutDashboard, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -9,7 +9,7 @@ const MODULOS = [
     key:    'admin',
     rota:   '/dashboard',
     label:  'Administrador',
-    desc:   'Painel, histórico, cadastros e relatórios',
+    desc:   'Painel, histórico e relatórios',
     Icon:   LayoutDashboard,
     cor:    'bg-cobeb-navy',
     borda:  'border-cobeb-navy/30',
@@ -70,6 +70,17 @@ const MODULOS = [
     borda:  'border-teal-600/30',
     texto:  'text-teal-700',
     fundo:  'bg-teal-600/5 hover:bg-teal-600/10',
+  },
+  {
+    key:    'cadastros',
+    rota:   '/cadastros',
+    label:  'Cadastros',
+    desc:   'Motoristas, carretas, cavalos e usuários',
+    Icon:   Users,
+    cor:    'bg-slate-600',
+    borda:  'border-slate-600/30',
+    texto:  'text-slate-700',
+    fundo:  'bg-slate-600/5 hover:bg-slate-600/10',
   },
 ]
 

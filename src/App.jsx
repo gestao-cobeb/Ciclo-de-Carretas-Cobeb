@@ -34,6 +34,7 @@ const MODO_ROTA = {
   portaria:   '/portaria',
   empilheira: '/estoque',
   dados:      '/dados',
+  cadastros:  '/cadastros',
 }
 
 function Spinner() {
