@@ -275,17 +275,15 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
                   <div className="flex items-center justify-between px-4 py-3 border-b border-cobeb-border/60 bg-[#EBF5FF]/50">
                     <span className="text-[11px] font-semibold text-cobeb-navy">Produto {idx + 1}</span>
                     <div className="flex items-center gap-2">
-                      {isMarketplace(tarefa) && (
-                        <div className="flex rounded-lg border border-cobeb-border overflow-hidden text-[10px] font-bold">
-                          {['PLT', 'CX'].map(u => (
-                            <button key={u} type="button"
-                              onClick={() => updateGrupo(idx, 'unidade', u)}
-                              className={`px-2.5 py-1 transition-colors ${gr.unidade === u ? 'bg-cobeb-navy text-white' : 'bg-white text-slate-500 hover:bg-[#EBF5FF]'}`}>
-                              {u}
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      <div className="flex rounded-lg border border-cobeb-border overflow-hidden text-[10px] font-bold">
+                        {['PLT', 'CX'].map(u => (
+                          <button key={u} type="button"
+                            onClick={() => updateGrupo(idx, 'unidade', u)}
+                            className={`px-2.5 py-1 transition-colors ${gr.unidade === u ? 'bg-cobeb-navy text-white' : 'bg-white text-slate-500 hover:bg-[#EBF5FF]'}`}>
+                            {u}
+                          </button>
+                        ))}
+                      </div>
                       {grupos.length > 1 && (
                         <button onClick={() => setGrupos(g => g.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-red-400 transition-colors p-1">
                           <X size={14} />

@@ -280,6 +280,8 @@ export default function Tarefas() {
             cxPallet,
             qtdePaletes:  String(Math.ceil(qtd)),
             qtdeCaixas:   cxPallet && qtd ? Math.round(Math.ceil(qtd) * cxPallet) : null,
+            unidade:      'PLT',
+            qtdaCxInput:  '',
             dataValidade: it.data_validade ?? '',
             curva:        p.curva ?? null,
             buscando:     false,
@@ -752,6 +754,26 @@ function ConferenciaView({
   onBack, onSetField, onSalvarItem, onConcluir, onAbrirAnomalia, signOut,
 }) {
   const concluida = tarefa.status === 'concluida'
+  const [confUnidade, setConfUnidade] = useState({})
+
+  function getU(pedidoId) {
+    return confUnidade[pedidoId] ?? { unidade: 'PLT', cxInput: '' }
+  }
+
+  function switchUnidade(pedidoId, u) {
+    setConfUnidade(prev => ({ ...prev, [pedidoId]: { unidade: u, cxInput: '' } }))
+    onSetField(pedidoId, 'qtde_recebida', '')
+  }
+
+  function handleCxInput(pedidoId, val, cxPallet) {
+    setConfUnidade(prev => ({ ...prev, [pedidoId]: { unidade: 'CX', cxInput: val } }))
+    const cx = Number(val)
+    if (cx > 0 && cxPallet) {
+      onSetField(pedidoId, 'qtde_recebida', String(Math.ceil(cx / cxPallet)))
+    } else {
+      onSetField(pedidoId, 'qtde_recebida', '')
+    }
+  }
 
   return (
     <div className="min-h-screen bg-[#EBF5FF] flex flex-col">
@@ -816,9 +838,11 @@ function ConferenciaView({
               </p>
               <div className="space-y-3">
                 {pedidos.map(pedido => {
-                  const it       = itenState[pedido.id] ?? {}
-                  const rec      = it.qtde_recebida
-                  const cxRec    = rec ? calcCaixas(rec, pedido) : null
+                  const it        = itenState[pedido.id] ?? {}
+                  const rec       = it.qtde_recebida
+                  const cxPallet  = pedido.qtde_pallets > 0 ? pedido.qtde_skus / pedido.qtde_pallets : null
+                  const { unidade, cxInput } = getU(pedido.id)
+                  const cxRec     = rec ? calcCaixas(rec, pedido) : null
                   const hasDiverg = rec !== undefined && rec !== '' &&
                     Math.abs(Number(rec) - Number(pedido.qtde_pallets)) > 0.001
 
@@ -835,12 +859,31 @@ function ConferenciaView({
                               'bg-[#1E3A5F]/50 text-slate-500'
                             }`}>{pedido.curva}</span>
                           )}
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="text-cobeb-text text-xs font-medium leading-snug">{pedido.descricao}</p>
                             <p className="text-slate-500 text-[10px] font-mono mt-0.5">
                               {pedido.cod_produto}{pedido.embalagem ? ` · ${pedido.embalagem}` : ''}
                             </p>
                           </div>
+                          {!concluida && (
+                            <div className="flex rounded-lg border border-cobeb-border overflow-hidden text-[10px] font-bold shrink-0">
+                              {['PLT', 'CX'].map(u => (
+                                <button key={u} type="button"
+                                  disabled={u === 'CX' && !cxPallet}
+                                  title={u === 'CX' && !cxPallet ? 'Conversão indisponível — use PLT' : undefined}
+                                  onClick={() => switchUnidade(pedido.id, u)}
+                                  className={`px-2.5 py-1 transition-colors ${
+                                    u === 'CX' && !cxPallet
+                                      ? 'bg-white text-slate-300 cursor-not-allowed'
+                                      : unidade === u
+                                        ? 'bg-cobeb-navy text-white'
+                                        : 'bg-white text-slate-500 hover:bg-[#EBF5FF]'
+                                  }`}>
+                                  {u}
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -863,27 +906,45 @@ function ConferenciaView({
                         {/* Recebido */}
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-slate-500 text-[11px] shrink-0">Recebido</span>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.5"
-                              placeholder="0"
-                              disabled={concluida}
-                              value={rec ?? ''}
-                              onChange={e => onSetField(pedido.id, 'qtde_recebida', e.target.value)}
-                              onBlur={() => onSalvarItem(pedido.id)}
-                              className={`w-20 text-right bg-[#EBF5FF] border rounded-xl px-2.5 py-1.5 text-xs text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors ${
-                                hasDiverg ? 'border-orange-500/60' : 'border-cobeb-border'
-                              } disabled:opacity-50 disabled:cursor-default`}
-                            />
-                            <span className="text-slate-500 text-[11px] shrink-0">plt</span>
-                            {cxRec !== null && (
-                              <span className="text-slate-500 text-[10px] whitespace-nowrap">
-                                = {cxRec.toLocaleString('pt-BR')} cx
-                              </span>
-                            )}
-                          </div>
+                          {unidade === 'CX' ? (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number" min="1" step="1" placeholder="0"
+                                disabled={concluida}
+                                value={cxInput}
+                                onChange={e => handleCxInput(pedido.id, e.target.value, cxPallet)}
+                                onBlur={() => onSalvarItem(pedido.id)}
+                                className={`w-20 text-right bg-[#EBF5FF] border rounded-xl px-2.5 py-1.5 text-xs text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors ${
+                                  hasDiverg ? 'border-orange-500/60' : 'border-cobeb-border'
+                                } disabled:opacity-50 disabled:cursor-default`}
+                              />
+                              <span className="text-slate-500 text-[11px] shrink-0">cx</span>
+                              {rec && Number(rec) > 0 && (
+                                <span className="text-slate-400 text-[10px] whitespace-nowrap">
+                                  = {Number(rec).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="number" min="0" step="0.5" placeholder="0"
+                                disabled={concluida}
+                                value={rec ?? ''}
+                                onChange={e => onSetField(pedido.id, 'qtde_recebida', e.target.value)}
+                                onBlur={() => onSalvarItem(pedido.id)}
+                                className={`w-20 text-right bg-[#EBF5FF] border rounded-xl px-2.5 py-1.5 text-xs text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors ${
+                                  hasDiverg ? 'border-orange-500/60' : 'border-cobeb-border'
+                                } disabled:opacity-50 disabled:cursor-default`}
+                              />
+                              <span className="text-slate-500 text-[11px] shrink-0">plt</span>
+                              {cxRec !== null && (
+                                <span className="text-slate-500 text-[10px] whitespace-nowrap">
+                                  = {cxRec.toLocaleString('pt-BR')} cx
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* Validade */}
