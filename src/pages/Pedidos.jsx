@@ -1,9 +1,10 @@
 ﻿import { useState, useEffect, useMemo } from 'react'
 import {
   ChevronDown, ChevronUp, X, Search, RefreshCw,
-  CheckCircle, Clock, Package,
+  CheckCircle, Clock, Package, AlertTriangle, RotateCcw,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 import AdminLayout from '../components/AdminLayout'
 
 function ptDate(iso) {
@@ -25,9 +26,13 @@ function addDays(isoDate, n) {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function Pedidos() {
-  const [unidades, setUnidades] = useState([])
-  const [pedidos, setPedidos] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { profile: meProfile } = useAuth()
+  const isAdminTotal = meProfile?.acesso_total === true
+
+  const [unidades,     setUnidades]     = useState([])
+  const [pedidos,      setPedidos]      = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [marcandoFuro, setMarcandoFuro] = useState(new Set())
 
   // filter state
   const [filtData, setFiltData] = useState('')
@@ -145,6 +150,19 @@ export default function Pedidos() {
     })
   }
 
+  async function marcarFuro(grupo, desfazer = false) {
+    const key = grupo.key
+    setMarcandoFuro(prev => new Set([...prev, key]))
+    const ids = grupo.itens.filter(i => i.status !== 'cancelado').map(i => i.id)
+    const payload = desfazer
+      ? { status: 'ativo', furo_marcado_em: null, furo_marcado_por: null }
+      : { status: 'furo', furo_marcado_em: new Date().toISOString(), furo_marcado_por: meProfile?.id }
+    const { error } = await supabase.from('pedidos').update(payload).in('id', ids)
+    setMarcandoFuro(prev => { const n = new Set(prev); n.delete(key); return n })
+    if (error) alert('Erro: ' + error.message)
+    else loadData()
+  }
+
   // ── render ──────────────────────────────────────────────────────────────────
 
   const pillBase =
@@ -260,9 +278,14 @@ export default function Pedidos() {
         ) : (
           <div className="px-4 pt-1 pb-4 space-y-1.5">
             {agrupados.map(g => {
-              const isOpen = expanded.has(g.key)
-              const unidade = unidades.find(u => u.id === g.unidade_id)
+              const isOpen    = expanded.has(g.key)
+              const unidade   = unidades.find(u => u.id === g.unidade_id)
               const vinculado = !!g.viagem_id
+              const ehFuro    = g.itens.some(i => i.status === 'furo')
+              const elegivelFuro = isAdminTotal && !vinculado && !ehFuro
+                && g.data_puxada < isoToday()
+                && g.itens.every(i => i.status !== 'cancelado')
+              const isMarcando = marcandoFuro.has(g.key)
 
               return (
                 <div key={g.key} className="bg-white rounded-2xl border border-cobeb-border overflow-hidden">
@@ -298,8 +321,24 @@ export default function Pedidos() {
                       </div>
 
                       {/* Col 3: status */}
-                      <div className="flex items-center gap-1.5 pr-2">
-                        {vinculado ? (
+                      <div className="flex items-center gap-1 pr-2">
+                        {ehFuro ? (
+                          <>
+                            <AlertTriangle size={13} className="text-red-500 shrink-0" />
+                            <span className="text-red-500 text-[10px] font-semibold whitespace-nowrap">Furo</span>
+                            {isAdminTotal && (
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                title="Desfazer furo"
+                                onClick={e => { e.stopPropagation(); marcarFuro(g, true) }}
+                                className="ml-0.5 cursor-pointer text-slate-400 hover:text-cobeb-navy transition-colors leading-none"
+                              >
+                                <RotateCcw size={10} />
+                              </span>
+                            )}
+                          </>
+                        ) : vinculado ? (
                           <>
                             <CheckCircle size={14} className="text-green-400 shrink-0" />
                             <span className="text-green-400 text-[10px] font-semibold whitespace-nowrap">Vinculado</span>
@@ -308,6 +347,21 @@ export default function Pedidos() {
                           <>
                             <Clock size={14} className="text-slate-500 shrink-0" />
                             <span className="text-slate-500 text-[10px] font-semibold whitespace-nowrap">Pendente</span>
+                            {elegivelFuro && (
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                title="Marcar como furo"
+                                onClick={e => { e.stopPropagation(); marcarFuro(g) }}
+                                className={`ml-1 cursor-pointer leading-none transition-colors ${
+                                  isMarcando ? 'text-slate-300' : 'text-orange-400 hover:text-red-500'
+                                }`}
+                              >
+                                {isMarcando
+                                  ? <div className="w-3 h-3 border border-slate-300 border-t-transparent rounded-full animate-spin" style={{ display: 'inline-block' }} />
+                                  : <AlertTriangle size={11} />}
+                              </span>
+                            )}
                           </>
                         )}
                       </div>
