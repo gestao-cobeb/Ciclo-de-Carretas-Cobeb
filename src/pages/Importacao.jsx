@@ -78,7 +78,7 @@ export default function Importacao() {
   async function carregar() {
     setLoading(true)
     const [{ data: peds }, { data: unis }, { data: prods }] = await Promise.all([
-      supabase.from('pedidos').select('arquivo_origem, data_puxada, viagem_id, importado_em'),
+      supabase.from('pedidos').select('arquivo_origem, data_puxada, viagem_id, importado_em, status'),
       supabase.from('unidades').select('id, nome, codigo, codigo_ambev, cidade, tipo').order('nome'),
       supabase.from('produtos_catalogo').select('arquivo_origem, importado_em'),
     ])
@@ -97,7 +97,7 @@ export default function Importacao() {
       }
       const b = map[p.arquivo_origem]
       b.total++
-      if (p.viagem_id) b.vinculados++
+      if (p.viagem_id || p.status === 'furo') b.vinculados++
       else b.livres++
       if ((p.importado_em ?? '') > (b.importado_em ?? '')) b.importado_em = p.importado_em
     })
