@@ -63,15 +63,13 @@ export default function AdminLayout({ title, children }) {
         </div>
 
         <div className="flex items-center gap-1">
-          {isAdminTotal && (
-            <button
-              onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
-              className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
-              title="Trocar Módulo"
-            >
-              <LayoutGrid size={18} />
-            </button>
-          )}
+          <button
+            onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
+            className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
+            title="Trocar Módulo"
+          >
+            <LayoutGrid size={18} />
+          </button>
           <button
             onClick={handleLogout}
             className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
