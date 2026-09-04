@@ -213,6 +213,14 @@ export default function Importacao() {
         if (!prev || (!prev.viagem_id && p.viagem_id)) existingMap[key] = p
       })
 
+      // numero_pedido → viagem_id ativa (para herdar em novos itens do mesmo pedido)
+      const pedidoViagemMap = {}
+      ;(existingPedidos ?? []).forEach(p => {
+        if (p.viagem_id && viagemStatusMap[p.viagem_id] !== 'concluida') {
+          pedidoViagemMap[p.numero_pedido] = p.viagem_id
+        }
+      })
+
       const toInsert = []
       const toUpdate = []
       let ignoradosCount = 0
@@ -222,7 +230,13 @@ export default function Importacao() {
         const key = `${rec.numero_pedido}|${rec.cod_produto}`
         const ex  = existingMap[key]
         if (!ex) {
-          toInsert.push(rec)
+          const inheritedViagemId = pedidoViagemMap[rec.numero_pedido]
+          if (inheritedViagemId) {
+            toInsert.push({ ...rec, viagem_id: inheritedViagemId })
+            viagensAlteradasIds.add(inheritedViagemId)
+          } else {
+            toInsert.push(rec)
+          }
         } else {
           const status = ex.viagem_id ? viagemStatusMap[ex.viagem_id] : null
           if (status === 'concluida') {
