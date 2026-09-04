@@ -81,7 +81,6 @@ export function renderNRI(doc, {
   // Row 3
   const rightW = 54
   const leftW  = W - rightW
-  const halfH  = r3H / 2
 
   doc.setFillColor(...BLACK); doc.rect(x0, r3Y, leftW, r3H, 'F')
   doc.setFontSize(7.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...WHITE)
@@ -89,27 +88,24 @@ export function renderNRI(doc, {
   const dateStr = fmt2Y(nri.dataValidade)
   doc.setFont('helvetica', 'bold'); doc.setFontSize(40)
   const w40 = doc.getTextWidth(dateStr)
-  // Limita pelo espaço disponível em largura E em altura (abaixo do label "VENCIMENTO")
   const maxByWidth  = Math.floor(40 * (leftW - 6) / w40)
-  const maxByHeight = Math.floor(18 / (0.353 * 0.72))  // ~71pt — garante não sobrepor o label
+  const maxByHeight = Math.floor(18 / (0.353 * 0.72))
   doc.setFontSize(Math.min(maxByWidth, maxByHeight))
   doc.setTextColor(...WHITE)
   doc.text(dateStr, x0 + leftW / 2, r3Y + r3H - 2, { align: 'center' })
 
-  doc.setFillColor(...GRAY_LT); doc.rect(x0 + leftW, r3Y, rightW, halfH, 'F')
+  // CURVA — bloco direito ocupa toda a altura r3H, letra maximizada
+  doc.setFillColor(...GRAY_LT); doc.rect(x0 + leftW, r3Y, rightW, r3H, 'F')
   doc.setFontSize(6.5); doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRAY_TX)
   doc.text('CURVA', x0 + leftW + rightW / 2, r3Y + 4.5, { align: 'center' })
-  doc.setFontSize(17); doc.setFont('helvetica', 'bold'); doc.setTextColor(...BLACK)
-  doc.text(nri.curva || '', x0 + leftW + rightW / 2, r3Y + 12, { align: 'center' })
-
-  doc.setDrawColor(...GRAY_TX); doc.setLineWidth(0.2)
-  doc.line(x0 + leftW, r3Y + halfH, x0 + W, r3Y + halfH)
-
-  doc.setFillColor(...GRAY_MD); doc.rect(x0 + leftW, r3Y + halfH, rightW, halfH, 'F')
-  doc.setFontSize(6); doc.setFont('helvetica', 'normal'); doc.setTextColor(...GRAY_TX)
-  doc.text('CARREGAR ATÉ', x0 + leftW + rightW / 2, r3Y + halfH + 5, { align: 'center' })
-  doc.setFontSize(12); doc.setFont('helvetica', 'bold'); doc.setTextColor(...BLACK)
-  doc.text(fmt2Y(minus30(nri.dataValidade)), x0 + leftW + rightW / 2, r3Y + halfH + 13, { align: 'center' })
+  const curvaLetter = nri.curva || ''
+  doc.setFontSize(60); doc.setFont('helvetica', 'bold')
+  const testW60 = doc.getTextWidth(curvaLetter) || 1
+  const maxCurvaByW = Math.floor(60 * (rightW - 6) / testW60)
+  const maxCurvaByH = Math.floor((r3H - 9) / (0.353 * 0.72))
+  doc.setFontSize(Math.min(maxCurvaByW, maxCurvaByH))
+  doc.setTextColor(...BLACK)
+  doc.text(curvaLetter, x0 + leftW + rightW / 2, r3Y + r3H - 3, { align: 'center' })
 
   doc.setDrawColor(...BLACK); doc.setLineWidth(0.25)
   doc.line(x0 + leftW, r3Y, x0 + leftW, r3Y + r3H)
@@ -126,6 +122,15 @@ export function renderNRI(doc, {
   doc.setFont('helvetica', 'normal')
   doc.text(`PLACA: ${placaStr}`,                                         x0 + 3, r4Y + 1.5 + lineH4 * 2.9)
   doc.text(`NF: ${numeroNF}`,                                            x0 + 3, r4Y + 1.5 + lineH4 * 3.9)
+
+  // CARREGAR ATÉ — canto inferior direito, fundo preto, mesma largura da coluna CURVA
+  doc.setFillColor(...BLACK); doc.rect(x0 + leftW, r4Y, rightW, r4H, 'F')
+  doc.setFontSize(5.5); doc.setFont('helvetica', 'bold'); doc.setTextColor(...WHITE)
+  doc.text('CARREGAR ATÉ', x0 + leftW + rightW / 2, r4Y + 5, { align: 'center' })
+  doc.setFontSize(16); doc.setFont('helvetica', 'bold'); doc.setTextColor(...WHITE)
+  doc.text(fmt2Y(minus30(nri.dataValidade)), x0 + leftW + rightW / 2, r4Y + r4H - 4, { align: 'center' })
+  doc.setDrawColor(...BLACK); doc.setLineWidth(0.25)
+  doc.line(x0 + leftW, r4Y, x0 + leftW, r4Y + r4H)
   hline(r4Y + r4H)
 
   // Row 5
