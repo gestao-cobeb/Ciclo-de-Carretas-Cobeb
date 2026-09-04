@@ -123,7 +123,7 @@ export default function MapaRealtime({ onVoltar }) {
   }, [])
 
   function filtrarPorUnidade(lista) {
-    if (isAdminTotal) return lista ?? []
+    if (isAdminTotal || profile?.todas_unidades === true) return lista ?? []
     return (lista ?? []).filter(v => v.unidade_descarga_id === profile?.unidade_id)
   }
 
