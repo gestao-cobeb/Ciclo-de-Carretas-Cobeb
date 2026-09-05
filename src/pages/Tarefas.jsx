@@ -769,7 +769,7 @@ function ConferenciaView({
     setConfUnidade(prev => ({ ...prev, [pedidoId]: { unidade: 'CX', cxInput: val } }))
     const cx = Number(val)
     if (cx > 0 && cxPallet) {
-      onSetField(pedidoId, 'qtde_recebida', String(Math.ceil(cx / cxPallet)))
+      onSetField(pedidoId, 'qtde_recebida', String(cx / cxPallet))
     } else {
       onSetField(pedidoId, 'qtde_recebida', '')
     }
