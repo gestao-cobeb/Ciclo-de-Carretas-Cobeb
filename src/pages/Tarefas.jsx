@@ -60,6 +60,7 @@ export default function Tarefas() {
   const [abrindoNRI,     setAbrindoNRI]     = useState(null) // tarefa.id enquanto carrega
   const [gruposNRI,      setGruposNRI]      = useState([])
   const [finalizando,    setFinalizando]    = useState(null)
+  const [finalizandoSem, setFinalizandoSem] = useState(null)
 
   // anomalia modal
   const [showModal, setShowModal]         = useState(false)
@@ -321,6 +322,15 @@ export default function Tarefas() {
     setTarefas(prev => prev.map(t => t.id === tarefa.id ? { ...t, status: 'concluida' } : t))
   }
 
+  async function finalizarSemConferencia(tarefa) {
+    if (!window.confirm(`Finalizar NF ${tarefa.numero_nf ?? tarefa.id} sem conferência?\nA tarefa será marcada como concluída sem revisão de itens.`)) return
+    setFinalizandoSem(tarefa.id)
+    const { error } = await supabase.from('tarefas').update({ status: 'concluida' }).eq('id', tarefa.id)
+    setFinalizandoSem(null)
+    if (error) { alert('Erro ao finalizar: ' + error.message); return }
+    setTarefas(prev => prev.map(t => t.id === tarefa.id ? { ...t, status: 'concluida' } : t))
+  }
+
   async function iniciarConferenciaMarketplace(tarefa) {
     setIniciando(tarefa.id)
     const { error } = await supabase.from('tarefas')
@@ -500,6 +510,7 @@ export default function Tarefas() {
           onConcluir={concluirConferencia}
           onAbrirAnomalia={abrirModalAnomalia}
           signOut={signOut}
+          isAdminEdit={!!profile?.acesso_total}
         />
         {showModal && anomForm && (
           <AnomaliaModal
@@ -700,6 +711,29 @@ export default function Tarefas() {
                                 Verificar
                               </button>
                             </div>
+                            {profile?.acesso_total && (
+                              <button onClick={() => finalizarSemConferencia(tarefa)} disabled={finalizandoSem === tarefa.id}
+                                className="w-full bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                                {finalizandoSem === tarefa.id
+                                  ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                  : 'Finalizar sem conferência'}
+                              </button>
+                            )}
+                          </div>
+                        ) : profile?.acesso_total ? (
+                          <div className="flex gap-2">
+                            <button onClick={() => iniciarConferencia(tarefa)} disabled={iniciando === tarefa.id}
+                              className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                              {iniciando === tarefa.id
+                                ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                : <><AlertCircle size={13} />Iniciar Conferência</>}
+                            </button>
+                            <button onClick={() => finalizarSemConferencia(tarefa)} disabled={finalizandoSem === tarefa.id}
+                              className="bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2.5 rounded-xl transition-colors flex items-center justify-center shrink-0">
+                              {finalizandoSem === tarefa.id
+                                ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                : 'Finalizar'}
+                            </button>
                           </div>
                         ) : (
                           <button onClick={() => iniciarConferencia(tarefa)} disabled={iniciando === tarefa.id}
@@ -711,10 +745,25 @@ export default function Tarefas() {
                         )
                       )}
                       {tarefa.status === 'em_andamento' && (
-                        <button onClick={() => openConferencia(tarefa)}
-                          className="w-full bg-cobeb-navy hover:bg-cobeb-blue text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
-                          <Package size={13} />Continuar Conferência
-                        </button>
+                        profile?.acesso_total ? (
+                          <div className="flex gap-2">
+                            <button onClick={() => openConferencia(tarefa)}
+                              className="flex-1 bg-cobeb-navy hover:bg-cobeb-blue text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                              <Package size={13} />Continuar Conferência
+                            </button>
+                            <button onClick={() => finalizarSemConferencia(tarefa)} disabled={finalizandoSem === tarefa.id}
+                              className="bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2.5 rounded-xl transition-colors flex items-center justify-center shrink-0">
+                              {finalizandoSem === tarefa.id
+                                ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                : 'Finalizar'}
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => openConferencia(tarefa)}
+                            className="w-full bg-cobeb-navy hover:bg-cobeb-blue text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                            <Package size={13} />Continuar Conferência
+                          </button>
+                        )
                       )}
                       {tarefa.status === 'concluida' && (
                         <div className="flex gap-2">
@@ -752,8 +801,10 @@ function ConferenciaView({
   tarefa, pedidos, itenState, anomalias,
   loadingConf, concluindo, todosConferidos, divergencias,
   onBack, onSetField, onSalvarItem, onConcluir, onAbrirAnomalia, signOut,
+  isAdminEdit,
 }) {
   const concluida = tarefa.status === 'concluida'
+  const readOnly = concluida && !isAdminEdit
   const [confUnidade, setConfUnidade] = useState({})
 
   function getU(pedidoId) {
@@ -865,7 +916,7 @@ function ConferenciaView({
                               {pedido.cod_produto}{pedido.embalagem ? ` · ${pedido.embalagem}` : ''}
                             </p>
                           </div>
-                          {!concluida && (
+                          {!readOnly && (
                             <div className="flex rounded-lg border border-cobeb-border overflow-hidden text-[10px] font-bold shrink-0">
                               {['PLT', 'CX'].map(u => (
                                 <button key={u} type="button"
@@ -910,7 +961,7 @@ function ConferenciaView({
                             <div className="flex items-center gap-2">
                               <input
                                 type="number" min="1" step="1" placeholder="0"
-                                disabled={concluida}
+                                disabled={readOnly}
                                 value={cxInput}
                                 onChange={e => handleCxInput(pedido.id, e.target.value, cxPallet)}
                                 onBlur={() => onSalvarItem(pedido.id)}
@@ -929,7 +980,7 @@ function ConferenciaView({
                             <div className="flex items-center gap-2">
                               <input
                                 type="number" min="0" step="0.5" placeholder="0"
-                                disabled={concluida}
+                                disabled={readOnly}
                                 value={rec ?? ''}
                                 onChange={e => onSetField(pedido.id, 'qtde_recebida', e.target.value)}
                                 onBlur={() => onSalvarItem(pedido.id)}
@@ -952,7 +1003,7 @@ function ConferenciaView({
                           <span className="text-slate-500 text-[11px] shrink-0">Validade</span>
                           <input
                             type="date"
-                            disabled={concluida}
+                            disabled={readOnly}
                             value={it.data_validade ?? ''}
                             onChange={e => onSetField(pedido.id, 'data_validade', e.target.value)}
                             onBlur={() => onSalvarItem(pedido.id)}
@@ -968,7 +1019,7 @@ function ConferenciaView({
                               Esperado {Number(pedido.qtde_pallets).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt,
                               recebido {Number(rec).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt
                             </p>
-                            {!concluida && (
+                            {!readOnly && (
                               <button onClick={onAbrirAnomalia}
                                 className="text-[10px] text-cobeb-yellow font-semibold underline whitespace-nowrap shrink-0">
                                 Registrar
@@ -989,7 +1040,7 @@ function ConferenciaView({
                 <p className="text-[11px] text-slate-500 font-semibold uppercase tracking-widest">
                   Anomalias{anomalias.length > 0 ? ` (${anomalias.length})` : ''}
                 </p>
-                {!concluida && (
+                {!readOnly && (
                   <button onClick={onAbrirAnomalia}
                     className="flex items-center gap-1 text-[11px] text-cobeb-yellow hover:text-orange-300 font-semibold transition-colors">
                     <Plus size={12} />Nova Anomalia
@@ -1056,7 +1107,7 @@ function ConferenciaView({
       </main>
 
       {/* Footer */}
-      {!concluida && (
+      {!readOnly && (
         <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-cobeb-border px-4 py-3 z-30">
           <div className="max-w-lg mx-auto">
             {!todosConferidos && (
@@ -1071,7 +1122,7 @@ function ConferenciaView({
             >
               {concluindo
                 ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                : <><CheckCircle size={16} />Concluir Conferência</>}
+                : <><CheckCircle size={16} />{concluida ? 'Atualizar Conferência' : 'Concluir Conferência'}</>}
             </button>
           </div>
         </div>
