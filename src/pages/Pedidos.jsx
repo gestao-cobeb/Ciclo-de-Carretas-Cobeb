@@ -24,6 +24,22 @@ function addDays(isoDate, n) {
   return d.toISOString().split('T')[0]
 }
 
+const STATUS_LABEL = {
+  iniciada:               'Iniciada',
+  em_transito:            'Em trânsito',
+  na_fabrica:             'Na fábrica',
+  retornando:             'Retornando',
+  aguardando_conferencia: 'Conferência',
+}
+
+const STATUS_CLS = {
+  iniciada:               'bg-slate-100 text-slate-500',
+  em_transito:            'bg-blue-100 text-blue-600',
+  na_fabrica:             'bg-amber-100 text-amber-600',
+  retornando:             'bg-green-100 text-green-600',
+  aguardando_conferencia: 'bg-purple-100 text-purple-600',
+}
+
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function Pedidos() {
@@ -209,8 +225,8 @@ export default function Pedidos() {
 
     const { data: viagens } = await supabase
       .from('viagens')
-      .select('id, motorista:profiles(nome), cavalo:cavalos(placa), carreta:carretas(placa)')
-      .eq('status', 'em_transito')
+      .select('id, status, motorista:profiles(nome), cavalo:cavalos(placa), carreta:carretas(placa)')
+      .neq('status', 'concluida')
       .order('created_at', { ascending: false })
 
     const ids = (viagens ?? []).map(v => v.id)
@@ -674,7 +690,7 @@ function ModalVincular({ grupo, viagens, loading, vinculando, onVincular, onCanc
             </div>
             <div>
               <p className="text-cobeb-text font-semibold text-base">Vincular pedido #{grupo.numero_pedido}</p>
-              <p className="text-slate-500 text-xs mt-0.5">Selecione a viagem em trânsito de destino</p>
+              <p className="text-slate-500 text-xs mt-0.5">Selecione a viagem ativa de destino</p>
             </div>
           </div>
         </div>
@@ -688,8 +704,8 @@ function ModalVincular({ grupo, viagens, loading, vinculando, onVincular, onCanc
           ) : viagens.length === 0 ? (
             <div className="text-center py-10">
               <Truck size={28} className="text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500 text-sm font-medium">Nenhuma viagem em trânsito</p>
-              <p className="text-slate-400 text-xs mt-1">Não há viagens com status "em trânsito" no momento.</p>
+              <p className="text-slate-500 text-sm font-medium">Nenhuma viagem ativa</p>
+              <p className="text-slate-400 text-xs mt-1">Não há viagens em andamento no momento.</p>
             </div>
           ) : (
             viagens.map(v => (
@@ -703,6 +719,9 @@ function ModalVincular({ grupo, viagens, loading, vinculando, onVincular, onCanc
                   <div className="flex items-center gap-2">
                     <User size={12} className="text-slate-400 shrink-0" />
                     <p className="text-cobeb-text text-sm font-semibold truncate">{v.motorista?.nome ?? '—'}</p>
+                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none shrink-0 ${STATUS_CLS[v.status] ?? 'bg-slate-100 text-slate-500'}`}>
+                      {STATUS_LABEL[v.status] ?? v.status}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 mt-1">
                     <Truck size={12} className="text-slate-400 shrink-0" />
