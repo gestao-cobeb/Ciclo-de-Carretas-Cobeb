@@ -195,16 +195,25 @@ export default function Viagem() {
 
       setView('active')
 
-      // Realtime: recebe ajustes feitos pelo admin (horário e rollback de status)
+      // Realtime: recebe ajustes feitos pelo admin (horário, rollback de status e novos pedidos)
       if (channelRef.current) supabase.removeChannel(channelRef.current)
       channelRef.current = supabase
         .channel(`viagem-driver-${v.id}`)
         .on(
           'postgres_changes',
           { event: 'UPDATE', schema: 'public', table: 'viagens', filter: `id=eq.${v.id}` },
-          (payload) => {
+          async (payload) => {
             const row = payload.new
             if (!row || row.id !== v.id) return
+
+            // Admin vinculou novo pedido à viagem — recarrega lista de pedidos
+            if (row.pedidos_vinculados_em) {
+              const { data: peds } = await supabase
+                .from('pedidos').select('*')
+                .eq('viagem_id', v.id).neq('status', 'cancelado')
+              if (peds) setPedidosDaViagem(peds)
+            }
+
             setViagemAtiva(prev => {
               if (!prev) return prev
               const patch = {}
