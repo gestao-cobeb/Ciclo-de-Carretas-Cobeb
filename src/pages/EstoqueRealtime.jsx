@@ -287,7 +287,7 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
   const [subBuscando,      setSubBuscando]      = useState(false)
   const [subNaoEncontrado, setSubNaoEncontrado] = useState(false)
 
-  const podeReverter    = isAdminTotal && ['na_fabrica', 'retornando'].includes(viagem.status)
+  const podeReverter    = isAdminTotal && ['na_fabrica', 'retornando', 'aguardando_conferencia'].includes(viagem.status)
   const podeSubstituir  = isAdminTotal && ['iniciada', 'em_transito', 'na_fabrica'].includes(viagem.status)
 
   async function salvarDestino() {
@@ -790,13 +790,27 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
                       <div className="flex items-start gap-1.5 bg-yellow-50 border border-yellow-200 rounded-xl px-3 py-2">
                         <AlertTriangle size={11} className="text-yellow-500 shrink-0 mt-0.5" />
                         <p className="text-[10px] text-yellow-700 leading-relaxed">
-                          Se o GPS do motorista estiver ativo, o geofence pode desfazer esta alteração automaticamente na próxima atualização de posição (~30s).
+                          {viagem.status === 'aguardando_conferencia'
+                            ? 'O registro de chegada será desfeito e o motorista voltará à tela de "Chegada na Revenda". Só funciona se a portaria ainda não iniciou o atendimento.'
+                            : 'Se o GPS do motorista estiver ativo, o geofence pode desfazer esta alteração automaticamente na próxima atualização de posição (~30s).'}
                         </p>
                       </div>
                       <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">
                         Reverter para:
                       </p>
                       <div className="flex gap-2 flex-wrap">
+                        {viagem.status === 'aguardando_conferencia' && (
+                          <button
+                            onClick={() => confirmarRollback('retornando')}
+                            disabled={adminLoading}
+                            className="flex items-center gap-1.5 text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-xl hover:bg-blue-100 transition-colors disabled:opacity-50"
+                          >
+                            {adminLoading
+                              ? <div className="w-3 h-3 border border-blue-400/40 border-t-blue-500 rounded-full animate-spin" />
+                              : <RotateCcw size={10} />}
+                            Retornando
+                          </button>
+                        )}
                         {viagem.status === 'retornando' && (
                           <button
                             onClick={() => confirmarRollback('na_fabrica')}
@@ -809,16 +823,18 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
                             Na Fábrica
                           </button>
                         )}
-                        <button
-                          onClick={() => confirmarRollback('em_transito')}
-                          disabled={adminLoading}
-                          className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl hover:bg-slate-200 transition-colors disabled:opacity-50"
-                        >
-                          {adminLoading
-                            ? <div className="w-3 h-3 border border-slate-400/40 border-t-slate-500 rounded-full animate-spin" />
-                            : <RotateCcw size={10} />}
-                          Em Rota
-                        </button>
+                        {viagem.status !== 'aguardando_conferencia' && (
+                          <button
+                            onClick={() => confirmarRollback('em_transito')}
+                            disabled={adminLoading}
+                            className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-xl hover:bg-slate-200 transition-colors disabled:opacity-50"
+                          >
+                            {adminLoading
+                              ? <div className="w-3 h-3 border border-slate-400/40 border-t-slate-500 rounded-full animate-spin" />
+                              : <RotateCcw size={10} />}
+                            Em Rota
+                          </button>
+                        )}
                         <button
                           onClick={() => setShowRollback(false)}
                           className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors px-2 py-1.5"
