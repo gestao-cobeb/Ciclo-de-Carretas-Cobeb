@@ -109,13 +109,13 @@ export default function Viagem() {
     },
   })
 
-  // Re-inicia GPS se viagem já estava em trânsito quando o app foi aberto
+  // Inicia GPS ao abrir app com viagem em trânsito, ou quando admin reverte status para fase de rastreamento
   useEffect(() => {
     const emTransito = ['em_transito', 'na_fabrica', 'retornando']
     if (viagemAtiva && fabricasAlvo.length > 0 && emTransito.includes(viagemAtiva.status)) {
       rastreamento.iniciar()
     }
-  }, [viagemAtiva?.id, fabricasAlvo.length])
+  }, [viagemAtiva?.id, fabricasAlvo.length, viagemAtiva?.status])
 
   // ── lifecycle ─────────────────────────────────────────────────────────────
 
@@ -225,6 +225,10 @@ export default function Viagem() {
                 patch.dt_chegada_fabrica = row.dt_chegada_fabrica
               if (row.dt_saida_fabrica !== prev.dt_saida_fabrica)
                 patch.dt_saida_fabrica = row.dt_saida_fabrica
+              if (row.dt_chegada_revenda !== prev.dt_chegada_revenda)
+                patch.dt_chegada_revenda = row.dt_chegada_revenda
+              if (row.numero_nf !== prev.numero_nf)
+                patch.numero_nf = row.numero_nf
               return Object.keys(patch).length ? { ...prev, ...patch } : prev
             })
           }
