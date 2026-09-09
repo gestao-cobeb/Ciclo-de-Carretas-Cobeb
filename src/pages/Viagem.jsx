@@ -42,7 +42,7 @@ function diffHHMM(start, end) {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function Viagem() {
-  const { profile, signOut, setModoVisao } = useAuth()
+  const { profile, signOut, modoVisao, setModoVisao } = useAuth()
   const navigate = useNavigate()
 
   const [view, setView]               = useState('loading')
@@ -493,7 +493,7 @@ export default function Viagem() {
         </div>
         <div className="flex items-center gap-3">
           {!isOnline && <WifiOff size={16} className="text-yellow-300" />}
-          {profile?.perfil === 'admin' && (
+          {modoVisao && (
             <button onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
               className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
               title="Trocar Módulo">

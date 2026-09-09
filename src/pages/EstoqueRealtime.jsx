@@ -50,7 +50,7 @@ const STEP_LABELS = ['Saída', 'Em Rota', 'Fábrica', 'Retorno', 'Chegou']
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function EstoqueRealtime({ adminMode = false }) {
-  const { profile, signOut, setModoVisao } = useAuth()
+  const { profile, signOut, modoVisao, setModoVisao } = useAuth()
   const navigate = useNavigate()
   const [viagens,    setViagens]    = useState([])
   const [loading,    setLoading]    = useState(true)
@@ -227,7 +227,7 @@ export default function EstoqueRealtime({ adminMode = false }) {
           >
             <RefreshCw size={16} />
           </button>
-          {profile?.perfil === 'admin' && (
+          {modoVisao && (
             <button
               onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
               className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"

@@ -44,7 +44,7 @@ const STATUS_TABS = [
 ]
 
 export default function PortariaPage() {
-  const { profile, signOut, setModoVisao } = useAuth()
+  const { profile, signOut, modoVisao, setModoVisao } = useAuth()
   const navigate = useNavigate()
 
   const [atendimentos, setAtendimentos] = useState([])
@@ -169,7 +169,7 @@ export default function PortariaPage() {
           <button onClick={carregar} className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10" title="Atualizar">
             <RefreshCw size={16} />
           </button>
-          {profile?.perfil === 'admin' && (
+          {modoVisao && (
             <button onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
               className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
               title="Trocar Módulo">

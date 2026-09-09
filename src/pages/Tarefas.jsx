@@ -35,7 +35,7 @@ function calcCaixas(qtdeRecebida, pedido) {
 // ── Main Component ────────────────────────────────────────────────────────────
 
 export default function Tarefas() {
-  const { profile, signOut, setModoVisao } = useAuth()
+  const { profile, signOut, modoVisao, setModoVisao } = useAuth()
   const navigate = useNavigate()
 
   const [view, setView]             = useState('lista')
@@ -557,7 +557,7 @@ export default function Tarefas() {
           <button onClick={loadLista} className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10">
             <RefreshCw size={16} />
           </button>
-          {profile?.perfil === 'admin' && (
+          {modoVisao && (
             <button onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
               className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
               title="Trocar Módulo">
