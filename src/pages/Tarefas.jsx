@@ -237,7 +237,12 @@ export default function Tarefas() {
     return Math.abs(Number(it.qtde_recebida) - Number(p.qtde_pallets)) > 0.001
   })
 
+  const divergenciasSemAnomalia = divergencias.filter(p =>
+    !anomalias.some(a => a.pedido_id === p.id)
+  )
+
   async function concluirConferencia() {
+    if (divergenciasSemAnomalia.length > 0) return
     setConcluindo(true)
     await supabase.from('tarefas').update({ status: 'concluida' }).eq('id', tarefaSel.id)
     setConcluindo(false)
@@ -345,10 +350,10 @@ export default function Tarefas() {
 
   // ─── Anomalia Modal ──────────────────────────────────────────────────────────
 
-  function abrirModalAnomalia() {
+  function abrirModalAnomalia(pedidoId = '') {
     setAnomaliaForm({
       tipo:                'qualidade',
-      pedido_id:           '',
+      pedido_id:           pedidoId,
       descricao:           '',
       lote:                '',
       folderKey:           uid(),
@@ -504,6 +509,7 @@ export default function Tarefas() {
           concluindo={concluindo}
           todosConferidos={todosConferidos}
           divergencias={divergencias}
+          divergenciasSemAnomalia={divergenciasSemAnomalia}
           onBack={voltarLista}
           onSetField={setItemField}
           onSalvarItem={salvarItem}
@@ -799,7 +805,7 @@ export default function Tarefas() {
 
 function ConferenciaView({
   tarefa, pedidos, itenState, anomalias,
-  loadingConf, concluindo, todosConferidos, divergencias,
+  loadingConf, concluindo, todosConferidos, divergencias, divergenciasSemAnomalia,
   onBack, onSetField, onSalvarItem, onConcluir, onAbrirAnomalia, signOut,
   isAdminEdit,
 }) {
@@ -896,6 +902,7 @@ function ConferenciaView({
                   const cxRec     = rec ? calcCaixas(rec, pedido) : null
                   const hasDiverg = rec !== undefined && rec !== '' &&
                     Math.abs(Number(rec) - Number(pedido.qtde_pallets)) > 0.001
+                  const anomaliaRegistrada = hasDiverg && anomalias.some(a => a.pedido_id === pedido.id)
 
                   return (
                     <div key={pedido.id}
@@ -1013,16 +1020,23 @@ function ConferenciaView({
 
                         {/* Divergence alert */}
                         {hasDiverg && (
-                          <div className="flex items-center gap-2 bg-cobeb-navy/10 border border-orange-500/30 rounded-xl px-3 py-2">
-                            <AlertTriangle size={11} className="text-cobeb-yellow shrink-0" />
-                            <p className="text-cobeb-yellow text-[10px] flex-1">
+                          <div className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${
+                            anomaliaRegistrada
+                              ? 'bg-green-500/10 border-green-500/30'
+                              : 'bg-cobeb-navy/10 border-orange-500/30'
+                          }`}>
+                            {anomaliaRegistrada
+                              ? <CheckCircle size={11} className="text-green-500 shrink-0" />
+                              : <AlertTriangle size={11} className="text-cobeb-yellow shrink-0" />}
+                            <p className={`text-[10px] flex-1 ${anomaliaRegistrada ? 'text-green-400' : 'text-cobeb-yellow'}`}>
                               Esperado {Number(pedido.qtde_pallets).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt,
                               recebido {Number(rec).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt
+                              {anomaliaRegistrada && ' · Anomalia registrada'}
                             </p>
-                            {!readOnly && (
-                              <button onClick={onAbrirAnomalia}
+                            {!readOnly && !anomaliaRegistrada && (
+                              <button onClick={() => onAbrirAnomalia(pedido.id)}
                                 className="text-[10px] text-cobeb-yellow font-semibold underline whitespace-nowrap shrink-0">
-                                Registrar
+                                Registrar Anomalia
                               </button>
                             )}
                           </div>
@@ -1115,9 +1129,17 @@ function ConferenciaView({
                 Preencha a quantidade recebida de todos os produtos para concluir
               </p>
             )}
+            {todosConferidos && divergenciasSemAnomalia.length > 0 && (
+              <p className="text-orange-400 text-[10px] text-center mb-2 flex items-center justify-center gap-1">
+                <AlertTriangle size={11} />
+                {divergenciasSemAnomalia.length === 1
+                  ? '1 produto com diferença aguarda apontamento de anomalia'
+                  : `${divergenciasSemAnomalia.length} produtos com diferença aguardam apontamento de anomalia`}
+              </p>
+            )}
             <button
               onClick={onConcluir}
-              disabled={!todosConferidos || concluindo}
+              disabled={!todosConferidos || concluindo || divergenciasSemAnomalia.length > 0}
               className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 rounded-2xl transition-colors flex items-center justify-center gap-2"
             >
               {concluindo
