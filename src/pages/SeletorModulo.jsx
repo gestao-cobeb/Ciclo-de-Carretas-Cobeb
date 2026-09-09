@@ -133,7 +133,10 @@ export default function SeletorModulo() {
     )
   }
 
-  if (!user || profile?.perfil !== 'admin') return <Navigate to="/login" replace />
+  const podeAcessar =
+    profile?.perfil === 'admin' ||
+    (profile?.perfil === 'conferente' && profile?.modulos_permitidos?.length > 0)
+  if (!user || !podeAcessar) return <Navigate to="/login" replace />
 
   // Se já tem modo, redireciona
   if (modoVisao) {
@@ -141,7 +144,7 @@ export default function SeletorModulo() {
     return <Navigate to={mod?.rota ?? '/dashboard'} replace />
   }
 
-  // Módulos visíveis: acesso_total vê todos; leitura vê apenas os autorizados
+  // Módulos visíveis: acesso_total vê todos; demais veem apenas os autorizados
   const modulosVisiveis = profile.acesso_total
     ? MODULOS
     : MODULOS.filter(m => profile.modulos_permitidos?.includes(m.key))

@@ -15,8 +15,11 @@ export default function ProtectedRoute({ children, allowedRoles, requireAdminTot
   if (loading) return null
   if (!user)   return <Navigate to="/login" replace />
 
-  // Qualquer admin (total ou leitura): passa se tiver modo selecionado
-  if (profile?.perfil === 'admin') {
+  // Admin ou conferente com módulos: passa se tiver modo selecionado
+  const usaSelector =
+    profile?.perfil === 'admin' ||
+    (profile?.perfil === 'conferente' && profile?.modulos_permitidos?.length > 0)
+  if (usaSelector) {
     if (!modoVisao) return <Navigate to="/selecionar-modulo" replace />
     return children
   }

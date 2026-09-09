@@ -53,7 +53,10 @@ function AppRoutes() {
 
   let home = '/login'
   if (profile) {
-    if (profile.perfil === 'admin') {
+    const usaSelector =
+      profile.perfil === 'admin' ||
+      (profile.perfil === 'conferente' && profile.modulos_permitidos?.length > 0)
+    if (usaSelector) {
       home = modoVisao ? (MODO_ROTA[modoVisao] ?? '/selecionar-modulo') : '/selecionar-modulo'
     } else {
       home = PERFIL_ROTA[profile.perfil] ?? '/login'
