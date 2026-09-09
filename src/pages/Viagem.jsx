@@ -139,7 +139,7 @@ export default function Viagem() {
     async function check() {
       const [{ data: tarefa }, { data: portaria }] = await Promise.all([
         supabase.from('tarefas').select('status').eq('viagem_id', id).maybeSingle(),
-        supabase.from('portaria_atendimentos').select('status, dt_saida').eq('viagem_id', id).maybeSingle(),
+        supabase.from('portaria_atendimentos').select('status, dt_saida').eq('viagem_id', id).is('excluido_em', null).maybeSingle(),
       ])
       if (tarefa?.status) setTarefaStatus(tarefa.status)
       if (portaria?.status) {
@@ -317,7 +317,7 @@ export default function Viagem() {
     if (!viagemAtiva?.id) return
     const [{ data: tarefa }, { data: portaria }] = await Promise.all([
       supabase.from('tarefas').select('status').eq('viagem_id', viagemAtiva.id).maybeSingle(),
-      supabase.from('portaria_atendimentos').select('status, dt_saida').eq('viagem_id', viagemAtiva.id).maybeSingle(),
+      supabase.from('portaria_atendimentos').select('status, dt_saida').eq('viagem_id', viagemAtiva.id).is('excluido_em', null).maybeSingle(),
     ])
     if (tarefa?.status) setTarefaStatus(tarefa.status)
     if (portaria?.status) {
