@@ -192,49 +192,101 @@ export default function Tarefas() {
     }
     const [{ data: peds }, { data: itens }, { data: anos }] = await Promise.all([
       supabase.from('pedidos').select('*').eq('viagem_id', viagemId).neq('status', 'cancelado').order('descricao'),
-      supabase.from('conferencia_itens').select('*').eq('tarefa_id', tarefa.id),
+      supabase.from('conferencia_itens').select('*').eq('tarefa_id', tarefa.id).order('created_at'),
       supabase.from('anomalias')
         .select('*, pedido:pedidos(descricao, cod_produto)')
         .eq('tarefa_id', tarefa.id)
         .order('created_at'),
     ])
-    setPedidos(peds ?? [])
-    const state = {}
+    const pedsList = peds ?? []
+    setPedidos(pedsList)
+
+    // Agrupa entradas do banco por pedido_id
+    const dbByPedido = {}
     ;(itens ?? []).forEach(it => {
-      state[it.pedido_id] = {
+      if (!dbByPedido[it.pedido_id]) dbByPedido[it.pedido_id] = []
+      dbByPedido[it.pedido_id].push({
+        _id:          uid(),
+        id:           it.id,
         qtde_recebida: it.qtde_recebida != null ? String(it.qtde_recebida) : '',
         data_validade: it.data_validade ?? '',
-      }
+        cxInput:      '',
+      })
     })
+
+    // Para produtos sem dados no banco, inicia com uma entrada em branco
+    const state = {}
+    pedsList.forEach(p => {
+      state[p.id] = dbByPedido[p.id] ?? [{ _id: uid(), id: null, qtde_recebida: '', data_validade: '', cxInput: '' }]
+    })
+
     setItenState(state)
     setAnomalias(anos ?? [])
     setLoadingConf(false)
   }
 
-  function setItemField(pedidoId, field, value) {
-    setItenState(s => ({ ...s, [pedidoId]: { ...(s[pedidoId] ?? {}), [field]: value } }))
+  function setEntradaField(pedidoId, localId, field, value) {
+    setItenState(s => ({
+      ...s,
+      [pedidoId]: (s[pedidoId] ?? []).map(e => e._id === localId ? { ...e, [field]: value } : e),
+    }))
   }
 
-  async function salvarItem(pedidoId) {
-    const it = itenState[pedidoId] ?? {}
-    await supabase.from('conferencia_itens').upsert({
-      tarefa_id:     tarefaSel.id,
-      pedido_id:     pedidoId,
-      qtde_recebida: it.qtde_recebida || null,
-      data_validade: it.data_validade || null,
-    }, { onConflict: 'tarefa_id,pedido_id' })
+  async function salvarEntrada(pedidoId, localId) {
+    const entries = itenState[pedidoId] ?? []
+    const entry = entries.find(e => e._id === localId)
+    if (!entry) return
+    const qtde = entry.qtde_recebida || null
+    const dataVal = entry.data_validade || null
+    if (!qtde && !dataVal && !entry.id) return
+    if (entry.id) {
+      await supabase.from('conferencia_itens')
+        .update({ qtde_recebida: qtde, data_validade: dataVal })
+        .eq('id', entry.id)
+    } else {
+      const { data: row } = await supabase.from('conferencia_itens')
+        .insert({ tarefa_id: tarefaSel.id, pedido_id: pedidoId, qtde_recebida: qtde, data_validade: dataVal })
+        .select('id')
+        .single()
+      if (row?.id) {
+        setItenState(s => ({
+          ...s,
+          [pedidoId]: (s[pedidoId] ?? []).map(e => e._id === localId ? { ...e, id: row.id } : e),
+        }))
+      }
+    }
+  }
+
+  function adicionarEntrada(pedidoId) {
+    setItenState(s => ({
+      ...s,
+      [pedidoId]: [...(s[pedidoId] ?? []), { _id: uid(), id: null, qtde_recebida: '', data_validade: '', cxInput: '' }],
+    }))
+  }
+
+  async function removerEntrada(pedidoId, localId) {
+    const entry = (itenState[pedidoId] ?? []).find(e => e._id === localId)
+    if (entry?.id) {
+      await supabase.from('conferencia_itens').delete().eq('id', entry.id)
+    }
+    setItenState(s => ({
+      ...s,
+      [pedidoId]: (s[pedidoId] ?? []).filter(e => e._id !== localId),
+    }))
   }
 
   const todosConferidos = pedidos.length > 0 &&
     pedidos.every(p => {
-      const it = itenState[p.id]
-      return it?.qtde_recebida !== undefined && it.qtde_recebida !== ''
+      const entries = itenState[p.id] ?? []
+      return entries.some(e => e.qtde_recebida && Number(e.qtde_recebida) > 0)
     })
 
   const divergencias = pedidos.filter(p => {
-    const it = itenState[p.id]
-    if (!it?.qtde_recebida) return false
-    return Math.abs(Number(it.qtde_recebida) - Number(p.qtde_pallets)) > 0.001
+    const entries = itenState[p.id] ?? []
+    const hasAnyQty = entries.some(e => e.qtde_recebida && Number(e.qtde_recebida) > 0)
+    if (!hasAnyQty) return false
+    const totalRec = entries.reduce((s, e) => s + (Number(e.qtde_recebida) || 0), 0)
+    return Math.abs(totalRec - Number(p.qtde_pallets)) > 0.001
   })
 
   const divergenciasSemAnomalia = divergencias.filter(p =>
@@ -511,8 +563,10 @@ export default function Tarefas() {
           divergencias={divergencias}
           divergenciasSemAnomalia={divergenciasSemAnomalia}
           onBack={voltarLista}
-          onSetField={setItemField}
-          onSalvarItem={salvarItem}
+          onSetEntrada={setEntradaField}
+          onSalvarEntrada={salvarEntrada}
+          onAdicionarEntrada={adicionarEntrada}
+          onRemoverEntrada={removerEntrada}
           onConcluir={concluirConferencia}
           onAbrirAnomalia={abrirModalAnomalia}
           signOut={signOut}
@@ -806,29 +860,34 @@ export default function Tarefas() {
 function ConferenciaView({
   tarefa, pedidos, itenState, anomalias,
   loadingConf, concluindo, todosConferidos, divergencias, divergenciasSemAnomalia,
-  onBack, onSetField, onSalvarItem, onConcluir, onAbrirAnomalia, signOut,
+  onBack, onSetEntrada, onSalvarEntrada, onAdicionarEntrada, onRemoverEntrada,
+  onConcluir, onAbrirAnomalia, signOut,
   isAdminEdit,
 }) {
   const concluida = tarefa.status === 'concluida'
   const readOnly = concluida && !isAdminEdit
   const [confUnidade, setConfUnidade] = useState({})
 
-  function getU(pedidoId) {
-    return confUnidade[pedidoId] ?? { unidade: 'PLT', cxInput: '' }
+  function getUnidade(pedidoId) {
+    return confUnidade[pedidoId] ?? 'PLT'
   }
 
   function switchUnidade(pedidoId, u) {
-    setConfUnidade(prev => ({ ...prev, [pedidoId]: { unidade: u, cxInput: '' } }))
-    onSetField(pedidoId, 'qtde_recebida', '')
+    const entries = itenState[pedidoId] ?? []
+    setConfUnidade(prev => ({ ...prev, [pedidoId]: u }))
+    entries.forEach(e => {
+      onSetEntrada(pedidoId, e._id, 'qtde_recebida', '')
+      onSetEntrada(pedidoId, e._id, 'cxInput', '')
+    })
   }
 
-  function handleCxInput(pedidoId, val, cxPallet) {
-    setConfUnidade(prev => ({ ...prev, [pedidoId]: { unidade: 'CX', cxInput: val } }))
+  function handleCxInput(pedidoId, localId, val, cxPallet) {
+    onSetEntrada(pedidoId, localId, 'cxInput', val)
     const cx = Number(val)
     if (cx > 0 && cxPallet) {
-      onSetField(pedidoId, 'qtde_recebida', String(cx / cxPallet))
+      onSetEntrada(pedidoId, localId, 'qtde_recebida', String(cx / cxPallet))
     } else {
-      onSetField(pedidoId, 'qtde_recebida', '')
+      onSetEntrada(pedidoId, localId, 'qtde_recebida', '')
     }
   }
 
@@ -895,13 +954,13 @@ function ConferenciaView({
               </p>
               <div className="space-y-3">
                 {pedidos.map(pedido => {
-                  const it        = itenState[pedido.id] ?? {}
-                  const rec       = it.qtde_recebida
+                  const entries   = itenState[pedido.id] ?? []
                   const cxPallet  = pedido.qtde_pallets > 0 ? pedido.qtde_skus / pedido.qtde_pallets : null
-                  const { unidade, cxInput } = getU(pedido.id)
-                  const cxRec     = rec ? calcCaixas(rec, pedido) : null
-                  const hasDiverg = rec !== undefined && rec !== '' &&
-                    Math.abs(Number(rec) - Number(pedido.qtde_pallets)) > 0.001
+                  const unidade   = getUnidade(pedido.id)
+                  const totalRec  = entries.reduce((s, e) => s + (Number(e.qtde_recebida) || 0), 0)
+                  const hasAnyQty = entries.some(e => e.qtde_recebida && Number(e.qtde_recebida) > 0)
+                  const cxRec     = hasAnyQty ? calcCaixas(totalRec, pedido) : null
+                  const hasDiverg = hasAnyQty && Math.abs(totalRec - Number(pedido.qtde_pallets)) > 0.001
                   const anomaliaRegistrada = hasDiverg && anomalias.some(a => a.pedido_id === pedido.id)
 
                   return (
@@ -961,61 +1020,67 @@ function ConferenciaView({
                           </span>
                         </div>
 
-                        {/* Recebido */}
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-slate-500 text-[11px] shrink-0">Recebido</span>
-                          {unidade === 'CX' ? (
-                            <div className="flex items-center gap-2">
+                        {/* Recebido — múltiplas entradas (qty + data) */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500 text-[11px]">Recebido</span>
+                            {entries.length > 1 && hasAnyQty && (
+                              <span className="text-cobeb-text text-[10px] font-semibold">
+                                Total: {totalRec.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt
+                                {cxRec !== null && ` = ${cxRec.toLocaleString('pt-BR')} cx`}
+                              </span>
+                            )}
+                          </div>
+                          {entries.map(entry => (
+                            <div key={entry._id} className="flex items-center gap-1.5">
+                              {unidade === 'CX' ? (
+                                <input
+                                  type="number" min="1" step="1" placeholder="0"
+                                  disabled={readOnly}
+                                  value={entry.cxInput ?? ''}
+                                  onChange={e => handleCxInput(pedido.id, entry._id, e.target.value, cxPallet)}
+                                  onBlur={() => onSalvarEntrada(pedido.id, entry._id)}
+                                  className={`w-16 text-right bg-[#EBF5FF] border rounded-xl px-2 py-1.5 text-xs text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors ${
+                                    hasDiverg ? 'border-orange-500/60' : 'border-cobeb-border'
+                                  } disabled:opacity-50 disabled:cursor-default`}
+                                />
+                              ) : (
+                                <input
+                                  type="number" min="0" step="0.5" placeholder="0"
+                                  disabled={readOnly}
+                                  value={entry.qtde_recebida ?? ''}
+                                  onChange={e => onSetEntrada(pedido.id, entry._id, 'qtde_recebida', e.target.value)}
+                                  onBlur={() => onSalvarEntrada(pedido.id, entry._id)}
+                                  className={`w-16 text-right bg-[#EBF5FF] border rounded-xl px-2 py-1.5 text-xs text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors ${
+                                    hasDiverg ? 'border-orange-500/60' : 'border-cobeb-border'
+                                  } disabled:opacity-50 disabled:cursor-default`}
+                                />
+                              )}
+                              <span className="text-slate-500 text-[11px] shrink-0">{unidade === 'CX' ? 'cx' : 'plt'}</span>
                               <input
-                                type="number" min="1" step="1" placeholder="0"
+                                type="date"
                                 disabled={readOnly}
-                                value={cxInput}
-                                onChange={e => handleCxInput(pedido.id, e.target.value, cxPallet)}
-                                onBlur={() => onSalvarItem(pedido.id)}
-                                className={`w-20 text-right bg-[#EBF5FF] border rounded-xl px-2.5 py-1.5 text-xs text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors ${
-                                  hasDiverg ? 'border-orange-500/60' : 'border-cobeb-border'
-                                } disabled:opacity-50 disabled:cursor-default`}
+                                value={entry.data_validade ?? ''}
+                                onChange={e => onSetEntrada(pedido.id, entry._id, 'data_validade', e.target.value)}
+                                onBlur={() => onSalvarEntrada(pedido.id, entry._id)}
+                                className="flex-1 min-w-0 bg-[#EBF5FF] border border-cobeb-border rounded-xl px-2 py-1.5 text-xs text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors disabled:opacity-50 disabled:cursor-default [color-scheme:light]"
                               />
-                              <span className="text-slate-500 text-[11px] shrink-0">cx</span>
-                              {rec && Number(rec) > 0 && (
-                                <span className="text-slate-400 text-[10px] whitespace-nowrap">
-                                  = {Number(rec).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt
-                                </span>
+                              {!readOnly && entries.length > 1 && (
+                                <button
+                                  onClick={() => onRemoverEntrada(pedido.id, entry._id)}
+                                  className="text-slate-400 hover:text-red-400 transition-colors shrink-0 p-0.5">
+                                  <X size={12} />
+                                </button>
                               )}
                             </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number" min="0" step="0.5" placeholder="0"
-                                disabled={readOnly}
-                                value={rec ?? ''}
-                                onChange={e => onSetField(pedido.id, 'qtde_recebida', e.target.value)}
-                                onBlur={() => onSalvarItem(pedido.id)}
-                                className={`w-20 text-right bg-[#EBF5FF] border rounded-xl px-2.5 py-1.5 text-xs text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors ${
-                                  hasDiverg ? 'border-orange-500/60' : 'border-cobeb-border'
-                                } disabled:opacity-50 disabled:cursor-default`}
-                              />
-                              <span className="text-slate-500 text-[11px] shrink-0">plt</span>
-                              {cxRec !== null && (
-                                <span className="text-slate-500 text-[10px] whitespace-nowrap">
-                                  = {cxRec.toLocaleString('pt-BR')} cx
-                                </span>
-                              )}
-                            </div>
+                          ))}
+                          {!readOnly && (
+                            <button
+                              onClick={() => onAdicionarEntrada(pedido.id)}
+                              className="flex items-center gap-1 text-[10px] text-cobeb-navy/70 hover:text-cobeb-navy font-semibold transition-colors">
+                              <Plus size={11} />Adicionar data
+                            </button>
                           )}
-                        </div>
-
-                        {/* Validade */}
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-slate-500 text-[11px] shrink-0">Validade</span>
-                          <input
-                            type="date"
-                            disabled={readOnly}
-                            value={it.data_validade ?? ''}
-                            onChange={e => onSetField(pedido.id, 'data_validade', e.target.value)}
-                            onBlur={() => onSalvarItem(pedido.id)}
-                            className="bg-[#EBF5FF] border border-cobeb-border rounded-xl px-2.5 py-1.5 text-xs text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors disabled:opacity-50 disabled:cursor-default"
-                          />
                         </div>
 
                         {/* Divergence alert */}
@@ -1030,7 +1095,7 @@ function ConferenciaView({
                               : <AlertTriangle size={11} className="text-cobeb-yellow shrink-0" />}
                             <p className={`text-[10px] flex-1 ${anomaliaRegistrada ? 'text-green-400' : 'text-cobeb-yellow'}`}>
                               Esperado {Number(pedido.qtde_pallets).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt,
-                              recebido {Number(rec).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt
+                              recebido {totalRec.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt
                               {anomaliaRegistrada && ' · Anomalia registrada'}
                             </p>
                             {!readOnly && !anomaliaRegistrada && (

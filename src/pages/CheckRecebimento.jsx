@@ -118,7 +118,8 @@ export default function CheckRecebimento() {
     const itemByTarefaPedido = {}
     ;(itens ?? []).forEach(it => {
       if (!itemByTarefaPedido[it.tarefa_id]) itemByTarefaPedido[it.tarefa_id] = {}
-      itemByTarefaPedido[it.tarefa_id][it.pedido_id] = it
+      if (!itemByTarefaPedido[it.tarefa_id][it.pedido_id]) itemByTarefaPedido[it.tarefa_id][it.pedido_id] = []
+      itemByTarefaPedido[it.tarefa_id][it.pedido_id].push(it)
     })
 
     const viagemById = {}
@@ -144,15 +145,17 @@ export default function CheckRecebimento() {
         const data     = viagem?.dt_chegada_revenda?.split('T')[0] ?? null
         const fabricas = [...new Set(peds.map(p => p.fabrica).filter(Boolean))]
 
-        const produtos = peds.map(p => ({ ...p, item: itemMap[p.id] ?? null }))
+        const produtos = peds.map(p => ({ ...p, itens: itemMap[p.id] ?? [] }))
 
         const totalPrevPal    = peds.reduce((s, p) => s + (Number(p.qtde_pallets) || 0), 0)
-        const totalRecPal     = produtos.reduce((s, p) => s + (Number(p.item?.qtde_recebida) || 0), 0)
-        const conferidoCount  = produtos.filter(p => p.item?.qtde_recebida != null).length
-        const temDivergencia  = produtos.some(p =>
-          p.item?.qtde_recebida != null &&
-          Math.abs(Number(p.item.qtde_recebida) - Number(p.qtde_pallets)) > 0.001
-        )
+        const totalRecPal     = produtos.reduce((s, p) =>
+          s + p.itens.reduce((es, it) => es + (Number(it.qtde_recebida) || 0), 0), 0)
+        const conferidoCount  = produtos.filter(p => p.itens.some(it => it.qtde_recebida != null)).length
+        const temDivergencia  = produtos.some(p => {
+          if (!p.itens.some(it => it.qtde_recebida != null)) return false
+          const totalRec = p.itens.reduce((s, it) => s + (Number(it.qtde_recebida) || 0), 0)
+          return Math.abs(totalRec - Number(p.qtde_pallets)) > 0.001
+        })
 
         const anomalias        = anosByTarefa[t.id] ?? []
         const temQualidade     = anomalias.some(a => a.tipo === 'qualidade')
@@ -586,13 +589,12 @@ export default function CheckRecebimento() {
                       ) : (
                         // ── Normal: produtos do pedido ─────────────────────────────────────────
                         g.produtos.map((p, i) => {
-                        const rec      = p.item?.qtde_recebida
-                        const val      = p.item?.data_validade
                         const prevPal  = Number(p.qtde_pallets)
-                        const recPal   = rec != null ? Number(rec) : null
-                        const diff     = recPal != null ? recPal - prevPal : null
-                        const cxRec    = recPal != null ? calcCaixas(recPal, p) : null
-                        const okColor  = diff == null ? '' : diff === 0 ? 'text-green-500' : diff < 0 ? 'text-orange-400' : 'text-red-400'
+                        const totalRec = p.itens.reduce((s, it) => s + (Number(it.qtde_recebida) || 0), 0)
+                        const hasAny   = p.itens.some(it => it.qtde_recebida != null)
+                        const diff     = hasAny ? totalRec - prevPal : null
+                        const cxRec    = hasAny ? calcCaixas(totalRec, p) : null
+                        const okColor  = diff == null ? '' : Math.abs(diff) < 0.001 ? 'text-green-500' : diff < 0 ? 'text-orange-400' : 'text-red-400'
 
                         const sub = g.substituteByPedido?.[p.id] ?? null
                         return (
@@ -611,20 +613,36 @@ export default function CheckRecebimento() {
                                   Prev: {prevPal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal
                                   {' / '}{Number(p.qtde_skus).toLocaleString('pt-BR')} cx
                                 </p>
-                                {recPal != null ? (
-                                  <p className={`text-xs font-semibold ${okColor}`}>
-                                    Rec: {recPal.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal
-                                    {cxRec != null && <span className="text-[10px] ml-1">/ {cxRec.toLocaleString('pt-BR')} cx</span>}
-                                    {diff !== 0 && diff != null && (
-                                      <span className="text-[10px] ml-1">
-                                        ({diff > 0 ? '+' : ''}{diff.toLocaleString('pt-BR', { maximumFractionDigits: 1 })})
-                                      </span>
+                                {hasAny ? (
+                                  <>
+                                    {p.itens.filter(it => it.qtde_recebida != null).map((it, idx) => (
+                                      <div key={idx}>
+                                        <p className={`text-xs font-semibold ${p.itens.length === 1 ? okColor : 'text-cobeb-text'}`}>
+                                          Rec: {Number(it.qtde_recebida).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal
+                                        </p>
+                                        {it.data_validade && <p className="text-[10px] text-slate-500">Val: {ptDate(it.data_validade)}</p>}
+                                      </div>
+                                    ))}
+                                    {p.itens.length > 1 && (
+                                      <p className={`text-xs font-semibold ${okColor}`}>
+                                        = {totalRec.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} pal total
+                                        {cxRec != null && <span className="text-[10px] ml-1">/ {cxRec.toLocaleString('pt-BR')} cx</span>}
+                                        {diff !== 0 && diff != null && (
+                                          <span className="text-[10px] ml-1">
+                                            ({diff > 0 ? '+' : ''}{diff.toLocaleString('pt-BR', { maximumFractionDigits: 1 })})
+                                          </span>
+                                        )}
+                                      </p>
                                     )}
-                                  </p>
+                                    {p.itens.length === 1 && diff !== 0 && diff != null && (
+                                      <p className={`text-[10px] ${okColor}`}>
+                                        ({diff > 0 ? '+' : ''}{diff.toLocaleString('pt-BR', { maximumFractionDigits: 1 })})
+                                      </p>
+                                    )}
+                                  </>
                                 ) : (
                                   <p className="text-[10px] text-slate-400 italic">Não conferido</p>
                                 )}
-                                {val && <p className="text-[10px] text-slate-500">Val: {ptDate(val)}</p>}
                               </div>
                             </div>
 
