@@ -50,6 +50,7 @@ export default function PortariaPage() {
   const [atendimentos, setAtendimentos] = useState([])
   const [loading,      setLoading]      = useState(true)
   const [registrando,  setRegistrando]  = useState(null)
+  const [confirmando,  setConfirmando]  = useState(null) // { id, acao: 'entrada'|'saida' }
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroData,   setFiltroData]   = useState(isoToday())
 
@@ -88,7 +89,16 @@ export default function PortariaPage() {
     navigate('/login', { replace: true })
   }
 
+  function pedirConfirmacao(id, acao) {
+    setConfirmando({ id, acao })
+  }
+
+  function cancelarConfirmacao() {
+    setConfirmando(null)
+  }
+
   async function registrarEntrada(atend) {
+    setConfirmando(null)
     setRegistrando(atend.id)
     const { error } = await supabase.rpc('registrar_entrada_portaria', {
       p_atendimento_id: atend.id,
@@ -117,6 +127,7 @@ export default function PortariaPage() {
   }
 
   async function registrarSaida(atend) {
+    setConfirmando(null)
     setRegistrando(atend.id)
     await supabase
       .from('portaria_atendimentos')
@@ -329,15 +340,33 @@ export default function PortariaPage() {
                           <ElapsedTimer from={a.dt_entrada} />
                         </div>
                       </div>
-                      <button
-                        onClick={() => registrarSaida(a)}
-                        disabled={registrando === a.id}
-                        className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-bold py-4 rounded-xl text-base transition-colors flex items-center justify-center gap-2"
-                      >
-                        {registrando === a.id
-                          ? <><div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Registrando...</>
-                          : <><Clock size={18} />Registrar Saída</>}
-                      </button>
+                      {confirmando?.id === a.id && confirmando?.acao === 'saida' ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={cancelarConfirmacao}
+                            className="flex-1 border border-cobeb-border text-slate-500 font-semibold py-3.5 rounded-xl text-sm transition-colors hover:bg-[#EBF5FF]"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={() => registrarSaida(a)}
+                            disabled={registrando === a.id}
+                            className="flex-1 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-bold py-3.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
+                          >
+                            {registrando === a.id
+                              ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                              : 'Confirmar Saída'}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => pedirConfirmacao(a.id, 'saida')}
+                          disabled={registrando === a.id}
+                          className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-bold py-4 rounded-xl text-base transition-colors flex items-center justify-center gap-2"
+                        >
+                          <Clock size={18} />Registrar Saída
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -374,15 +403,33 @@ export default function PortariaPage() {
                           Agendado: {a.agendamento.bloco} · {a.agendamento.tipo_dia}
                         </p>
                       )}
-                      <button
-                        onClick={() => registrarEntrada(a)}
-                        disabled={registrando === a.id}
-                        className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-bold py-4 rounded-xl text-base transition-colors flex items-center justify-center gap-2"
-                      >
-                        {registrando === a.id
-                          ? <><div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Registrando...</>
-                          : <><Clock size={18} />Registrar Entrada</>}
-                      </button>
+                      {confirmando?.id === a.id && confirmando?.acao === 'entrada' ? (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={cancelarConfirmacao}
+                            className="flex-1 border border-cobeb-border text-slate-500 font-semibold py-3.5 rounded-xl text-sm transition-colors hover:bg-[#EBF5FF]"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={() => registrarEntrada(a)}
+                            disabled={registrando === a.id}
+                            className="flex-1 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-bold py-3.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
+                          >
+                            {registrando === a.id
+                              ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                              : 'Confirmar Entrada'}
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => pedirConfirmacao(a.id, 'entrada')}
+                          disabled={registrando === a.id}
+                          className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-bold py-4 rounded-xl text-base transition-colors flex items-center justify-center gap-2"
+                        >
+                          <Clock size={18} />Registrar Entrada
+                        </button>
+                      )}
                     </div>
                   ))}
                 </div>
