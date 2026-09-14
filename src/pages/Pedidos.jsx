@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   ChevronDown, ChevronUp, X, Search, RefreshCw,
   CheckCircle, Clock, Package, AlertTriangle, RotateCcw,
-  Link2, Unlink2, Truck, User,
+  Unlink2,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -24,38 +24,23 @@ function addDays(isoDate, n) {
   return d.toISOString().split('T')[0]
 }
 
-const STATUS_LABEL = {
-  iniciada:               'Iniciada',
-  em_transito:            'Em trânsito',
-  na_fabrica:             'Na fábrica',
-  retornando:             'Retornando',
-  aguardando_conferencia: 'Conferência',
-}
-
-const STATUS_CLS = {
-  iniciada:               'bg-slate-100 text-slate-500',
-  em_transito:            'bg-blue-100 text-blue-600',
-  na_fabrica:             'bg-amber-100 text-amber-600',
-  retornando:             'bg-green-100 text-green-600',
-  aguardando_conferencia: 'bg-purple-100 text-purple-600',
-}
-
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function Pedidos() {
   const { profile: meProfile } = useAuth()
   const isAdminTotal = meProfile?.acesso_total === true
 
-  const [unidades,     setUnidades]     = useState([])
-  const [pedidos,      setPedidos]      = useState([])
-  const [loading,      setLoading]      = useState(true)
-  const [marcandoFuro, setMarcandoFuro] = useState(new Set())
+  const [unidades,          setUnidades]          = useState([])
+  const [pedidos,           setPedidos]           = useState([])
+  const [loading,           setLoading]           = useState(true)
+  const [marcandoFuro,      setMarcandoFuro]      = useState(new Set())
+  const [marcandoRealizado, setMarcandoRealizado] = useState(new Set())
 
   // filter state
-  const [filtData, setFiltData] = useState('')
+  const [filtData,    setFiltData]    = useState('')
   const [filtUnidade, setFiltUnidade] = useState('')
   const [filtFabrica, setFiltFabrica] = useState('')
-  const [search, setSearch] = useState('')
+  const [search,      setSearch]      = useState('')
 
   const [expanded, setExpanded] = useState(new Set())
 
@@ -63,11 +48,8 @@ export default function Pedidos() {
   const [showConfirmDesvincular, setShowConfirmDesvincular] = useState(null)
   const [desvinculando,          setDesvinculando]          = useState(false)
 
-  // vincular
-  const [showVincularModal, setShowVincularModal]   = useState(null)
-  const [viagemsTransito,   setViagemsTransito]     = useState([])
-  const [loadingViagemModal, setLoadingViagemModal] = useState(false)
-  const [vinculando,         setVinculando]         = useState(false)
+  // ação (furo ou realizado)
+  const [showAcaoModal, setShowAcaoModal] = useState(null)
 
   useEffect(() => { loadData() }, [])
 
@@ -195,6 +177,19 @@ export default function Pedidos() {
     else loadData()
   }
 
+  async function marcarRealizado(grupo, desfazer = false) {
+    const key = grupo.key
+    setMarcandoRealizado(prev => new Set([...prev, key]))
+    const ids = grupo.itens.filter(i => i.status !== 'cancelado').map(i => i.id)
+    const { error } = await supabase
+      .from('pedidos')
+      .update({ status: desfazer ? 'ativo' : 'realizado' })
+      .in('id', ids)
+    setMarcandoRealizado(prev => { const n = new Set(prev); n.delete(key); return n })
+    if (error) alert('Erro: ' + error.message)
+    else loadData()
+  }
+
   // ── desvincular ──────────────────────────────────────────────────────────────
 
   async function desvincularViagem() {
@@ -213,53 +208,6 @@ export default function Pedidos() {
       }
       return
     }
-    loadData()
-  }
-
-  // ── vincular ─────────────────────────────────────────────────────────────────
-
-  async function abrirModalVincular(grupo) {
-    setShowVincularModal(grupo)
-    setLoadingViagemModal(true)
-    setViagemsTransito([])
-
-    const { data: viagens } = await supabase
-      .from('viagens')
-      .select('id, status, motorista:profiles(nome), cavalo:cavalos(placa), carreta:carretas(placa)')
-      .neq('status', 'concluida')
-      .order('created_at', { ascending: false })
-
-    const ids = (viagens ?? []).map(v => v.id)
-    let pedidosPorViagem = {}
-    if (ids.length > 0) {
-      const { data: peds } = await supabase
-        .from('pedidos')
-        .select('viagem_id, numero_pedido')
-        .in('viagem_id', ids)
-        .neq('status', 'cancelado')
-      ;(peds ?? []).forEach(p => {
-        if (!pedidosPorViagem[p.viagem_id]) pedidosPorViagem[p.viagem_id] = []
-        if (!pedidosPorViagem[p.viagem_id].includes(p.numero_pedido))
-          pedidosPorViagem[p.viagem_id].push(p.numero_pedido)
-      })
-    }
-
-    setViagemsTransito((viagens ?? []).map(v => ({
-      ...v,
-      pedidos: pedidosPorViagem[v.id] ?? [],
-    })))
-    setLoadingViagemModal(false)
-  }
-
-  async function vincularPedido(viagem_id) {
-    setVinculando(true)
-    const { error } = await supabase.rpc('admin_vincular_pedido_viagem', {
-      p_numero_pedido: showVincularModal.numero_pedido,
-      p_viagem_id:     viagem_id,
-    })
-    setVinculando(false)
-    if (error) { alert('Erro: ' + error.message); return }
-    setShowVincularModal(null)
     loadData()
   }
 
@@ -376,23 +324,23 @@ export default function Pedidos() {
         ) : (
           <div className="px-4 pt-1 pb-4 space-y-1.5">
             {agrupados.map(g => {
-              const isOpen    = expanded.has(g.key)
-              const unidade   = unidades.find(u => u.id === g.unidade_id)
-              const vinculado = !!g.viagem_id
-              const ehFuro    = g.itens.some(i => i.status === 'furo')
+              const isOpen      = expanded.has(g.key)
+              const unidade     = unidades.find(u => u.id === g.unidade_id)
+              const vinculado   = !!g.viagem_id
+              const ehFuro      = g.itens.some(i => i.status === 'furo')
+              const ehRealizado = !g.viagem_id && g.itens.some(i => i.status === 'realizado')
+              const isPast      = g.data_puxada < isoToday()
 
-              const elegivelFuro = isAdminTotal && !vinculado && !ehFuro
-                && g.data_puxada < isoToday()
+              // pedido pendente do dia atual ou anterior: admin pode registrar situação
+              const elegivelAcao = isAdminTotal && !vinculado && !ehFuro && !ehRealizado
                 && g.itens.every(i => i.status !== 'cancelado')
+                && g.data_puxada <= isoToday()
 
-              const elegivelVincular = isAdminTotal && !vinculado && !ehFuro
-                && g.itens.every(i => i.status !== 'cancelado')
-
-              // Desvincular: só para viagens ainda em transito ou iniciadas
+              // desvincular: só para viagens ainda em transito ou iniciadas
               const podeDesvincular = isAdminTotal && vinculado
                 && (g.viagem_status === 'iniciada' || g.viagem_status === 'em_transito')
 
-              const isMarcando = marcandoFuro.has(g.key)
+              const isMarcando = marcandoFuro.has(g.key) || marcandoRealizado.has(g.key)
 
               return (
                 <div key={g.key} className="bg-white rounded-2xl border border-cobeb-border overflow-hidden">
@@ -461,34 +409,39 @@ export default function Pedidos() {
                               </span>
                             )}
                           </>
+                        ) : ehRealizado ? (
+                          <>
+                            <CheckCircle size={14} className="text-green-400 shrink-0" />
+                            <span className="text-green-400 text-[10px] font-semibold whitespace-nowrap">Vinculado</span>
+                            {isAdminTotal && (
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                title="Desfazer vínculo manual"
+                                onClick={e => { e.stopPropagation(); marcarRealizado(g, true) }}
+                                className="ml-0.5 cursor-pointer text-slate-400 hover:text-red-400 transition-colors leading-none"
+                              >
+                                <RotateCcw size={10} />
+                              </span>
+                            )}
+                          </>
                         ) : (
                           <>
                             <Clock size={14} className="text-slate-500 shrink-0" />
                             <span className="text-slate-500 text-[10px] font-semibold whitespace-nowrap">Pendente</span>
-                            {elegivelFuro && (
+                            {elegivelAcao && (
                               <span
                                 role="button"
                                 tabIndex={0}
-                                title="Marcar como furo"
-                                onClick={e => { e.stopPropagation(); marcarFuro(g) }}
+                                title={isPast ? 'Registrar situação' : 'Vincular como realizado'}
+                                onClick={e => { e.stopPropagation(); setShowAcaoModal(g) }}
                                 className={`ml-1 cursor-pointer leading-none transition-colors ${
-                                  isMarcando ? 'text-slate-300' : 'text-orange-400 hover:text-red-500'
+                                  isMarcando ? 'text-slate-300' : 'text-orange-400 hover:text-orange-500'
                                 }`}
                               >
                                 {isMarcando
                                   ? <div className="w-3 h-3 border border-slate-300 border-t-transparent rounded-full animate-spin" style={{ display: 'inline-block' }} />
                                   : <AlertTriangle size={11} />}
-                              </span>
-                            )}
-                            {elegivelVincular && (
-                              <span
-                                role="button"
-                                tabIndex={0}
-                                title="Vincular a viagem em trânsito"
-                                onClick={e => { e.stopPropagation(); abrirModalVincular(g) }}
-                                className="ml-1 cursor-pointer leading-none text-blue-400 hover:text-cobeb-navy transition-colors"
-                              >
-                                <Link2 size={11} />
                               </span>
                             )}
                           </>
@@ -610,15 +563,13 @@ export default function Pedidos() {
         />
       )}
 
-      {/* ── Modal: vincular a viagem em trânsito ── */}
-      {showVincularModal && (
-        <ModalVincular
-          grupo={showVincularModal}
-          viagens={viagemsTransito}
-          loading={loadingViagemModal}
-          vinculando={vinculando}
-          onVincular={vincularPedido}
-          onCancelar={() => setShowVincularModal(null)}
+      {/* ── Modal: registrar situação do pedido ── */}
+      {showAcaoModal && (
+        <ModalAcaoPedido
+          grupo={showAcaoModal}
+          onFuro={() => { const g = showAcaoModal; setShowAcaoModal(null); marcarFuro(g) }}
+          onVincular={() => { const g = showAcaoModal; setShowAcaoModal(null); marcarRealizado(g) }}
+          onCancelar={() => setShowAcaoModal(null)}
         />
       )}
 
@@ -674,85 +625,59 @@ function ModalConfirmDesvincular({ grupo, desvinculando, onConfirmar, onCancelar
   )
 }
 
-// ── Modal: vincular a viagem em trânsito ──────────────────────────────────────
+// ── Modal: registrar situação do pedido (furo ou realizado) ───────────────────
 
-function ModalVincular({ grupo, viagens, loading, vinculando, onVincular, onCancelar }) {
+function ModalAcaoPedido({ grupo, onFuro, onVincular, onCancelar }) {
+  const isPast = grupo.data_puxada < isoToday()
+
   return (
     <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
-      <div className="w-full max-w-lg mx-auto bg-white rounded-t-3xl flex flex-col" style={{ maxHeight: '85vh' }}>
+      <div className="w-full max-w-lg mx-auto bg-white rounded-t-3xl p-6 space-y-4">
+        <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto" />
 
-        {/* Header */}
-        <div className="px-6 pt-5 pb-4 border-b border-cobeb-border shrink-0">
-          <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto mb-4" />
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-cobeb-navy/10 flex items-center justify-center shrink-0">
-              <Link2 size={16} className="text-cobeb-navy" />
-            </div>
-            <div>
-              <p className="text-cobeb-text font-semibold text-base">Vincular pedido #{grupo.numero_pedido}</p>
-              <p className="text-slate-500 text-xs mt-0.5">Selecione a viagem ativa de destino</p>
-            </div>
-          </div>
+        <div className="text-center">
+          <p className="text-cobeb-text font-semibold text-base">O que aconteceu com este pedido?</p>
+          <p className="text-slate-500 text-xs mt-1">
+            #{grupo.numero_pedido} · {ptDate(grupo.data_puxada)} · {grupo.fabrica}
+          </p>
         </div>
 
-        {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 py-4 space-y-2">
-          {loading ? (
-            <div className="flex justify-center py-10">
-              <div className="w-7 h-7 border-2 border-cobeb-blue border-t-transparent rounded-full animate-spin" />
+        <div className="space-y-2">
+          <button
+            onClick={onVincular}
+            className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl border border-cobeb-border bg-white hover:border-green-400 hover:bg-green-50 transition-all text-left"
+          >
+            <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center shrink-0">
+              <CheckCircle size={20} className="text-green-500" />
             </div>
-          ) : viagens.length === 0 ? (
-            <div className="text-center py-10">
-              <Truck size={28} className="text-slate-300 mx-auto mb-3" />
-              <p className="text-slate-500 text-sm font-medium">Nenhuma viagem ativa</p>
-              <p className="text-slate-400 text-xs mt-1">Não há viagens em andamento no momento.</p>
+            <div>
+              <p className="text-cobeb-text font-semibold text-sm">Vincular como realizado</p>
+              <p className="text-slate-500 text-xs mt-0.5">A viagem foi feita mas o motorista não vinculou o pedido</p>
             </div>
-          ) : (
-            viagens.map(v => (
-              <button
-                key={v.id}
-                onClick={() => !vinculando && onVincular(v.id)}
-                disabled={vinculando}
-                className="w-full flex items-center justify-between px-4 py-3.5 rounded-2xl border border-cobeb-border bg-white hover:border-cobeb-blue hover:bg-cobeb-navy/5 transition-all text-left disabled:opacity-50"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <User size={12} className="text-slate-400 shrink-0" />
-                    <p className="text-cobeb-text text-sm font-semibold truncate">{v.motorista?.nome ?? '—'}</p>
-                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none shrink-0 ${STATUS_CLS[v.status] ?? 'bg-slate-100 text-slate-500'}`}>
-                      {STATUS_LABEL[v.status] ?? v.status}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Truck size={12} className="text-slate-400 shrink-0" />
-                    <p className="text-slate-500 text-xs font-mono">
-                      {v.carreta?.placa ?? '—'} · {v.cavalo?.placa ?? '—'}
-                    </p>
-                  </div>
-                  {v.pedidos.length > 0 && (
-                    <p className="text-[10px] text-slate-400 mt-1">
-                      Pedidos: {v.pedidos.map(n => `#${n}`).join(' · ')}
-                    </p>
-                  )}
-                </div>
-                {vinculando
-                  ? <div className="w-4 h-4 border-2 border-cobeb-blue border-t-transparent rounded-full animate-spin shrink-0" />
-                  : <Link2 size={14} className="text-cobeb-blue shrink-0 ml-2" />}
-              </button>
-            ))
+          </button>
+
+          {isPast && (
+            <button
+              onClick={onFuro}
+              className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl border border-cobeb-border bg-white hover:border-red-300 hover:bg-red-50 transition-all text-left"
+            >
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} className="text-red-500" />
+              </div>
+              <div>
+                <p className="text-cobeb-text font-semibold text-sm">Marcar como furo</p>
+                <p className="text-slate-500 text-xs mt-0.5">O pedido não foi atendido — nenhuma viagem foi realizada</p>
+              </div>
+            </button>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="px-6 pb-6 pt-3 border-t border-cobeb-border shrink-0">
-          <button
-            onClick={onCancelar}
-            disabled={vinculando}
-            className="w-full bg-[#EBF5FF] border border-cobeb-border text-slate-400 font-semibold py-4 rounded-2xl text-sm disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-        </div>
+        <button
+          onClick={onCancelar}
+          className="w-full bg-[#EBF5FF] border border-cobeb-border text-slate-400 font-semibold py-4 rounded-2xl text-sm transition-colors hover:bg-slate-100"
+        >
+          Cancelar
+        </button>
       </div>
     </div>
   )
