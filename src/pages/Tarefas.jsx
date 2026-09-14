@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+﻿import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   LogOut, ClipboardList, MapPin, ChevronLeft, CheckCircle, Clock,
@@ -10,12 +10,12 @@ import EmissaoNRI from './EmissaoNRI'
 
 const uid = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const STATUS_CFG = {
   pendente:     { label: 'Pendente',     color: 'text-slate-500',  bg: 'bg-[#EBF5FF]',    border: 'border-cobeb-border' },
   em_andamento: { label: 'Em Andamento', color: 'text-blue-400',   bg: 'bg-blue-500/10',  border: 'border-blue-500/40' },
-  concluida:    { label: 'Concluída',    color: 'text-green-400',  bg: 'bg-green-500/10', border: 'border-green-500/40' },
+  concluida:    { label: 'ConcluÃ­da',    color: 'text-green-400',  bg: 'bg-green-500/10', border: 'border-green-500/40' },
 }
 
 function formatTs(iso) {
@@ -32,7 +32,7 @@ function calcCaixas(qtdeRecebida, pedido) {
   return Math.round(rec * (cx / pal))
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
+// â”€â”€ Main Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function Tarefas() {
   const { profile, signOut, modoVisao, setModoVisao } = useAuth()
@@ -46,10 +46,10 @@ export default function Tarefas() {
   const [loading, setLoading]             = useState(true)
   const [filtroStatus, setFiltroStatus]   = useState('')
   const [iniciando, setIniciando]         = useState(null)
-  const [portariaMap, setPortariaMap]     = useState({}) // viagem_id → status portaria
+  const [portariaMap, setPortariaMap]     = useState({}) // viagem_id â†’ status portaria
   const [verificando, setVerificando]     = useState(null)
 
-  // conferência
+  // conferÃªncia
   const [pedidos, setPedidos]             = useState([])
   const [itenState, setItenState]         = useState({})
   const [anomalias, setAnomalias]         = useState([])
@@ -75,7 +75,7 @@ export default function Tarefas() {
     return () => clearInterval(timer)
   }, [])
 
-  // ─── Lista ──────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Lista â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async function loadLista(silent = false) {
     if (!silent) setLoading(true)
@@ -107,7 +107,7 @@ export default function Tarefas() {
         .select('viagem_id, status')
         .in('viagem_id', viagemIds)
         .is('excluido_em', null)
-      // Default 'aguardando' para todas — sem registro = portaria ainda não iniciou
+      // Default 'aguardando' para todas â€” sem registro = portaria ainda nÃ£o iniciou
       const map = {}
       viagemIds.forEach(id => { map[id] = 'aguardando' })
       ;(ports ?? []).forEach(p => { map[p.viagem_id] = p.status })
@@ -179,7 +179,7 @@ export default function Tarefas() {
     setAnomalias([])
   }
 
-  // ─── Conferência ────────────────────────────────────────────────────────────
+  // â”€â”€â”€ ConferÃªncia â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   async function loadConferencia(tarefa) {
     setLoadingConf(true)
@@ -380,7 +380,7 @@ export default function Tarefas() {
   }
 
   async function finalizarSemConferencia(tarefa) {
-    if (!window.confirm(`Finalizar NF ${tarefa.numero_nf ?? tarefa.id} sem conferência?\nA tarefa será marcada como concluída sem revisão de itens.`)) return
+    if (!window.confirm(`Finalizar NF ${tarefa.numero_nf ?? tarefa.id} sem conferÃªncia?\nA tarefa serÃ¡ marcada como concluÃ­da sem revisÃ£o de itens.`)) return
     setFinalizandoSem(tarefa.id)
     const { error } = await supabase.from('tarefas').update({ status: 'concluida' }).eq('id', tarefa.id)
     setFinalizandoSem(null)
@@ -400,7 +400,7 @@ export default function Tarefas() {
     await abrirNRIMarketplace(updated)
   }
 
-  // ─── Anomalia Modal ──────────────────────────────────────────────────────────
+  // â”€â”€â”€ Anomalia Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   function abrirModalAnomalia(pedidoId = '') {
     setAnomaliaForm({
@@ -442,7 +442,7 @@ export default function Tarefas() {
           : null
         return { ...f, sub_buscando: false, sub_descricao: data.descricao, sub_erro: null, sub_caixas_pallet: data.caixas_pallet, sub_qtde_caixas: cx }
       }
-      return { ...f, sub_buscando: false, sub_descricao: null, sub_erro: 'Produto não encontrado na tabela', sub_caixas_pallet: null, sub_qtde_caixas: null }
+      return { ...f, sub_buscando: false, sub_descricao: null, sub_erro: 'Produto nÃ£o encontrado na tabela', sub_caixas_pallet: null, sub_qtde_caixas: null }
     })
   }
 
@@ -480,15 +480,15 @@ export default function Tarefas() {
     }
 
     /**
-     * Guarda o CAMINHO, e não mais a URL pública.
+     * Guarda o CAMINHO, e nÃ£o mais a URL pÃºblica.
      *
-     * O bucket passou a ser privado (ver `sql/054` e `src/lib/fotos.js`), então
-     * `getPublicUrl` devolveria um endereço que não abre. Guardar um endereço
-     * que dá erro quando alguém o cola é pista falsa: manda a investigação
-     * começar no lugar errado.
+     * O bucket passou a ser privado (ver `sql/054` e `src/lib/fotos.js`), entÃ£o
+     * `getPublicUrl` devolveria um endereÃ§o que nÃ£o abre. Guardar um endereÃ§o
+     * que dÃ¡ erro quando alguÃ©m o cola Ã© pista falsa: manda a investigaÃ§Ã£o
+     * comeÃ§ar no lugar errado.
      *
      * As anomalias antigas continuam com a URL inteira gravada, e `caminhoDaFoto`
-     * lê as duas formas -- nenhuma migração de dados foi necessária.
+     * lÃª as duas formas -- nenhuma migraÃ§Ã£o de dados foi necessÃ¡ria.
      */
     setAnomaliaForm(f => {
       if (!f) return f
@@ -525,7 +525,7 @@ export default function Tarefas() {
     }
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
+  // â”€â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const tarefasFiltradas = filtroStatus
     ? tarefas.filter(t => t.status === filtroStatus)
@@ -596,11 +596,11 @@ export default function Tarefas() {
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-transparent.png`}
             alt="COBEB"
-            className="h-14 w-auto object-contain" style={{ filter: 'brightness(0) invert(1)', opacity: 0.92 }}
+            className="h-14 w-auto object-contain" style={{ opacity: 0.92 }}
             onError={(e) => { e.target.style.display = 'none' }}
           />
           <div>
-            <p className="text-white text-sm font-semibold leading-tight">Tarefas de Conferência</p>
+            <p className="text-white text-sm font-semibold leading-tight">Tarefas de ConferÃªncia</p>
             <p className="text-blue-300/60 text-[10px] font-medium flex items-center gap-1">
               <MapPin size={9} />
               {profile?.unidade?.nome ?? 'COBEB'}
@@ -614,7 +614,7 @@ export default function Tarefas() {
           {modoVisao && (
             <button onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
               className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
-              title="Trocar Módulo">
+              title="Trocar MÃ³dulo">
               <LayoutGrid size={16} />
             </button>
           )}
@@ -632,7 +632,7 @@ export default function Tarefas() {
               { value: '',             label: 'Todas',        count: tarefas.length },
               { value: 'pendente',     label: 'Pendentes',    count: counts.pendente },
               { value: 'em_andamento', label: 'Em Andamento', count: counts.em_andamento },
-              { value: 'concluida',    label: 'Concluídas',   count: counts.concluida },
+              { value: 'concluida',    label: 'ConcluÃ­das',   count: counts.concluida },
             ].map(({ value, label, count }) => {
               const active = filtroStatus === value
               return (
@@ -697,7 +697,7 @@ export default function Tarefas() {
                               )}
                               {(tarefa.viagem?.carreta?.placa || tarefa.viagem?.cavalo?.placa) && (
                                 <>
-                                  <span className="text-slate-700">·</span>
+                                  <span className="text-slate-700">Â·</span>
                                   <span className="font-mono text-[11px]">
                                     {[tarefa.viagem?.carreta?.placa, tarefa.viagem?.cavalo?.placa].filter(Boolean).join(' / ')}
                                   </span>
@@ -776,7 +776,7 @@ export default function Tarefas() {
                                 className="w-full bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
                                 {finalizandoSem === tarefa.id
                                   ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                  : 'Finalizar sem conferência'}
+                                  : 'Finalizar sem conferÃªncia'}
                               </button>
                             )}
                           </div>
@@ -786,7 +786,7 @@ export default function Tarefas() {
                               className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
                               {iniciando === tarefa.id
                                 ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                : <><AlertCircle size={13} />Iniciar Conferência</>}
+                                : <><AlertCircle size={13} />Iniciar ConferÃªncia</>}
                             </button>
                             <button onClick={() => finalizarSemConferencia(tarefa)} disabled={finalizandoSem === tarefa.id}
                               className="bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2.5 rounded-xl transition-colors flex items-center justify-center shrink-0">
@@ -800,7 +800,7 @@ export default function Tarefas() {
                             className="w-full bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
                             {iniciando === tarefa.id
                               ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                              : <><AlertCircle size={13} />Iniciar Conferência</>}
+                              : <><AlertCircle size={13} />Iniciar ConferÃªncia</>}
                           </button>
                         )
                       )}
@@ -809,7 +809,7 @@ export default function Tarefas() {
                           <div className="flex gap-2">
                             <button onClick={() => openConferencia(tarefa)}
                               className="flex-1 bg-cobeb-navy hover:bg-cobeb-blue text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
-                              <Package size={13} />Continuar Conferência
+                              <Package size={13} />Continuar ConferÃªncia
                             </button>
                             <button onClick={() => finalizarSemConferencia(tarefa)} disabled={finalizandoSem === tarefa.id}
                               className="bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2.5 rounded-xl transition-colors flex items-center justify-center shrink-0">
@@ -821,7 +821,7 @@ export default function Tarefas() {
                         ) : (
                           <button onClick={() => openConferencia(tarefa)}
                             className="w-full bg-cobeb-navy hover:bg-cobeb-blue text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
-                            <Package size={13} />Continuar Conferência
+                            <Package size={13} />Continuar ConferÃªncia
                           </button>
                         )
                       )}
@@ -829,7 +829,7 @@ export default function Tarefas() {
                         <div className="flex gap-2">
                           <button onClick={() => openConferencia(tarefa)}
                             className="flex-1 bg-[#EBF5FF] border border-green-500/30 hover:border-green-500/60 text-green-400 text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
-                            <CheckCircle size={13} />Ver Conferência
+                            <CheckCircle size={13} />Ver ConferÃªncia
                           </button>
                           <button
                             onClick={() => abrirNRI(tarefa)}
@@ -855,7 +855,7 @@ export default function Tarefas() {
   )
 }
 
-// ── ConferenciaView ────────────────────────────────────────────────────────────
+// â”€â”€ ConferenciaView â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function ConferenciaView({
   tarefa, pedidos, itenState, anomalias,
@@ -900,10 +900,10 @@ function ConferenciaView({
             <ChevronLeft size={20} />
           </button>
           <div className="flex-1 min-w-0">
-            <p className="text-white text-sm font-semibold truncate">Conferência — NF {tarefa.numero_nf}</p>
+            <p className="text-white text-sm font-semibold truncate">ConferÃªncia â€” NF {tarefa.numero_nf}</p>
             <p className="text-blue-300/60 text-[11px] truncate">
               {tarefa.viagem?.motorista?.nome ?? 'Motorista'}
-              {tarefa.viagem?.carreta?.placa && ` · ${tarefa.viagem.carreta.placa}`}
+              {tarefa.viagem?.carreta?.placa && ` Â· ${tarefa.viagem.carreta.placa}`}
               {tarefa.viagem?.cavalo?.placa  && ` / ${tarefa.viagem.cavalo.placa}`}
             </p>
           </div>
@@ -919,7 +919,7 @@ function ConferenciaView({
           {tarefa.viagem?.horario_agendado && <span>Agend.: {tarefa.viagem.horario_agendado}</span>}
           {concluida && (
             <span className="text-green-400 flex items-center gap-1">
-              <CheckCircle size={9} />Concluída
+              <CheckCircle size={9} />ConcluÃ­da
             </span>
           )}
         </div>
@@ -942,7 +942,7 @@ function ConferenciaView({
               </span>
               {divergencias.length > 0 && (
                 <span className="text-[11px] text-cobeb-yellow flex items-center gap-1.5">
-                  <AlertTriangle size={12} />{divergencias.length} divergência(s)
+                  <AlertTriangle size={12} />{divergencias.length} divergÃªncia(s)
                 </span>
               )}
             </div>
@@ -979,7 +979,7 @@ function ConferenciaView({
                           <div className="min-w-0 flex-1">
                             <p className="text-cobeb-text text-xs font-medium leading-snug">{pedido.descricao}</p>
                             <p className="text-slate-500 text-[10px] font-mono mt-0.5">
-                              {pedido.cod_produto}{pedido.embalagem ? ` · ${pedido.embalagem}` : ''}
+                              {pedido.cod_produto}{pedido.embalagem ? ` Â· ${pedido.embalagem}` : ''}
                             </p>
                           </div>
                           {!readOnly && (
@@ -987,7 +987,7 @@ function ConferenciaView({
                               {['PLT', 'CX'].map(u => (
                                 <button key={u} type="button"
                                   disabled={u === 'CX' && !cxPallet}
-                                  title={u === 'CX' && !cxPallet ? 'Conversão indisponível — use PLT' : undefined}
+                                  title={u === 'CX' && !cxPallet ? 'ConversÃ£o indisponÃ­vel â€” use PLT' : undefined}
                                   onClick={() => switchUnidade(pedido.id, u)}
                                   className={`px-2.5 py-1 transition-colors ${
                                     u === 'CX' && !cxPallet
@@ -1013,14 +1013,14 @@ function ConferenciaView({
                             <span className="text-cobeb-text font-semibold">
                               {Number(pedido.qtde_pallets).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}
                             </span>
-                            <span className="text-slate-500"> plt · </span>
+                            <span className="text-slate-500"> plt Â· </span>
                             <span className="text-slate-400">
                               {Number(pedido.qtde_skus).toLocaleString('pt-BR')} cx
                             </span>
                           </span>
                         </div>
 
-                        {/* Recebido — múltiplas entradas (qty + data) */}
+                        {/* Recebido â€” mÃºltiplas entradas (qty + data) */}
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-slate-500 text-[11px]">Recebido</span>
@@ -1096,7 +1096,7 @@ function ConferenciaView({
                             <p className={`text-[10px] flex-1 ${anomaliaRegistrada ? 'text-green-400' : 'text-cobeb-yellow'}`}>
                               Esperado {Number(pedido.qtde_pallets).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt,
                               recebido {totalRec.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} plt
-                              {anomaliaRegistrada && ' · Anomalia registrada'}
+                              {anomaliaRegistrada && ' Â· Anomalia registrada'}
                             </p>
                             {!readOnly && !anomaliaRegistrada && (
                               <button onClick={() => onAbrirAnomalia(pedido.id)}
@@ -1138,13 +1138,13 @@ function ConferenciaView({
                       <div className="px-4 py-3">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           {ano.tipo === 'inversao'
-                            ? <span className="text-[10px] font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded-full">Inversão de Produto</span>
+                            ? <span className="text-[10px] font-semibold bg-orange-500/10 text-orange-400 border border-orange-500/20 px-2 py-0.5 rounded-full">InversÃ£o de Produto</span>
                             : <span className="text-[10px] font-semibold bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full">Problema de Qualidade</span>
                           }
                         </div>
                         {ano.pedido && (
                           <p className="text-slate-500 text-[10px] mb-1 font-mono">
-                            {ano.pedido.cod_produto} — {ano.pedido.descricao}
+                            {ano.pedido.cod_produto} â€” {ano.pedido.descricao}
                           </p>
                         )}
                         <p className="text-cobeb-text text-xs">{ano.descricao}</p>
@@ -1156,7 +1156,7 @@ function ConferenciaView({
                             {ano.substituto_qtde_pallets != null && (
                               <p className="text-cobeb-yellow text-xs font-semibold mt-0.5">
                                 {Number(ano.substituto_qtde_pallets).toLocaleString('pt-BR')} plt
-                                {ano.substituto_qtde_caixas != null && ` · ${Number(ano.substituto_qtde_caixas).toLocaleString('pt-BR')} cx`}
+                                {ano.substituto_qtde_caixas != null && ` Â· ${Number(ano.substituto_qtde_caixas).toLocaleString('pt-BR')} cx`}
                               </p>
                             )}
                             {ano.substituto_data_validade && (
@@ -1198,8 +1198,8 @@ function ConferenciaView({
               <p className="text-orange-400 text-[10px] text-center mb-2 flex items-center justify-center gap-1">
                 <AlertTriangle size={11} />
                 {divergenciasSemAnomalia.length === 1
-                  ? '1 produto com diferença aguarda apontamento de anomalia'
-                  : `${divergenciasSemAnomalia.length} produtos com diferença aguardam apontamento de anomalia`}
+                  ? '1 produto com diferenÃ§a aguarda apontamento de anomalia'
+                  : `${divergenciasSemAnomalia.length} produtos com diferenÃ§a aguardam apontamento de anomalia`}
               </p>
             )}
             <button
@@ -1209,7 +1209,7 @@ function ConferenciaView({
             >
               {concluindo
                 ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                : <><CheckCircle size={16} />{concluida ? 'Atualizar Conferência' : 'Concluir Conferência'}</>}
+                : <><CheckCircle size={16} />{concluida ? 'Atualizar ConferÃªncia' : 'Concluir ConferÃªncia'}</>}
             </button>
           </div>
         </div>
@@ -1218,7 +1218,7 @@ function ConferenciaView({
   )
 }
 
-// ── AnomaliaModal ─────────────────────────────────────────────────────────────
+// â”€â”€ AnomaliaModal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function AnomaliaModal({ form, pedidos, fotoRefs, salvando, onClose, onSave, onFotoSelect, onChange, onBuscarSubstituto }) {
   const uploading = form.uploading.some(Boolean)
@@ -1244,7 +1244,7 @@ function AnomaliaModal({ form, pedidos, fotoRefs, salvando, onClose, onSave, onF
             <div className="flex gap-2">
               {[
                 { key: 'qualidade', label: 'Problema de Qualidade' },
-                { key: 'inversao', label: 'Inversão de Produto' },
+                { key: 'inversao', label: 'InversÃ£o de Produto' },
               ].map(({ key, label }) => (
                 <button
                   key={key}
@@ -1274,9 +1274,9 @@ function AnomaliaModal({ form, pedidos, fotoRefs, salvando, onClose, onSave, onF
               onChange={e => onChange(f => ({ ...f, pedido_id: e.target.value }))}
               className="w-full bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-2.5 text-xs text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors"
             >
-              <option value="">— Selecione (opcional) —</option>
+              <option value="">â€” Selecione (opcional) â€”</option>
               {pedidos.map(p => (
-                <option key={p.id} value={p.id}>{p.cod_produto} — {p.descricao}</option>
+                <option key={p.id} value={p.id}>{p.cod_produto} â€” {p.descricao}</option>
               ))}
             </select>
           </div>
@@ -1309,13 +1309,13 @@ function AnomaliaModal({ form, pedidos, fotoRefs, salvando, onClose, onSave, onF
             />
           </div>
 
-          {/* Produto substituto — só para inversão */}
+          {/* Produto substituto â€” sÃ³ para inversÃ£o */}
           {form.tipo === 'inversao' && <div className="bg-[#EBF5FF] rounded-2xl p-4 space-y-3 border border-cobeb-border">
             <p className="text-[11px] font-semibold uppercase tracking-widest text-cobeb-navy">Produto recebido no lugar</p>
 
-            {/* Código */}
+            {/* CÃ³digo */}
             <div>
-              <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-1.5">Código do produto substituto</label>
+              <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-1.5">CÃ³digo do produto substituto</label>
               <div className="flex gap-2">
                 <input
                   type="text"
@@ -1383,7 +1383,7 @@ function AnomaliaModal({ form, pedidos, fotoRefs, salvando, onClose, onSave, onF
           <div>
             <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-2">
               Fotos <span className="text-cobeb-yellow">*</span>
-              <span className="text-slate-700 ml-1.5 normal-case tracking-normal font-normal">frente · lateral · fundo · lote</span>
+              <span className="text-slate-700 ml-1.5 normal-case tracking-normal font-normal">frente Â· lateral Â· fundo Â· lote</span>
             </label>
             <div className="grid grid-cols-2 gap-3">
               {['Frente', 'Lateral', 'Fundo', 'Lote'].map((label, idx) => {
@@ -1447,7 +1447,7 @@ function AnomaliaModal({ form, pedidos, fotoRefs, salvando, onClose, onSave, onF
             </div>
             <p className="text-slate-500 text-[10px] mt-1 text-center">
               {form.fotosUrls.filter(Boolean).length} de 4 fotos enviadas
-              {form.fotosUrls.filter(Boolean).length === 0 && ' — fotos são opcionais'}
+              {form.fotosUrls.filter(Boolean).length === 0 && ' â€” fotos sÃ£o opcionais'}
             </p>
           </div>
 
@@ -1469,3 +1469,4 @@ function AnomaliaModal({ form, pedidos, fotoRefs, salvando, onClose, onSave, onF
     </div>
   )
 }
+

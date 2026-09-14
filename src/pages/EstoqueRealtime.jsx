@@ -203,7 +203,7 @@ export default function EstoqueRealtime({ adminMode = false }) {
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-transparent.png`}
             alt="COBEB"
             className="h-12 w-auto object-contain"
-            style={{ filter: 'brightness(0) invert(1)', opacity: 0.92 }}
+            style={{ opacity: 0.92 }}
             onError={e => { e.target.style.display = 'none' }}
           />
           <div>
@@ -923,3 +923,4 @@ function EmptyState() {
     </div>
   )
 }
+
