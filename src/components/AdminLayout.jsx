@@ -32,12 +32,12 @@ export default function AdminLayout({ title, subheader, children }) {
 
       {/* Header + filtros fixos no topo */}
       <div className="sticky top-0 z-40">
-      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
-        <div className="flex items-center gap-3">
+      <header className="bg-cobeb-navy border-b border-blue-800 px-3 py-2 sm:px-5 sm:py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
             alt="COBEB"
-            className="h-16 w-auto object-contain"
+            className="h-7 sm:h-11 md:h-14 w-auto object-contain shrink-0"
             style={{ opacity: 0.92 }}
             onError={(e) => {
               e.target.style.display = 'none'
@@ -47,14 +47,14 @@ export default function AdminLayout({ title, subheader, children }) {
           {/* Fallback */}
           <div
             style={{ display: 'none' }}
-            className="w-8 h-8 rounded-lg bg-white/20 items-center justify-center"
+            className="w-7 h-7 rounded-lg bg-white/20 items-center justify-center shrink-0"
           >
             <span className="text-white text-xs font-black select-none">CB</span>
           </div>
 
-          <div>
-            <p className="text-white text-sm font-semibold leading-tight">{title}</p>
-            <p className="text-blue-300/60 text-[10px] font-medium tracking-wide uppercase">
+          <div className="min-w-0">
+            <p className="text-white text-xs sm:text-sm font-semibold leading-tight truncate">{title}</p>
+            <p className="text-blue-300/60 text-[9px] sm:text-[10px] font-medium tracking-wide uppercase hidden sm:block">
               Ciclo de Carretas
             </p>
           </div>

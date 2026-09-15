@@ -478,12 +478,12 @@ export default function Viagem() {
 
   return (
     <div className="min-h-screen bg-[#EBF5FF]">
-      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-3 py-2 sm:px-5 sm:py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
             alt="COBEB"
-            className="h-14 w-auto object-contain" style={{ opacity: 0.92 }}
+            className="h-7 sm:h-11 md:h-14 w-auto object-contain shrink-0" style={{ opacity: 0.92 }}
             onError={(e) => { e.target.style.display = 'none' }}
           />
           <div>
@@ -1476,12 +1476,12 @@ function ResumoViagem({ resumoData, profile, onNovaViagem, signOut }) {
 
   return (
     <div className="min-h-screen bg-[#EBF5FF]">
-      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-3 py-2 sm:px-5 sm:py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
             alt="COBEB"
-            className="h-14 w-auto object-contain" style={{ opacity: 0.92 }}
+            className="h-7 sm:h-11 md:h-14 w-auto object-contain shrink-0" style={{ opacity: 0.92 }}
             onError={(e) => { e.target.style.display = 'none' }}
           />
           <div>

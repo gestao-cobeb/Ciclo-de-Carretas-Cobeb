@@ -158,11 +158,11 @@ export default function SeletorModulo() {
     <div className="min-h-screen bg-[#EBF5FF]">
 
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-cobeb-navy px-5 py-4 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+      <header className="sticky top-0 z-40 bg-cobeb-navy px-3 py-3 sm:px-5 sm:py-4 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <img
           src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
           alt="COBEB Distribuidora"
-          className="h-10 w-auto object-contain"
+          className="h-7 sm:h-9 md:h-10 w-auto object-contain"
           style={{ opacity: 0.92 }}
         />
         <button

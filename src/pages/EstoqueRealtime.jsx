@@ -197,18 +197,18 @@ export default function EstoqueRealtime({ adminMode = false }) {
     <div className="min-h-dvh bg-[#EBF5FF]">
 
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-cobeb-navy px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
-        <div className="flex items-center gap-3">
+      <header className="sticky top-0 z-40 bg-cobeb-navy px-3 py-2 sm:px-5 sm:py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
             alt="COBEB"
-            className="h-12 w-auto object-contain"
+            className="h-7 sm:h-10 md:h-12 w-auto object-contain shrink-0"
             style={{ opacity: 0.92 }}
             onError={e => { e.target.style.display = 'none' }}
           />
-          <div>
-            <p className="text-white text-sm font-semibold leading-tight">Painel de Veículos</p>
-            <p className="text-blue-300/60 text-[10px] font-medium tracking-wide uppercase">
+          <div className="min-w-0">
+            <p className="text-white text-xs sm:text-sm font-semibold leading-tight truncate">Painel de Veículos</p>
+            <p className="text-blue-300/60 text-[9px] sm:text-[10px] font-medium tracking-wide uppercase hidden sm:block">
               {profile?.unidade?.nome ?? 'Tempo Real'}
             </p>
           </div>
