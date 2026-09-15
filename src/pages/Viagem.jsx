@@ -483,7 +483,7 @@ export default function Viagem() {
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-transparent.png`}
             alt="COBEB"
-            className="h-14 w-auto object-contain" style={{ opacity: 0.92 }}
+            className="h-8 w-auto object-contain" style={{ opacity: 0.92 }}
             onError={(e) => { e.target.style.display = 'none' }}
           />
           <div>
@@ -1481,7 +1481,7 @@ function ResumoViagem({ resumoData, profile, onNovaViagem, signOut }) {
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-transparent.png`}
             alt="COBEB"
-            className="h-14 w-auto object-contain" style={{ opacity: 0.92 }}
+            className="h-8 w-auto object-contain" style={{ opacity: 0.92 }}
             onError={(e) => { e.target.style.display = 'none' }}
           />
           <div>
@@ -1591,4 +1591,5 @@ function ResumoViagem({ resumoData, profile, onNovaViagem, signOut }) {
     </div>
   )
 }
+
 

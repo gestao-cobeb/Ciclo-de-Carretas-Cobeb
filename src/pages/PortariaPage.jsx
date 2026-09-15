@@ -162,7 +162,7 @@ export default function PortariaPage() {
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-transparent.png`}
             alt="COBEB"
-            className="h-16 w-auto object-contain"
+            className="h-8 w-auto object-contain"
             style={{ opacity: 0.92 }}
             onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex' }}
           />
@@ -487,4 +487,5 @@ export default function PortariaPage() {
     </div>
   )
 }
+
 

@@ -202,7 +202,7 @@ export default function EstoqueRealtime({ adminMode = false }) {
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-transparent.png`}
             alt="COBEB"
-            className="h-12 w-auto object-contain"
+            className="h-8 w-auto object-contain"
             style={{ opacity: 0.92 }}
             onError={e => { e.target.style.display = 'none' }}
           />
@@ -923,4 +923,5 @@ function EmptyState() {
     </div>
   )
 }
+
 
