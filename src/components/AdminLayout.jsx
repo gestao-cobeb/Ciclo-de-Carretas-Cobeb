@@ -106,4 +106,3 @@ export default function AdminLayout({ title, children }) {
     </div>
   )
 }
-

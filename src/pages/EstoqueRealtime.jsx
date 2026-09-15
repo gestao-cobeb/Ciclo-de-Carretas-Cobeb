@@ -923,5 +923,3 @@ function EmptyState() {
     </div>
   )
 }
-
-

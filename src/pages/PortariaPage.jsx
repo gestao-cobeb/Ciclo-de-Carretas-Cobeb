@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { LogOut, Clock, CheckCircle, Truck, RefreshCw, X, LayoutGrid, PlusCircle, ShoppingCart } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -14,7 +14,7 @@ function diffHHMM(start, end) {
 }
 
 function formatTs(iso) {
-  if (!iso) return 'â€”'
+  if (!iso) return '—'
   const d = new Date(iso)
   return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
@@ -40,7 +40,7 @@ const STATUS_TABS = [
   { key: 'todos',          label: 'Todos'          },
   { key: 'aguardando',     label: 'Aguardando'     },
   { key: 'em_atendimento', label: 'Em Atendimento' },
-  { key: 'concluido',      label: 'ConcluÃ­dos'     },
+  { key: 'concluido',      label: 'Concluídos'     },
 ]
 
 export default function PortariaPage() {
@@ -183,7 +183,7 @@ export default function PortariaPage() {
           {modoVisao && (
             <button onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
               className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
-              title="Trocar MÃ³dulo">
+              title="Trocar Módulo">
               <LayoutGrid size={16} />
             </button>
           )}
@@ -195,7 +195,7 @@ export default function PortariaPage() {
 
       {/* Filtros */}
       <div className="bg-white border-b border-cobeb-border px-4 py-3 space-y-3 shrink-0">
-        {/* Status pills + botÃ£o entrada manual */}
+        {/* Status pills + botão entrada manual */}
         <div className="flex items-center gap-2">
           <div className="flex gap-2 overflow-x-auto pb-0.5 flex-1">
             {STATUS_TABS.map(tab => (
@@ -251,10 +251,10 @@ export default function PortariaPage() {
                 <X size={18} />
               </button>
             </div>
-            <p className="text-slate-500 text-xs">VeÃ­culo terceiro â€” descarga marketplace sem pedido vinculado.</p>
+            <p className="text-slate-500 text-xs">Veículo terceiro — descarga marketplace sem pedido vinculado.</p>
             <div className="space-y-3">
               <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">NÃºmero da NF *</label>
+                <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Número da NF *</label>
                 <input
                   value={numeroNFM}
                   onChange={e => setNumeroNFM(e.target.value)}
@@ -315,7 +315,7 @@ export default function PortariaPage() {
                           {a.tipo === 'marketplace'
                             ? <ShoppingCart size={16} className="text-cobeb-yellow shrink-0" />
                             : <Truck size={16} className="text-cobeb-yellow shrink-0" />}
-                          <span className="text-cobeb-text font-bold text-sm">{a.placa_cavalo ?? 'â€”'}</span>
+                          <span className="text-cobeb-text font-bold text-sm">{a.placa_cavalo ?? '—'}</span>
                           {a.placa_carreta && <span className="text-slate-500 text-xs font-mono">/ {a.placa_carreta}</span>}
                         </div>
                         {a.tipo === 'marketplace'
@@ -324,13 +324,13 @@ export default function PortariaPage() {
                               {a.numero_nf && <span className="text-cobeb-yellow text-xs font-mono font-semibold">NF {a.numero_nf}</span>}
                             </div>
                           : <div className="text-right space-y-0.5">
-                              {a.numero_nf_saida && <p className="text-[10px] text-slate-400 font-mono">SaÃ­da: <span className="text-cobeb-yellow font-semibold">{a.numero_nf_saida}</span></p>}
+                              {a.numero_nf_saida && <p className="text-[10px] text-slate-400 font-mono">Saída: <span className="text-cobeb-yellow font-semibold">{a.numero_nf_saida}</span></p>}
                               {a.numero_nf && <p className="text-cobeb-yellow text-sm font-mono font-semibold">{a.numero_nf_saida ? 'Ent.: ' : 'NF '}{a.numero_nf}</p>}
                             </div>}
                       </div>
                       {a.agendamento && (
                         <p className="text-cobeb-navy text-[11px] font-semibold mb-1">
-                          Agendado: {a.agendamento.bloco} Â· {a.agendamento.tipo_dia}
+                          Agendado: {a.agendamento.bloco} · {a.agendamento.tipo_dia}
                         </p>
                       )}
                       <div className="flex items-center gap-3 mb-4">
@@ -355,7 +355,7 @@ export default function PortariaPage() {
                           >
                             {registrando === a.id
                               ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                              : 'Confirmar SaÃ­da'}
+                              : 'Confirmar Saída'}
                           </button>
                         </div>
                       ) : (
@@ -364,7 +364,7 @@ export default function PortariaPage() {
                           disabled={registrando === a.id}
                           className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-bold py-4 rounded-xl text-base transition-colors flex items-center justify-center gap-2"
                         >
-                          <Clock size={18} />Registrar SaÃ­da
+                          <Clock size={18} />Registrar Saída
                         </button>
                       )}
                     </div>
@@ -385,7 +385,7 @@ export default function PortariaPage() {
                           {a.tipo === 'marketplace'
                             ? <ShoppingCart size={15} className="text-slate-500 shrink-0" />
                             : <Truck size={15} className="text-slate-500 shrink-0" />}
-                          <span className="text-cobeb-text font-semibold text-sm">{a.placa_cavalo ?? 'â€”'}</span>
+                          <span className="text-cobeb-text font-semibold text-sm">{a.placa_cavalo ?? '—'}</span>
                           {a.placa_carreta && <span className="text-slate-500 text-xs font-mono">/ {a.placa_carreta}</span>}
                         </div>
                         {a.tipo === 'marketplace'
@@ -394,13 +394,13 @@ export default function PortariaPage() {
                               {a.numero_nf && <span className="text-cobeb-yellow text-xs font-mono font-semibold">NF {a.numero_nf}</span>}
                             </div>
                           : <div className="text-right space-y-0.5">
-                              {a.numero_nf_saida && <p className="text-[10px] text-slate-400 font-mono">SaÃ­da: <span className="text-cobeb-yellow font-semibold">{a.numero_nf_saida}</span></p>}
+                              {a.numero_nf_saida && <p className="text-[10px] text-slate-400 font-mono">Saída: <span className="text-cobeb-yellow font-semibold">{a.numero_nf_saida}</span></p>}
                               {a.numero_nf && <p className="text-cobeb-yellow text-sm font-mono font-semibold">{a.numero_nf_saida ? 'Ent.: ' : 'NF '}{a.numero_nf}</p>}
                             </div>}
                       </div>
                       {a.agendamento && (
                         <p className="text-cobeb-navy text-[11px] font-semibold mb-2">
-                          Agendado: {a.agendamento.bloco} Â· {a.agendamento.tipo_dia}
+                          Agendado: {a.agendamento.bloco} · {a.agendamento.tipo_dia}
                         </p>
                       )}
                       {confirmando?.id === a.id && confirmando?.acao === 'entrada' ? (
@@ -447,10 +447,10 @@ export default function PortariaPage() {
               </div>
             )}
 
-            {/* ConcluÃ­dos */}
+            {/* Concluídos */}
             {concluidos.length > 0 && (
               <section>
-                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">ConcluÃ­dos</p>
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest mb-2">Concluídos</p>
                 <div className="space-y-2">
                   {concluidos.map(a => {
                     const tma = diffHHMM(a.dt_entrada, a.dt_saida)
@@ -459,12 +459,12 @@ export default function PortariaPage() {
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2 min-w-0">
                             <CheckCircle size={14} className="text-green-400 shrink-0" />
-                            <span className="text-cobeb-text text-sm font-semibold font-mono">{a.placa_cavalo ?? 'â€”'}</span>
+                            <span className="text-cobeb-text text-sm font-semibold font-mono">{a.placa_cavalo ?? '—'}</span>
                             {a.placa_carreta && <span className="text-slate-500 text-xs font-mono truncate">/ {a.placa_carreta}</span>}
                             {a.tipo === 'marketplace'
                               ? <><span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-orange-600">Mkt</span>{a.numero_nf && <span className="text-slate-400 text-xs">NF {a.numero_nf}</span>}</>
                               : <>
-                                  {a.numero_nf_saida && <span className="text-[10px] text-slate-400 font-mono">SaÃ­da:{a.numero_nf_saida}</span>}
+                                  {a.numero_nf_saida && <span className="text-[10px] text-slate-400 font-mono">Saída:{a.numero_nf_saida}</span>}
                                   {a.numero_nf && <span className="text-slate-400 text-xs">{a.numero_nf_saida ? ' Ent.:' : 'NF '}{a.numero_nf}</span>}
                                 </>}
                           </div>
@@ -472,7 +472,7 @@ export default function PortariaPage() {
                         </div>
                         <div className="flex items-center gap-4 mt-1.5 text-[10px] text-slate-500">
                           <span>Entrada: {formatTs(a.dt_entrada)}</span>
-                          <span>SaÃ­da: {formatTs(a.dt_saida)}</span>
+                          <span>Saída: {formatTs(a.dt_saida)}</span>
                           {tma && <span className="text-cobeb-yellow font-semibold">TMA {tma}</span>}
                         </div>
                       </div>
@@ -487,5 +487,3 @@ export default function PortariaPage() {
     </div>
   )
 }
-
-

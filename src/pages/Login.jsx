@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Eye, EyeOff, Loader2, AlertCircle, ArrowLeft, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -92,7 +92,7 @@ function TruckSceneBg() {
       {/* Road bottom edge line */}
       <line x1="0" y1="618" x2="1440" y2="618" stroke="#003DA5" strokeOpacity="0.10" strokeWidth="2" />
 
-      {/* === TRUCK 1 â€” carreta de puxada grande (posiÃ§Ã£o central-direita) === */}
+      {/* === TRUCK 1 — carreta de puxada grande (posição central-direita) === */}
       {/* Trailer body */}
       <rect x="680" y="496" width="480" height="90" fill="url(#truckGrad)" rx="6" />
       {/* Trailer ribbing lines */}
@@ -132,7 +132,7 @@ function TruckSceneBg() {
         </g>
       ))}
 
-      {/* === TRUCK 2 â€” carreta menor ao fundo (posiÃ§Ã£o esquerda) === */}
+      {/* === TRUCK 2 — carreta menor ao fundo (posição esquerda) === */}
       <rect x="-60" y="508" width="320" height="68" fill="#003DA5" fillOpacity="0.06" rx="5" />
       <rect x="-60" y="508" width="320" height="8" fill="#FFB81C" fillOpacity="0.12" rx="3" />
       <rect x="258" y="514" width="75" height="62" fill="#003DA5" fillOpacity="0.08" rx="6" />
@@ -140,7 +140,7 @@ function TruckSceneBg() {
         <circle key={i} cx={cx} cy="580" r="14" fill="#003DA5" fillOpacity="0.08" />
       ))}
 
-      {/* === WAREHOUSE / FABRICA â€” right side === */}
+      {/* === WAREHOUSE / FABRICA — right side === */}
       <g opacity="0.08">
         {/* Building main */}
         <rect x="1280" y="370" width="180" height="130" fill="#003DA5" rx="4" />
@@ -231,13 +231,13 @@ export default function Login() {
       ? `${digits}@motorista.cobeb.com.br`
       : email.trim()
     const { error } = await signIn(emailLogin, password)
-    if (error) { setErro('Acesso ou senha invÃ¡lidos. Verifique e tente novamente.'); setLoading(false) }
+    if (error) { setErro('Acesso ou senha inválidos. Verifique e tente novamente.'); setLoading(false) }
   }
 
   const handleNovaSenha = async (e) => {
     e.preventDefault()
-    if (novaSenha.length < 6) { setResetErro('MÃ­nimo 6 caracteres.'); return }
-    if (novaSenha !== confirmar) { setResetErro('As senhas nÃ£o coincidem.'); return }
+    if (novaSenha.length < 6) { setResetErro('Mínimo 6 caracteres.'); return }
+    if (novaSenha !== confirmar) { setResetErro('As senhas não coincidem.'); return }
     setResetLoading(true); setResetErro('')
     const { error } = await supabase.auth.updateUser({ password: novaSenha })
     if (error) { setResetErro('Erro: ' + error.message); setResetLoading(false); return }
@@ -251,7 +251,7 @@ export default function Login() {
   return (
     <div className="min-h-[100dvh] relative flex flex-col items-center justify-center px-5 py-4 sm:py-8 overflow-y-auto">
 
-      {/* Foto real do galpÃ£o Ambev como fundo */}
+      {/* Foto real do galpão Ambev como fundo */}
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: `url(${base}bg-login.jpg)` }}
@@ -262,7 +262,7 @@ export default function Login() {
 
       <div className="relative z-10 w-full max-w-[380px]">
 
-        {/* Logotipo â€” sem espaÃ§o excessivo */}
+        {/* Logotipo — sem espaço excessivo */}
         <div className="flex flex-col items-center mb-3 sm:mb-5">
           <LogoCobeb baseUrl={base} />
           <p className="text-white/80 text-sm tracking-[0.3em] uppercase font-semibold -mt-1">
@@ -273,7 +273,7 @@ export default function Login() {
         {/* Card */}
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-4 sm:p-6 border border-white/20 shadow-2xl shadow-black/30">
 
-          {/* â”€â”€ VIEW: LOGIN â”€â”€ */}
+          {/* ── VIEW: LOGIN ── */}
           {view === 'login' && (
             <>
               <p className="text-slate-500 text-sm mb-6 leading-relaxed">
@@ -291,7 +291,7 @@ export default function Login() {
                   <div className="relative">
                     <input type={showPass ? 'text' : 'password'} value={password}
                       onChange={e => { setPassword(e.target.value); setErro('') }}
-                      placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" autoComplete="current-password"
+                      placeholder="••••••••" autoComplete="current-password"
                       className="w-full bg-[#F5F9FF] border border-cobeb-border rounded-xl px-4 py-3.5 pr-12 text-cobeb-text text-sm placeholder-blue-200 focus:outline-none focus:border-cobeb-blue focus:ring-2 focus:ring-cobeb-blue/20 transition-all" />
                     <button type="button" onClick={() => setShowPass(!showPass)} tabIndex={-1}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cobeb-navy transition-colors">
@@ -307,7 +307,7 @@ export default function Login() {
                 )}
                 <button type="submit" disabled={loading}
                   className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-lg shadow-cobeb-navy/25 mt-1">
-                  {loading ? <><Loader2 size={16} className="animate-spin" />Entrandoâ€¦</> : 'Entrar'}
+                  {loading ? <><Loader2 size={16} className="animate-spin" />Entrando…</> : 'Entrar'}
                 </button>
                 <button type="button" onClick={() => setView('esqueci')}
                   className="w-full text-cobeb-navy/60 hover:text-cobeb-navy text-xs font-medium transition-colors pt-1">
@@ -317,7 +317,7 @@ export default function Login() {
             </>
           )}
 
-          {/* â”€â”€ VIEW: ESQUECI A SENHA â”€â”€ */}
+          {/* ── VIEW: ESQUECI A SENHA ── */}
           {view === 'esqueci' && (
             <>
               <button onClick={() => setView('login')} className="flex items-center gap-1.5 text-cobeb-navy/60 hover:text-cobeb-navy text-xs font-medium mb-4 transition-colors">
@@ -337,7 +337,7 @@ export default function Login() {
             </>
           )}
 
-          {/* â”€â”€ VIEW: PRIMEIRO ACESSO â”€â”€ */}
+          {/* ── VIEW: PRIMEIRO ACESSO ── */}
           {view === 'primeiro_acesso' && (
             <>
               <div className="flex items-center gap-2 mb-1">
@@ -345,7 +345,7 @@ export default function Login() {
                 <h3 className="text-cobeb-text font-semibold text-base">Bem-vindo!</h3>
               </div>
               <p className="text-slate-500 text-sm mt-1 mb-4 leading-relaxed">
-                Este Ã© seu primeiro acesso. Por seguranÃ§a, defina uma senha pessoal antes de continuar.
+                Este é seu primeiro acesso. Por segurança, defina uma senha pessoal antes de continuar.
               </p>
               <form onSubmit={handleNovaSenha} noValidate className="space-y-4">
                 <div className="space-y-1.5">
@@ -353,7 +353,7 @@ export default function Login() {
                   <div className="relative">
                     <input type={showNova ? 'text' : 'password'} value={novaSenha}
                       onChange={e => { setNovaSenha(e.target.value); setResetErro('') }}
-                      placeholder="MÃ­nimo 6 caracteres" autoFocus
+                      placeholder="Mínimo 6 caracteres" autoFocus
                       className="w-full bg-[#F5F9FF] border border-cobeb-border rounded-xl px-4 py-3.5 pr-12 text-cobeb-text text-sm placeholder-blue-200 focus:outline-none focus:border-cobeb-blue focus:ring-2 focus:ring-cobeb-blue/20 transition-all" />
                     <button type="button" onClick={() => setShowNova(!showNova)} tabIndex={-1}
                       className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cobeb-navy transition-colors">
@@ -382,7 +382,7 @@ export default function Login() {
                 )}
                 <button type="submit" disabled={resetLoading}
                   className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-60 text-white font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-sm">
-                  {resetLoading ? <><Loader2 size={16} className="animate-spin" />Salvandoâ€¦</> : 'Definir senha e entrar'}
+                  {resetLoading ? <><Loader2 size={16} className="animate-spin" />Salvando…</> : 'Definir senha e entrar'}
                 </button>
               </form>
             </>
@@ -390,7 +390,7 @@ export default function Login() {
 
         </div>
 
-        {/* RodapÃ© com logo Ambev */}
+        {/* Rodapé com logo Ambev */}
         <div className="flex flex-col items-center mt-4 sm:mt-6 gap-2">
           <p className="text-white/40 text-[10px] font-semibold uppercase tracking-widest">
             Distribuidora Oficial
@@ -408,4 +408,3 @@ export default function Login() {
     </div>
   )
 }
-

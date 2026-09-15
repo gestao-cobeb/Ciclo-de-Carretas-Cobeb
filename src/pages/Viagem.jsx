@@ -1591,5 +1591,3 @@ function ResumoViagem({ resumoData, profile, onNovaViagem, signOut }) {
     </div>
   )
 }
-
-
