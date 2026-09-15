@@ -591,7 +591,7 @@ export default function Tarefas() {
 
   return (
     <div className="min-h-screen bg-[#EBF5FF]">
-      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
@@ -894,7 +894,7 @@ function ConferenciaView({
   return (
     <div className="min-h-screen bg-[#EBF5FF]">
       {/* Header */}
-      <header className="bg-cobeb-navy border-b border-blue-800 px-4 py-3 shadow-md shadow-cobeb-navy/20">
+      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-4 py-3 shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3 mb-2">
           <button onClick={onBack} className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10 -ml-1">
             <ChevronLeft size={20} />

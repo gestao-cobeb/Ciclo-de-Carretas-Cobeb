@@ -478,7 +478,7 @@ export default function Viagem() {
 
   return (
     <div className="min-h-screen bg-[#EBF5FF]">
-      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
@@ -1476,7 +1476,7 @@ function ResumoViagem({ resumoData, profile, onNovaViagem, signOut }) {
 
   return (
     <div className="min-h-screen bg-[#EBF5FF]">
-      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
