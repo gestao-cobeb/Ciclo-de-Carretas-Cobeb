@@ -200,7 +200,7 @@ export default function EstoqueRealtime({ adminMode = false }) {
       <header className="bg-cobeb-navy px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20 shrink-0">
         <div className="flex items-center gap-3">
           <img
-            src={`${import.meta.env.BASE_URL}logos/logo-cobeb-transparent.png`}
+            src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
             alt="COBEB"
             className="h-12 w-auto object-contain"
             style={{ opacity: 0.92 }}
@@ -923,4 +923,5 @@ function EmptyState() {
     </div>
   )
 }
+
 

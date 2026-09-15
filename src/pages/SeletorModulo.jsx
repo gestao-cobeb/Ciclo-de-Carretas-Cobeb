@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+﻿import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
@@ -9,7 +9,7 @@ export const MODULOS = [
     key:    'admin',
     rota:   '/dashboard',
     label:  'Administrador',
-    desc:   'Painel, histórico e relatórios',
+    desc:   'Painel, histÃ³rico e relatÃ³rios',
     Icon:   LayoutDashboard,
     cor:    'bg-cobeb-navy',
     borda:  'border-cobeb-navy/30',
@@ -31,7 +31,7 @@ export const MODULOS = [
     key:    'conferente',
     rota:   '/tarefas',
     label:  'Conferente',
-    desc:   'Conferência de carga e registro de anomalias',
+    desc:   'ConferÃªncia de carga e registro de anomalias',
     Icon:   ClipboardList,
     cor:    'bg-green-600',
     borda:  'border-green-600/30',
@@ -42,7 +42,7 @@ export const MODULOS = [
     key:    'portaria',
     rota:   '/portaria',
     label:  'Portaria',
-    desc:   'Controle de entrada e saída de veículos',
+    desc:   'Controle de entrada e saÃ­da de veÃ­culos',
     Icon:   Shield,
     cor:    'bg-cobeb-yellow',
     borda:  'border-cobeb-yellow/40',
@@ -53,7 +53,7 @@ export const MODULOS = [
     key:    'empilheira',
     rota:   '/estoque',
     label:  'Painel Tempo Real',
-    desc:   'Monitoramento de veículos em tempo real',
+    desc:   'Monitoramento de veÃ­culos em tempo real',
     Icon:   Monitor,
     cor:    'bg-orange-500',
     borda:  'border-orange-500/30',
@@ -75,7 +75,7 @@ export const MODULOS = [
     key:    'cadastros',
     rota:   '/cadastros',
     label:  'Cadastros',
-    desc:   'Motoristas, carretas, cavalos e usuários',
+    desc:   'Motoristas, carretas, cavalos e usuÃ¡rios',
     Icon:   Users,
     cor:    'bg-slate-600',
     borda:  'border-slate-600/30',
@@ -85,8 +85,8 @@ export const MODULOS = [
   {
     key:    'importacao',
     rota:   '/importacao',
-    label:  'Importação',
-    desc:   'Importar BASE e catálogo de produtos Ambev',
+    label:  'ImportaÃ§Ã£o',
+    desc:   'Importar BASE e catÃ¡logo de produtos Ambev',
     Icon:   FileSpreadsheet,
     cor:    'bg-green-700',
     borda:  'border-green-700/30',
@@ -138,13 +138,13 @@ export default function SeletorModulo() {
     (profile?.perfil === 'conferente' && profile?.modulos_permitidos?.length > 0)
   if (!user || !podeAcessar) return <Navigate to="/login" replace />
 
-  // Se já tem modo, redireciona
+  // Se jÃ¡ tem modo, redireciona
   if (modoVisao) {
     const mod = MODULOS.find(m => m.key === modoVisao)
     return <Navigate to={mod?.rota ?? '/dashboard'} replace />
   }
 
-  // Módulos visíveis: acesso_total vê todos; demais veem apenas os autorizados
+  // MÃ³dulos visÃ­veis: acesso_total vÃª todos; demais veem apenas os autorizados
   const modulosVisiveis = profile.acesso_total
     ? MODULOS
     : MODULOS.filter(m => profile.modulos_permitidos?.includes(m.key))
@@ -160,7 +160,7 @@ export default function SeletorModulo() {
       {/* Header */}
       <header className="bg-cobeb-navy px-5 py-4 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <img
-          src={`${import.meta.env.BASE_URL}logos/logo-cobeb-transparent.png`}
+          src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
           alt="COBEB Distribuidora"
           className="h-10 w-auto object-contain"
           style={{ opacity: 0.92 }}
@@ -178,7 +178,7 @@ export default function SeletorModulo() {
       <main className="flex-1 flex flex-col items-center justify-start px-5 pt-8 pb-10">
         <div className="w-full max-w-sm">
 
-          {/* Saudação */}
+          {/* SaudaÃ§Ã£o */}
           <div className="mb-8 text-center">
             <div className="w-14 h-14 rounded-2xl bg-cobeb-navy flex items-center justify-center mx-auto mb-3 shadow-lg shadow-cobeb-navy/30">
               <span className="text-cobeb-yellow text-xl font-black">
@@ -188,23 +188,23 @@ export default function SeletorModulo() {
             <p className="text-cobeb-text font-bold text-base">
               {profile.nome ?? 'Administrador'}
             </p>
-            <p className="text-slate-500 text-sm mt-0.5">Selecione o módulo de acesso</p>
+            <p className="text-slate-500 text-sm mt-0.5">Selecione o mÃ³dulo de acesso</p>
           </div>
 
-          {/* Sem módulos autorizados */}
+          {/* Sem mÃ³dulos autorizados */}
           {modulosVisiveis.length === 0 && (
             <div className="bg-white border border-cobeb-border rounded-2xl p-6 text-center">
               <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
                 <Shield size={22} className="text-slate-400" />
               </div>
-              <p className="text-cobeb-text font-semibold text-sm">Nenhum módulo disponível</p>
+              <p className="text-cobeb-text font-semibold text-sm">Nenhum mÃ³dulo disponÃ­vel</p>
               <p className="text-slate-500 text-xs mt-1 leading-relaxed">
-                Contate o administrador para liberar o acesso aos módulos.
+                Contate o administrador para liberar o acesso aos mÃ³dulos.
               </p>
             </div>
           )}
 
-          {/* Cards de módulo */}
+          {/* Cards de mÃ³dulo */}
           {modulosVisiveis.length > 0 && (
             <div className="grid grid-cols-2 gap-3">
               {modulosVisiveis.map(mod => {
@@ -240,3 +240,4 @@ export default function SeletorModulo() {
     </div>
   )
 }
+
