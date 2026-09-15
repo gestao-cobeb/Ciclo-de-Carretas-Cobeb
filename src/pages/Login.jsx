@@ -201,7 +201,7 @@ export default function Login() {
   const [loading, setLoading]   = useState(false)
   const [erro, setErro]         = useState('')
 
-  // view: 'login' | 'esqueci' | 'primeiro_acesso'
+  // view: 'login' | 'esqueci' | 'primeiro_acesso' | 'redefinir_senha'
   const [view, setView]           = useState('login')
   const [novaSenha, setNovaSenha] = useState('')
   const [confirmar, setConfirmar] = useState('')
@@ -210,21 +210,33 @@ export default function Login() {
   const [resetLoading, setResetLoading] = useState(false)
   const [resetErro, setResetErro] = useState('')
 
+  // redefinir senha (usuário sabe a senha atual)
+  const [rdEmail, setRdEmail]           = useState('')
+  const [rdSenhaAtual, setRdSenhaAtual] = useState('')
+  const [rdNovaSenha, setRdNovaSenha]   = useState('')
+  const [rdShowAtual, setRdShowAtual]   = useState(false)
+  const [rdShowNova, setRdShowNova]     = useState(false)
+  const [rdLoading, setRdLoading]       = useState(false)
+  const [rdErro, setRdErro]             = useState('')
+
   const { signIn, profile } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => {
     if (!profile) return
+    // Não redirecionar automaticamente enquanto o usuário está trocando a própria senha;
+    // a navegação é feita manualmente ao final do fluxo.
+    if (view === 'redefinir_senha') return
     if (profile.primeiro_acesso) {
       setView('primeiro_acesso')
     } else {
       navigate(PERFIL_ROTA[profile.perfil] ?? '/login', { replace: true })
     }
-  }, [profile, navigate])
+  }, [profile, navigate, view])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!email.trim() || !password) { setErro('Preencha o acesso e a senha.'); return }
+    if (!email.trim()) { setErro('Preencha o acesso.'); return }
     setLoading(true); setErro('')
     const digits = email.trim().replace(/\D/g, '')
     const emailLogin = (!email.trim().includes('@') && digits.length === 11)
@@ -244,6 +256,52 @@ export default function Login() {
     await supabase.from('profiles').update({ primeiro_acesso: false }).eq('id', profile.id)
     setResetLoading(false)
     navigate(PERFIL_ROTA[profile.perfil] ?? '/login', { replace: true })
+  }
+
+  const resolveEmail = (raw) => {
+    const digits = raw.replace(/\D/g, '')
+    return (!raw.includes('@') && digits.length === 11)
+      ? `${digits}@motorista.cobeb.com.br`
+      : raw
+  }
+
+  const handleRedefinirSenha = async (e) => {
+    e.preventDefault()
+    if (!rdEmail.trim()) { setRdErro('Preencha o acesso.'); return }
+    if (rdNovaSenha.length > 20) { setRdErro('Máximo 20 caracteres.'); return }
+
+    setRdLoading(true); setRdErro('')
+
+    const { error: loginErr } = await supabase.auth.signInWithPassword({
+      email: resolveEmail(rdEmail.trim()),
+      password: rdSenhaAtual,
+    })
+    if (loginErr) { setRdErro('Acesso ou senha atual incorretos.'); setRdLoading(false); return }
+
+    const { error: updateErr } = await supabase.auth.updateUser({ password: rdNovaSenha })
+    if (updateErr) {
+      setRdErro('Erro ao atualizar: ' + updateErr.message)
+      await supabase.auth.signOut()
+      setRdLoading(false)
+      return
+    }
+
+    const { data: { user: u } } = await supabase.auth.getUser()
+    const { data: prof } = await supabase.from('profiles')
+      .select('perfil, primeiro_acesso').eq('id', u.id).single()
+
+    setRdLoading(false)
+    if (prof?.primeiro_acesso) {
+      setView('primeiro_acesso')
+    } else {
+      navigate(PERFIL_ROTA[prof?.perfil] ?? '/login', { replace: true })
+    }
+  }
+
+  const voltarDeRedefinir = async () => {
+    await supabase.auth.signOut()
+    setRdEmail(''); setRdSenhaAtual(''); setRdNovaSenha(''); setRdErro('')
+    setView('login')
   }
 
   const base = import.meta.env.BASE_URL
@@ -309,10 +367,16 @@ export default function Login() {
                   className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-lg shadow-cobeb-navy/25 mt-1">
                   {loading ? <><Loader2 size={16} className="animate-spin" />Entrando…</> : 'Entrar'}
                 </button>
-                <button type="button" onClick={() => setView('esqueci')}
-                  className="w-full text-cobeb-navy/60 hover:text-cobeb-navy text-xs font-medium transition-colors pt-1">
-                  Esqueceu sua senha?
-                </button>
+                <div className="flex items-center justify-between pt-1">
+                  <button type="button" onClick={() => setView('esqueci')}
+                    className="text-cobeb-navy/60 hover:text-cobeb-navy text-xs font-medium transition-colors">
+                    Esqueceu sua senha?
+                  </button>
+                  <button type="button" onClick={() => setView('redefinir_senha')}
+                    className="text-cobeb-navy/60 hover:text-cobeb-navy text-xs font-medium transition-colors">
+                    Alterar senha
+                  </button>
+                </div>
               </form>
             </>
           )}
@@ -334,6 +398,64 @@ export default function Login() {
               <button onClick={() => setView('login')} className="w-full text-cobeb-navy/60 hover:text-cobeb-navy text-xs font-medium transition-colors pt-3">
                 Voltar ao login
               </button>
+            </>
+          )}
+
+          {/* ── VIEW: REDEFINIR SENHA (usuário sabe a senha atual) ── */}
+          {view === 'redefinir_senha' && (
+            <>
+              <button onClick={voltarDeRedefinir} className="flex items-center gap-1.5 text-cobeb-navy/60 hover:text-cobeb-navy text-xs font-medium mb-4 transition-colors">
+                <ArrowLeft size={14} /> Voltar
+              </button>
+              <h3 className="text-cobeb-text font-semibold text-base mb-1">Alterar senha</h3>
+              <p className="text-slate-500 text-sm mt-1 mb-4 leading-relaxed">
+                Informe seu acesso, confirme a senha atual e defina a nova. A nova senha pode ficar em branco.
+              </p>
+              <form onSubmit={handleRedefinirSenha} noValidate className="space-y-4">
+                <div className="space-y-1.5">
+                  <label className="block text-cobeb-navy/60 text-[11px] font-semibold uppercase tracking-widest">Email / CPF</label>
+                  <input type="text" value={rdEmail} onChange={e => { setRdEmail(e.target.value); setRdErro('') }}
+                    placeholder="Email ou CPF do motorista" autoComplete="username" autoCapitalize="none" inputMode="email" autoFocus
+                    className="w-full bg-[#F5F9FF] border border-cobeb-border rounded-xl px-4 py-3.5 text-cobeb-text text-sm placeholder-blue-200 focus:outline-none focus:border-cobeb-blue focus:ring-2 focus:ring-cobeb-blue/20 transition-all" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-cobeb-navy/60 text-[11px] font-semibold uppercase tracking-widest">Senha atual</label>
+                  <div className="relative">
+                    <input type={rdShowAtual ? 'text' : 'password'} value={rdSenhaAtual}
+                      onChange={e => { setRdSenhaAtual(e.target.value); setRdErro('') }}
+                      placeholder="Senha atual" autoComplete="current-password"
+                      className="w-full bg-[#F5F9FF] border border-cobeb-border rounded-xl px-4 py-3.5 pr-12 text-cobeb-text text-sm placeholder-blue-200 focus:outline-none focus:border-cobeb-blue focus:ring-2 focus:ring-cobeb-blue/20 transition-all" />
+                    <button type="button" onClick={() => setRdShowAtual(!rdShowAtual)} tabIndex={-1}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cobeb-navy transition-colors">
+                      {rdShowAtual ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-cobeb-navy/60 text-[11px] font-semibold uppercase tracking-widest">Nova senha</label>
+                  <div className="relative">
+                    <input type={rdShowNova ? 'text' : 'password'} value={rdNovaSenha}
+                      onChange={e => { setRdNovaSenha(e.target.value.slice(0, 20)); setRdErro('') }}
+                      placeholder="Em branco para acessar sem senha" autoComplete="new-password"
+                      className="w-full bg-[#F5F9FF] border border-cobeb-border rounded-xl px-4 py-3.5 pr-12 text-cobeb-text text-sm placeholder-blue-200 focus:outline-none focus:border-cobeb-blue focus:ring-2 focus:ring-cobeb-blue/20 transition-all" />
+                    <button type="button" onClick={() => setRdShowNova(!rdShowNova)} tabIndex={-1}
+                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-cobeb-navy transition-colors">
+                      {rdShowNova ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
+                  </div>
+                  <p className="text-slate-400 text-xs">{rdNovaSenha.length}/20 caracteres</p>
+                </div>
+                {rdErro && (
+                  <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                    <AlertCircle size={15} className="text-red-500 mt-0.5 shrink-0" />
+                    <p className="text-red-600 text-sm">{rdErro}</p>
+                  </div>
+                )}
+                <button type="submit" disabled={!rdEmail.trim() || rdLoading}
+                  className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 text-sm shadow-lg shadow-cobeb-navy/25 mt-1">
+                  {rdLoading ? <><Loader2 size={16} className="animate-spin" />Verificando…</> : 'Alterar senha'}
+                </button>
+              </form>
             </>
           )}
 
