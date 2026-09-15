@@ -110,15 +110,14 @@ export default function SeletorModulo() {
 
   useEffect(() => {
     async function fetchSinal() {
-      const { data } = await supabase
-        .from('viagens')
-        .select('motorista_last_seen_at')
-        .neq('status', 'concluida')
-        .not('motorista_last_seen_at', 'is', null)
-        .order('motorista_last_seen_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      setSinalLastSeen(data?.motorista_last_seen_at ?? null)
+      // Usa o mesmo RPC do painel para garantir que o RLS não bloqueie
+      // a leitura para perfis conferente/operador
+      const { data } = await supabase.rpc('get_painel_viagens')
+      if (!data || data.length === 0) { setSinalLastSeen(null); return }
+      const mais_recente = data
+        .filter(v => v.motorista_last_seen_at)
+        .sort((a, b) => new Date(b.motorista_last_seen_at) - new Date(a.motorista_last_seen_at))[0]
+      setSinalLastSeen(mais_recente?.motorista_last_seen_at ?? null)
     }
     fetchSinal()
     const timer = setInterval(fetchSinal, 30000)

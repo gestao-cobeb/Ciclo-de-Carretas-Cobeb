@@ -247,17 +247,15 @@ export default function EstoqueRealtime({ adminMode = false }) {
       </header>
 
       <main className="pb-6">
-        {profile?.acesso_total && (
-          <div className="px-4 pt-4 max-w-lg mx-auto">
-            <button
-              onClick={() => setView('mapa')}
-              className="w-full flex items-center justify-center gap-2 bg-cobeb-navy hover:bg-cobeb-blue text-white text-sm font-semibold py-3 rounded-xl transition-colors mb-1"
-            >
-              <Map size={16} />
-              Mapa em Tempo Real
-            </button>
-          </div>
-        )}
+        <div className="px-4 pt-4 max-w-lg mx-auto">
+          <button
+            onClick={() => setView('mapa')}
+            className="w-full flex items-center justify-center gap-2 bg-cobeb-navy hover:bg-cobeb-blue text-white text-sm font-semibold py-3 rounded-xl transition-colors mb-1"
+          >
+            <Map size={16} />
+            Mapa em Tempo Real
+          </button>
+        </div>
         {conteudo}
       </main>
     </div>
