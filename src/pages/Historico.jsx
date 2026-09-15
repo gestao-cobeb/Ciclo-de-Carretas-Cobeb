@@ -233,9 +233,42 @@ export default function Historico() {
     nMkt > 0     ? `${nMkt} recebimento(s) marketplace` : '',
   ].filter(Boolean).join(' e ')
 
+  const filtrosJSX = (
+    <div className="max-w-2xl mx-auto px-4 pt-3 pb-3 space-y-2 border-b border-cobeb-border/40">
+      <div className="flex gap-2">
+        <select value={filtroUnid} onChange={e => { setFiltroUnid(e.target.value); setSelecionadas(new Set()) }} className={`flex-1 ${selCls}`}>
+          <option value="">Todas as unidades</option>
+          {unidades.map(u => <option key={u.id} value={u.id}>{u.nome} — {u.cidade}</option>)}
+        </select>
+        <select value={filtroPlaca} onChange={e => { setFiltroPlaca(e.target.value); setSelecionadas(new Set()) }} className={`flex-1 ${selCls}`}>
+          <option value="">Todas as placas</option>
+          {todasPlacas.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <input type="date" value={filtroDataDe} max={filtroDataAte || undefined}
+          onChange={e => { setFiltroDataDe(e.target.value); setSelecionadas(new Set()) }} className={dateCls} />
+        <span className="text-slate-400 text-xs shrink-0">até</span>
+        <input type="date" value={filtroDataAte} min={filtroDataDe || undefined}
+          onChange={e => { setFiltroDataAte(e.target.value); setSelecionadas(new Set()) }} className={dateCls} />
+        {(filtroDataDe || filtroDataAte) && (
+          <button onClick={() => { setFiltroDataDe(''); setFiltroDataAte(''); setSelecionadas(new Set()) }}
+            className="text-slate-500 hover:text-cobeb-yellow transition-colors shrink-0">
+            <X size={15} />
+          </button>
+        )}
+      </div>
+      {temFiltroAtivo && (
+        <button onClick={resetFiltros} className="text-xs text-slate-500 hover:text-cobeb-yellow transition-colors">
+          Limpar filtros
+        </button>
+      )}
+    </div>
+  )
+
   return (
-    <AdminLayout title="Histórico de Viagens">
-      <div className="max-w-2xl mx-auto px-4 pt-5 pb-4 space-y-4">
+    <AdminLayout title="Histórico de Viagens" subheader={filtrosJSX}>
+      <div className="max-w-2xl mx-auto px-4 pt-4 pb-4 space-y-4">
 
         {/* Feedback */}
         {feedback && (
@@ -248,63 +281,6 @@ export default function Historico() {
               {feedback.msg}
             </span>
             <button onClick={() => setFeedback(null)} className="ml-auto text-slate-500 hover:text-slate-400 text-xs">✕</button>
-          </div>
-        )}
-
-        {/* Filtros — Unidade + Placa */}
-        <div className="flex gap-2">
-          <select
-            value={filtroUnid}
-            onChange={e => { setFiltroUnid(e.target.value); setSelecionadas(new Set()) }}
-            className={`flex-1 ${selCls}`}>
-            <option value="">Todas as unidades</option>
-            {unidades.map(u => (
-              <option key={u.id} value={u.id}>{u.nome} — {u.cidade}</option>
-            ))}
-          </select>
-          <select
-            value={filtroPlaca}
-            onChange={e => { setFiltroPlaca(e.target.value); setSelecionadas(new Set()) }}
-            className={`flex-1 ${selCls}`}>
-            <option value="">Todas as placas</option>
-            {todasPlacas.map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Filtro Período */}
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={filtroDataDe}
-            max={filtroDataAte || undefined}
-            onChange={e => { setFiltroDataDe(e.target.value); setSelecionadas(new Set()) }}
-            className={dateCls}
-          />
-          <span className="text-slate-400 text-xs shrink-0">até</span>
-          <input
-            type="date"
-            value={filtroDataAte}
-            min={filtroDataDe || undefined}
-            onChange={e => { setFiltroDataAte(e.target.value); setSelecionadas(new Set()) }}
-            className={dateCls}
-          />
-          {(filtroDataDe || filtroDataAte) && (
-            <button
-              onClick={() => { setFiltroDataDe(''); setFiltroDataAte(''); setSelecionadas(new Set()) }}
-              className="text-slate-500 hover:text-cobeb-yellow transition-colors shrink-0">
-              <X size={15} />
-            </button>
-          )}
-        </div>
-
-        {/* Limpar todos os filtros */}
-        {temFiltroAtivo && (
-          <div className="-mt-1">
-            <button onClick={resetFiltros} className="text-xs text-slate-500 hover:text-cobeb-yellow transition-colors">
-              Limpar filtros
-            </button>
           </div>
         )}
 

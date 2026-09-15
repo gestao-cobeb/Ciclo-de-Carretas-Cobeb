@@ -591,43 +591,43 @@ export default function Tarefas() {
 
   return (
     <div className="min-h-screen bg-[#EBF5FF]">
-      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
-        <div className="flex items-center gap-3">
-          <img
-            src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
-            alt="COBEB"
-            className="h-14 w-auto object-contain" style={{ opacity: 0.92 }}
-            onError={(e) => { e.target.style.display = 'none' }}
-          />
-          <div>
-            <p className="text-white text-sm font-semibold leading-tight">Tarefas de Conferência</p>
-            <p className="text-blue-300/60 text-[10px] font-medium flex items-center gap-1">
-              <MapPin size={9} />
-              {profile?.unidade?.nome ?? 'COBEB'}
-            </p>
+      {/* Header + filtros fixos no topo */}
+      <div className="sticky top-0 z-40">
+        <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+          <div className="flex items-center gap-3">
+            <img
+              src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
+              alt="COBEB"
+              className="h-14 w-auto object-contain" style={{ opacity: 0.92 }}
+              onError={(e) => { e.target.style.display = 'none' }}
+            />
+            <div>
+              <p className="text-white text-sm font-semibold leading-tight">Tarefas de Conferência</p>
+              <p className="text-blue-300/60 text-[10px] font-medium flex items-center gap-1">
+                <MapPin size={9} />
+                {profile?.unidade?.nome ?? 'COBEB'}
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={loadLista} className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10">
-            <RefreshCw size={16} />
-          </button>
-          {modoVisao && (
-            <button onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
-              className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
-              title="Trocar Módulo">
-              <LayoutGrid size={16} />
+          <div className="flex items-center gap-2">
+            <button onClick={loadLista} className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10">
+              <RefreshCw size={16} />
             </button>
-          )}
-          <button onClick={() => signOut()} className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10">
-            <LogOut size={18} />
-          </button>
-        </div>
-      </header>
-
-      <main className="pb-8">
-        <div className="max-w-lg mx-auto px-4 pt-5 space-y-4">
-          {/* Status pills */}
-          <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
+            {modoVisao && (
+              <button onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
+                className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
+                title="Trocar Módulo">
+                <LayoutGrid size={16} />
+              </button>
+            )}
+            <button onClick={() => signOut()} className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10">
+              <LogOut size={18} />
+            </button>
+          </div>
+        </header>
+        {/* Status pills */}
+        <div className="bg-[#EBF5FF] border-b border-cobeb-border/40 px-4 py-2.5">
+          <div className="max-w-lg mx-auto flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
             {[
               { value: '',             label: 'Todas',        count: tarefas.length },
               { value: 'pendente',     label: 'Pendentes',    count: counts.pendente },
@@ -648,6 +648,11 @@ export default function Tarefas() {
               )
             })}
           </div>
+        </div>
+      </div>{/* /sticky */}
+
+      <main className="pb-8">
+        <div className="max-w-lg mx-auto px-4 pt-4 space-y-4">
 
           {/* Task list */}
           {loading ? (

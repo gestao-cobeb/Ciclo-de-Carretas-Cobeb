@@ -224,74 +224,65 @@ export default function Pedidos() {
     'bg-white border border-cobeb-border rounded-xl px-3 py-2 text-cobeb-text text-xs ' +
     'focus:outline-none focus:border-cobeb-blue appearance-none cursor-pointer'
 
+  const filtrosJSX = (
+    <div className="max-w-lg mx-auto px-4 pt-3 pb-3 space-y-2 border-b border-cobeb-border/40">
+      <div className="flex items-center gap-2">
+        {[{ label: 'D-1', diff: -1 }, { label: 'D0', diff: 0 }, { label: 'D1', diff: 1 }].map(({ label, diff }) => {
+          const iso = addDays(isoToday(), diff)
+          const active = filtData === iso
+          const hasData = datas.includes(iso)
+          return (
+            <button
+              key={label}
+              onClick={() => setFiltData(active ? '' : iso)}
+              className={`${pillBase} ${active ? pillActive : pillInactive} ${!hasData ? 'opacity-40' : ''}`}
+            >
+              {label}
+            </button>
+          )
+        })}
+        <input
+          type="date"
+          value={filtData}
+          onChange={e => setFiltData(e.target.value)}
+          className="flex-1 bg-white border border-cobeb-border rounded-xl px-3 py-1.5 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue transition-colors [color-scheme:light]"
+        />
+        {filtData && (
+          <button onClick={() => setFiltData('')} className="text-slate-500 hover:text-cobeb-yellow transition-colors shrink-0">
+            <X size={15} />
+          </button>
+        )}
+      </div>
+      <div className="relative">
+        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+        <input
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Buscar número do pedido..."
+          className="w-full bg-white border border-cobeb-border rounded-xl pl-9 pr-4 py-2.5 text-cobeb-text text-sm placeholder-slate-400 focus:outline-none focus:border-cobeb-blue transition-colors"
+        />
+        {search && (
+          <button onClick={() => setSearch('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400">
+            <X size={14} />
+          </button>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <select value={filtUnidade} onChange={e => setFiltUnidade(e.target.value)} className={`flex-1 ${selCls}`}>
+          <option value="">Todas unidades</option>
+          {unidades.map(u => <option key={u.id} value={u.id}>{u.codigo}</option>)}
+        </select>
+        <select value={filtFabrica} onChange={e => setFiltFabrica(e.target.value)} className={`flex-1 ${selCls}`}>
+          <option value="">Todas fábricas</option>
+          {fabricas.map(f => <option key={f} value={f}>{f}</option>)}
+        </select>
+      </div>
+    </div>
+  )
+
   return (
-    <AdminLayout title="Consulta de Pedidos">
+    <AdminLayout title="Consulta de Pedidos" subheader={filtrosJSX}>
       <div className="max-w-lg mx-auto">
-
-        {/* ── Date filter ── */}
-        <div className="px-4 pt-4">
-          <div className="flex items-center gap-2">
-            {[{ label: 'D-1', diff: -1 }, { label: 'D0', diff: 0 }, { label: 'D1', diff: 1 }].map(({ label, diff }) => {
-              const iso = addDays(isoToday(), diff)
-              const active = filtData === iso
-              const hasData = datas.includes(iso)
-              return (
-                <button
-                  key={label}
-                  onClick={() => setFiltData(active ? '' : iso)}
-                  className={`${pillBase} ${active ? pillActive : pillInactive} ${!hasData ? 'opacity-40' : ''}`}
-                >
-                  {label}
-                </button>
-              )
-            })}
-
-            <input
-              type="date"
-              value={filtData}
-              onChange={e => setFiltData(e.target.value)}
-              className="flex-1 bg-white border border-cobeb-border rounded-xl px-3 py-1.5 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue transition-colors [color-scheme:light]"
-            />
-
-            {filtData && (
-              <button onClick={() => setFiltData('')} className="text-slate-500 hover:text-cobeb-yellow transition-colors shrink-0">
-                <X size={15} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* ── Search + secondary filters ── */}
-        <div className="px-4 pt-3 space-y-2">
-          <div className="relative">
-            <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Buscar número do pedido..."
-              className="w-full bg-white border border-cobeb-border rounded-xl pl-9 pr-4 py-2.5 text-cobeb-text text-sm placeholder-slate-400 focus:outline-none focus:border-cobeb-blue transition-colors"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-400"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-
-          <div className="flex gap-2">
-            <select value={filtUnidade} onChange={e => setFiltUnidade(e.target.value)} className={`flex-1 ${selCls}`}>
-              <option value="">Todas unidades</option>
-              {unidades.map(u => <option key={u.id} value={u.id}>{u.codigo}</option>)}
-            </select>
-            <select value={filtFabrica} onChange={e => setFiltFabrica(e.target.value)} className={`flex-1 ${selCls}`}>
-              <option value="">Todas fábricas</option>
-              {fabricas.map(f => <option key={f} value={f}>{f}</option>)}
-            </select>
-          </div>
-        </div>
 
         {/* ── Column header ── */}
         {!loading && agrupados.length > 0 && (

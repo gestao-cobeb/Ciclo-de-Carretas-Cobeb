@@ -126,76 +126,50 @@ export default function Anomalias() {
     setFiltroDataAte('')
   }
 
-  return (
-    <AdminLayout title="Anomalias">
-      <div className="max-w-2xl mx-auto px-4 pt-5 pb-8 space-y-4">
-
-        {/* Header strip */}
-        <div className="flex items-center justify-between">
-          <p className="text-slate-500 text-xs">
-            {anomaliasFiltradas.length} anomalia(s)
-          </p>
+  const filtrosJSX = (
+    <div className="max-w-2xl mx-auto px-4 pt-3 pb-3 space-y-2 border-b border-cobeb-border/40">
+      <div className="flex items-center justify-between">
+        <p className="text-slate-500 text-xs">{anomaliasFiltradas.length} anomalia(s)</p>
+        <div className="flex items-center gap-2">
+          {temFiltroAtivo && (
+            <button onClick={resetFiltros} className="text-xs text-slate-500 hover:text-cobeb-yellow transition-colors">
+              Limpar filtros
+            </button>
+          )}
           <button onClick={load} className="text-slate-500 hover:text-cobeb-yellow transition-colors">
             <RefreshCw size={15} />
           </button>
         </div>
-
-        {/* Filtros — Unidade + Placa */}
-        <div className="flex gap-2">
-          <select
-            value={filtroUnidade}
-            onChange={e => setFiltroUnidade(e.target.value)}
-            className={`flex-1 ${selCls}`}>
-            <option value="">Todas as unidades</option>
-            {unidades.map(u => (
-              <option key={u.id} value={u.id}>{u.nome} — {u.cidade}</option>
-            ))}
-          </select>
-          <select
-            value={filtroPlaca}
-            onChange={e => setFiltroPlaca(e.target.value)}
-            className={`flex-1 ${selCls}`}>
-            <option value="">Todas as placas</option>
-            {todasPlacas.map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
-        </div>
-
-        {/* Filtro Período */}
-        <div className="flex items-center gap-2">
-          <input
-            type="date"
-            value={filtroDataDe}
-            max={filtroDataAte || undefined}
-            onChange={e => setFiltroDataDe(e.target.value)}
-            className={dateCls}
-          />
-          <span className="text-slate-400 text-xs shrink-0">até</span>
-          <input
-            type="date"
-            value={filtroDataAte}
-            min={filtroDataDe || undefined}
-            onChange={e => setFiltroDataAte(e.target.value)}
-            className={dateCls}
-          />
-          {(filtroDataDe || filtroDataAte) && (
-            <button
-              onClick={() => { setFiltroDataDe(''); setFiltroDataAte('') }}
-              className="text-slate-500 hover:text-cobeb-yellow transition-colors shrink-0">
-              <X size={15} />
-            </button>
-          )}
-        </div>
-
-        {/* Limpar todos os filtros */}
-        {temFiltroAtivo && (
-          <div className="-mt-1">
-            <button onClick={resetFiltros} className="text-xs text-slate-500 hover:text-cobeb-yellow transition-colors">
-              Limpar filtros
-            </button>
-          </div>
+      </div>
+      <div className="flex gap-2">
+        <select value={filtroUnidade} onChange={e => setFiltroUnidade(e.target.value)} className={`flex-1 ${selCls}`}>
+          <option value="">Todas as unidades</option>
+          {unidades.map(u => <option key={u.id} value={u.id}>{u.nome} — {u.cidade}</option>)}
+        </select>
+        <select value={filtroPlaca} onChange={e => setFiltroPlaca(e.target.value)} className={`flex-1 ${selCls}`}>
+          <option value="">Todas as placas</option>
+          {todasPlacas.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      <div className="flex items-center gap-2">
+        <input type="date" value={filtroDataDe} max={filtroDataAte || undefined}
+          onChange={e => setFiltroDataDe(e.target.value)} className={dateCls} />
+        <span className="text-slate-400 text-xs shrink-0">até</span>
+        <input type="date" value={filtroDataAte} min={filtroDataDe || undefined}
+          onChange={e => setFiltroDataAte(e.target.value)} className={dateCls} />
+        {(filtroDataDe || filtroDataAte) && (
+          <button onClick={() => { setFiltroDataDe(''); setFiltroDataAte('') }}
+            className="text-slate-500 hover:text-cobeb-yellow transition-colors shrink-0">
+            <X size={15} />
+          </button>
         )}
+      </div>
+    </div>
+  )
+
+  return (
+    <AdminLayout title="Anomalias" subheader={filtrosJSX}>
+      <div className="max-w-2xl mx-auto px-4 pt-4 pb-8 space-y-4">
 
         {/* List */}
         {loading ? (

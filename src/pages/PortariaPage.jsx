@@ -156,8 +156,9 @@ export default function PortariaPage() {
   return (
     <div className="min-h-screen bg-[#EBF5FF]">
 
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+      {/* Header + filtros fixos no topo */}
+      <div className="sticky top-0 z-40">
+      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
@@ -194,7 +195,7 @@ export default function PortariaPage() {
       </header>
 
       {/* Filtros */}
-      <div className="bg-white border-b border-cobeb-border px-4 py-3 space-y-3 shrink-0">
+      <div className="bg-white border-b border-cobeb-border px-4 py-3 space-y-3">
         {/* Status pills + botão entrada manual */}
         <div className="flex items-center gap-2">
           <div className="flex gap-2 overflow-x-auto pb-0.5 flex-1">
@@ -236,6 +237,7 @@ export default function PortariaPage() {
           )}
         </div>
       </div>
+      </div>{/* /sticky */}
 
       {/* Modal entrada manual marketplace */}
       {showModalMarket && (

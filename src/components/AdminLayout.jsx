@@ -2,7 +2,7 @@
 import { LayoutDashboard, LogOut, Package, AlertTriangle, History, ClipboardCheck, DoorOpen, LayoutGrid, Monitor, Table2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
-export default function AdminLayout({ title, children }) {
+export default function AdminLayout({ title, subheader, children }) {
   const { profile, signOut, setModoVisao } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
@@ -30,8 +30,9 @@ export default function AdminLayout({ title, children }) {
   return (
     <div className="min-h-screen bg-[#EBF5FF]">
 
-      {/* Header azul COBEB */}
-      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+      {/* Header + filtros fixos no topo */}
+      <div className="sticky top-0 z-40">
+      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
@@ -76,6 +77,8 @@ export default function AdminLayout({ title, children }) {
           </button>
         </div>
       </header>
+      {subheader && <div className="bg-[#EBF5FF]">{subheader}</div>}
+      </div>
 
       <main className="pb-20">
         {children}

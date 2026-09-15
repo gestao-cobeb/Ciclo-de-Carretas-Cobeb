@@ -114,60 +114,52 @@ export default function PortariaAdmin() {
 
   const temFiltroAtivo = filtroUnidade || filtroData
 
-  return (
-    <AdminLayout title="Portaria">
-      <div className="max-w-2xl mx-auto px-4 pt-5 pb-8 space-y-4">
-
-        {/* Status pills */}
-        <div className="flex gap-2 overflow-x-auto pb-0.5">
-          {STATUS_TABS.map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setFiltroStatus(tab.key)}
-              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-                filtroStatus === tab.key
-                  ? 'bg-cobeb-navy border-orange-500 text-white'
-                  : 'bg-white border-cobeb-border text-slate-500 hover:border-cobeb-blue/50'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Filtros */}
-        <div className="flex gap-2">
-          <select value={filtroUnidade} onChange={e => setFiltroUnidade(e.target.value)} className={`flex-1 ${selCls}`}>
-            <option value="">Todas as unidades</option>
-            {unidades.map(u => <option key={u.id} value={u.id}>{u.nome} — {u.cidade}</option>)}
-          </select>
-          <div className="flex items-center gap-2 flex-1">
-            <input
-              type="date"
-              value={filtroData}
-              onChange={e => setFiltroData(e.target.value)}
-              className={dateCls}
-            />
-            {filtroData && (
-              <button onClick={() => setFiltroData('')} className="text-slate-500 hover:text-cobeb-yellow transition-colors shrink-0">
-                <X size={15} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {temFiltroAtivo && (
-          <button onClick={() => { setFiltroUnidade(''); setFiltroData('') }}
-            className="text-xs text-slate-500 hover:text-cobeb-yellow transition-colors -mt-1">
-            Limpar filtros
+  const filtrosJSX = (
+    <div className="max-w-2xl mx-auto px-4 pt-3 pb-3 space-y-2 border-b border-cobeb-border/40">
+      <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        {STATUS_TABS.map(tab => (
+          <button key={tab.key} onClick={() => setFiltroStatus(tab.key)}
+            className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+              filtroStatus === tab.key
+                ? 'bg-cobeb-navy border-orange-500 text-white'
+                : 'bg-white border-cobeb-border text-slate-500 hover:border-cobeb-blue/50'
+            }`}>
+            {tab.label}
           </button>
-        )}
-
-        {/* Counter + refresh */}
-        <div className="flex items-center justify-between">
-          <p className="text-slate-500 text-xs"><span className="text-cobeb-text font-semibold">{filtrados.length}</span> atendimento(s)</p>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <select value={filtroUnidade} onChange={e => setFiltroUnidade(e.target.value)} className={`flex-1 ${selCls}`}>
+          <option value="">Todas as unidades</option>
+          {unidades.map(u => <option key={u.id} value={u.id}>{u.nome} — {u.cidade}</option>)}
+        </select>
+        <div className="flex items-center gap-2 flex-1">
+          <input type="date" value={filtroData} onChange={e => setFiltroData(e.target.value)} className={dateCls} />
+          {filtroData && (
+            <button onClick={() => setFiltroData('')} className="text-slate-500 hover:text-cobeb-yellow transition-colors shrink-0">
+              <X size={15} />
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center justify-between">
+        <p className="text-slate-500 text-xs"><span className="text-cobeb-text font-semibold">{filtrados.length}</span> atendimento(s)</p>
+        <div className="flex items-center gap-3">
+          {temFiltroAtivo && (
+            <button onClick={() => { setFiltroUnidade(''); setFiltroData('') }}
+              className="text-xs text-slate-500 hover:text-cobeb-yellow transition-colors">
+              Limpar filtros
+            </button>
+          )}
           <button onClick={carregar} className="text-slate-500 hover:text-cobeb-yellow transition-colors"><RefreshCw size={14} /></button>
         </div>
+      </div>
+    </div>
+  )
+
+  return (
+    <AdminLayout title="Portaria" subheader={filtrosJSX}>
+      <div className="max-w-2xl mx-auto px-4 pt-4 pb-8 space-y-4">
 
         {/* Lista */}
         {loading ? (
