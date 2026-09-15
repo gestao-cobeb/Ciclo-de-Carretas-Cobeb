@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Upload, FileSpreadsheet, Trash2, RefreshCw,
-  AlertCircle, CheckCircle2, X, Database, AlertTriangle, Package,
+  AlertCircle, CheckCircle2, X, Database, AlertTriangle, Package, Download,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import AdminLayout from '../components/AdminLayout'
@@ -72,6 +72,8 @@ export default function Importacao() {
   const [importResultProd, setImportResultProd] = useState(null)
   const [confirmarDelProd, setConfirmarDelProd] = useState(null)
   const [excluindoProd,    setExcluindoProd]    = useState(false)
+  const [baixandoBase,     setBaixandoBase]     = useState(null)
+  const [baixandoCatalogo, setBaixandoCatalogo] = useState(null)
 
   useEffect(() => { carregar() }, [])
 
@@ -416,6 +418,68 @@ export default function Importacao() {
     setExcluindo(false)
   }
 
+  async function baixarBaseAmbev(base) {
+    setBaixandoBase(base.arquivo_origem)
+    try {
+      const { data, error } = await supabase
+        .from('pedidos')
+        .select('data_puxada, codigo_revenda, revenda, codigo_fabrica, fabrica, numero_pedido, placa, cod_produto, descricao, embalagem, curva, qtde_pallets, qtde_skus')
+        .eq('arquivo_origem', base.arquivo_origem)
+        .order('numero_pedido')
+      if (error || !data?.length) return
+      const header = ['Data Puxada', 'Cód. Revenda', 'Revenda', 'Cód. Fábrica', 'Fábrica', 'Nº Pedido', 'Placa', 'Cód. Produto', 'Descrição', 'Embalagem', 'Curva', 'Qtde Pallets', 'Qtde SKUs']
+      const rows = data.map(p => [
+        p.data_puxada, p.codigo_revenda, p.revenda, p.codigo_fabrica, p.fabrica,
+        p.numero_pedido, p.placa, p.cod_produto, p.descricao, p.embalagem,
+        p.curva, p.qtde_pallets, p.qtde_skus,
+      ])
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([header, ...rows])
+      XLSX.utils.book_append_sheet(wb, ws, 'BASE')
+      XLSX.writeFile(wb, `${base.arquivo_origem}.xlsx`)
+    } finally {
+      setBaixandoBase(null)
+    }
+  }
+
+  async function baixarCatalogoProd(base) {
+    setBaixandoCatalogo(base.arquivo_origem)
+    try {
+      const { data, error } = await supabase
+        .from('produtos_catalogo')
+        .select('codigo, descricao, tipo_marca, linha_marca, embalagem, marca, peso_bruto, fator, grupo, ean, caixas_pallet, nr_fator_conversao, codigo_sap, ncm, subtipo')
+        .eq('arquivo_origem', base.arquivo_origem)
+        .order('codigo')
+      if (error || !data?.length) return
+      // Reconstrói nas mesmas posições do arquivo original (48 colunas)
+      const rows = data.map(p => {
+        const row = new Array(48).fill('')
+        row[0]  = p.codigo ?? ''
+        row[1]  = p.descricao ?? ''
+        row[4]  = p.tipo_marca ?? ''
+        row[5]  = p.linha_marca ?? ''
+        row[6]  = p.embalagem ?? ''
+        row[7]  = p.marca ?? ''
+        row[12] = p.peso_bruto ?? ''
+        row[13] = p.fator ?? ''
+        row[17] = p.grupo ?? ''
+        row[19] = p.ean ?? ''
+        row[21] = p.caixas_pallet ?? ''
+        row[22] = p.nr_fator_conversao ?? ''
+        row[38] = p.codigo_sap ?? ''
+        row[40] = p.ncm ?? ''
+        row[47] = p.subtipo ?? ''
+        return row
+      })
+      const wb = XLSX.utils.book_new()
+      const ws = XLSX.utils.aoa_to_sheet([new Array(48).fill(''), ...rows])
+      XLSX.utils.book_append_sheet(wb, ws, 'Produtos')
+      XLSX.writeFile(wb, `${base.arquivo_origem}.xlsx`)
+    } finally {
+      setBaixandoCatalogo(null)
+    }
+  }
+
   const basesFiltradas = useMemo(() => {
     if (!busca.trim()) return bases
     return bases.filter(b => b.arquivo_origem.toLowerCase().includes(busca.toLowerCase()))
@@ -568,14 +632,26 @@ export default function Importacao() {
                       </div>
                       <p className="text-slate-400 text[10px] mt-1 text-[10px]">Importado em: {ptTs(b.importado_em)}</p>
                     </div>
-                    <button
-                      onClick={() => setConfirmarDel(b)}
-                      disabled={b.livres === 0}
-                      title={b.livres === 0 ? 'Todos os registros estão vinculados' : 'Excluir registros livres'}
-                      className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0 mt-0.5"
-                    >
-                      <Trash2 size={14} />
-                    </button>
+                    <div className="flex items-center gap-1.5 shrink-0 mt-0.5">
+                      <button
+                        onClick={() => baixarBaseAmbev(b)}
+                        disabled={baixandoBase === b.arquivo_origem}
+                        title="Baixar base"
+                        className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-cobeb-blue hover:border-cobeb-blue/40 transition-colors disabled:opacity-50 shrink-0"
+                      >
+                        {baixandoBase === b.arquivo_origem
+                          ? <div className="w-3.5 h-3.5 border-2 border-cobeb-blue/40 border-t-cobeb-blue rounded-full animate-spin" />
+                          : <Download size={14} />}
+                      </button>
+                      <button
+                        onClick={() => setConfirmarDel(b)}
+                        disabled={b.livres === 0}
+                        title={b.livres === 0 ? 'Todos os registros estão vinculados' : 'Excluir registros livres'}
+                        className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -666,13 +742,25 @@ export default function Importacao() {
                     <p className="text-cobeb-text text-sm font-semibold font-mono">{b.arquivo_origem}</p>
                     <p className="text-slate-500 text-xs mt-0.5">{b.total.toLocaleString('pt-BR')} produtos · Importado em: {ptTs(b.importado_em)}</p>
                   </div>
-                  <button
-                    onClick={() => setConfirmarDelProd(b)}
-                    title="Excluir catálogo"
-                    className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors shrink-0"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => baixarCatalogoProd(b)}
+                      disabled={baixandoCatalogo === b.arquivo_origem}
+                      title="Baixar catálogo"
+                      className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-cobeb-blue hover:border-cobeb-blue/40 transition-colors disabled:opacity-50 shrink-0"
+                    >
+                      {baixandoCatalogo === b.arquivo_origem
+                        ? <div className="w-3.5 h-3.5 border-2 border-cobeb-blue/40 border-t-cobeb-blue rounded-full animate-spin" />
+                        : <Download size={14} />}
+                    </button>
+                    <button
+                      onClick={() => setConfirmarDelProd(b)}
+                      title="Excluir catálogo"
+                      className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors shrink-0"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
