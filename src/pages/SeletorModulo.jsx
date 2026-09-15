@@ -155,7 +155,7 @@ export default function SeletorModulo() {
   }
 
   return (
-    <div className="min-h-screen bg-[#EBF5FF] flex flex-col">
+    <div className="min-h-screen bg-[#EBF5FF]">
 
       {/* Header */}
       <header className="bg-cobeb-navy px-5 py-4 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
@@ -175,7 +175,7 @@ export default function SeletorModulo() {
       </header>
 
       {/* Body */}
-      <main className="flex-1 flex flex-col items-center justify-start px-5 pt-8 pb-10">
+      <main className="flex flex-col items-center justify-start px-5 pt-8 pb-10">
         <div className="w-full max-w-sm">
 
           {/* Saudação */}

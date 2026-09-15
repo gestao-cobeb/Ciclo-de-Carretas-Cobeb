@@ -590,8 +590,8 @@ export default function Tarefas() {
   }
 
   return (
-    <div className="min-h-screen bg-[#EBF5FF] flex flex-col">
-      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shrink-0 shadow-md shadow-cobeb-navy/20">
+    <div className="min-h-screen bg-[#EBF5FF]">
+      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
@@ -624,7 +624,7 @@ export default function Tarefas() {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-8">
+      <main className="pb-8">
         <div className="max-w-lg mx-auto px-4 pt-5 space-y-4">
           {/* Status pills */}
           <div className="flex gap-2 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
@@ -892,9 +892,9 @@ function ConferenciaView({
   }
 
   return (
-    <div className="min-h-screen bg-[#EBF5FF] flex flex-col">
+    <div className="min-h-screen bg-[#EBF5FF]">
       {/* Header */}
-      <header className="bg-cobeb-navy border-b border-blue-800 px-4 py-3 shrink-0 shadow-md shadow-cobeb-navy/20">
+      <header className="bg-cobeb-navy border-b border-blue-800 px-4 py-3 shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3 mb-2">
           <button onClick={onBack} className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10 -ml-1">
             <ChevronLeft size={20} />
@@ -926,7 +926,7 @@ function ConferenciaView({
       </header>
 
       {/* Body */}
-      <main className="flex-1 overflow-y-auto">
+      <main>
         {loadingConf ? (
           <div className="flex justify-center py-16">
             <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />

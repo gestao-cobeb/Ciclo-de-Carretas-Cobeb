@@ -194,10 +194,10 @@ export default function EstoqueRealtime({ adminMode = false }) {
   }
 
   return (
-    <div className="min-h-dvh bg-[#EBF5FF] flex flex-col">
+    <div className="min-h-dvh bg-[#EBF5FF]">
 
       {/* Header */}
-      <header className="bg-cobeb-navy px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20 shrink-0">
+      <header className="bg-cobeb-navy px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
@@ -246,7 +246,7 @@ export default function EstoqueRealtime({ adminMode = false }) {
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-6">
+      <main className="pb-6">
         {profile?.acesso_total && (
           <div className="px-4 pt-4 max-w-lg mx-auto">
             <button

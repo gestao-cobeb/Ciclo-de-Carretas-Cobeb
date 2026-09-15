@@ -477,8 +477,8 @@ export default function Viagem() {
     : 'Nova Viagem'
 
   return (
-    <div className="min-h-screen bg-[#EBF5FF] flex flex-col">
-      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shrink-0 shadow-md shadow-cobeb-navy/20">
+    <div className="min-h-screen bg-[#EBF5FF]">
+      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
@@ -522,7 +522,7 @@ export default function Viagem() {
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto pb-10">
+      <main className="pb-10">
         {view === 'wizard'
           ? <Wizard
               step={step} setStep={setStep}
@@ -1475,8 +1475,8 @@ function ResumoViagem({ resumoData, profile, onNovaViagem, signOut }) {
   const diferenca  = paletesRec - paletesEsp
 
   return (
-    <div className="min-h-screen bg-[#EBF5FF] flex flex-col">
-      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shrink-0 shadow-md shadow-cobeb-navy/20">
+    <div className="min-h-screen bg-[#EBF5FF]">
+      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
@@ -1494,7 +1494,7 @@ function ResumoViagem({ resumoData, profile, onNovaViagem, signOut }) {
         </button>
       </header>
 
-      <main className="flex-1 overflow-y-auto pb-28">
+      <main className="pb-28">
         <div className="max-w-lg mx-auto px-4 pt-5 space-y-4">
 
           {/* Banner de conclusão */}

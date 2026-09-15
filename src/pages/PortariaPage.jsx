@@ -154,10 +154,10 @@ export default function PortariaPage() {
   const semAtividade  = filtrados.length === 0
 
   return (
-    <div className="min-h-screen bg-[#EBF5FF] flex flex-col">
+    <div className="min-h-screen bg-[#EBF5FF]">
 
       {/* Header */}
-      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shrink-0 shadow-md shadow-cobeb-navy/20">
+      <header className="bg-cobeb-navy border-b border-blue-800 px-5 py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
         <div className="flex items-center gap-3">
           <img
             src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
@@ -295,7 +295,7 @@ export default function PortariaPage() {
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto px-4 pt-4 pb-8 max-w-lg mx-auto w-full space-y-5">
+      <main className="px-4 pt-4 pb-8 max-w-lg mx-auto w-full space-y-5">
 
         {loading ? (
           <div className="flex justify-center py-20">
