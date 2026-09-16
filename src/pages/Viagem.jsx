@@ -350,8 +350,13 @@ export default function Viagem() {
 
   async function cancelarAgendamento() {
     if (!agendamento) return
-    await supabase.from('agendamentos').update({ status: 'cancelado' }).eq('id', agendamento.id)
+    const { error } = await supabase
+      .from('agendamentos')
+      .update({ status: 'cancelado' })
+      .eq('id', agendamento.id)
+    if (error) { alert('Erro ao cancelar agendamento: ' + error.message); return }
     setAgendamento(null)
+    setShowModalAgendamento(true)
   }
 
   // ── registrar etapa ───────────────────────────────────────────────────────
