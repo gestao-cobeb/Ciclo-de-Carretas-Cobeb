@@ -319,27 +319,24 @@ export default function Tarefas() {
     setAbrindoNRI(tarefa.id)
     try {
       const nriViagemId = tarefa.viagem?.id ?? tarefa.viagem_id
-      const [{ data: peds }, { data: itens }, { data: anos }] = await Promise.all([
+      const [{ data: peds }, { data: itens }] = await Promise.all([
         supabase.from('pedidos').select('*').eq('viagem_id', nriViagemId).neq('status', 'cancelado').order('descricao'),
         supabase.from('conferencia_itens')
           .select('pedido_id, qtde_recebida, data_validade')
           .eq('tarefa_id', tarefa.id)
           .gt('qtde_recebida', 0),
-        supabase.from('anomalias')
-          .select('pedido_id')
-          .eq('tarefa_id', tarefa.id)
-          .not('pedido_id', 'is', null),
       ])
 
       const pedidos = peds ?? []
       setPedidos(pedidos)
 
-      const pedidoMap   = {}
+      const pedidoMap = {}
       pedidos.forEach(p => { pedidoMap[p.id] = p })
-      const comAnomalia = new Set((anos ?? []).map(a => a.pedido_id))
 
+      // Itens com qtde_recebida > 0 entram no NRI independentemente de anomalia.
+      // Itens onde nada foi recebido (qtde = 0) já foram excluídos pela query acima.
       const gruposIniciais = (itens ?? [])
-        .filter(it => !comAnomalia.has(it.pedido_id) && pedidoMap[it.pedido_id])
+        .filter(it => pedidoMap[it.pedido_id])
         .map(it => {
           const p        = pedidoMap[it.pedido_id]
           const cxPallet = (p.qtde_pallets > 0) ? p.qtde_skus / p.qtde_pallets : null
