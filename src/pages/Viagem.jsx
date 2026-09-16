@@ -372,8 +372,10 @@ export default function Viagem() {
       return !error
     }
 
+    let dbOk = false
     if (isOnline && await tryDB()) {
       setViagemAtiva(updated); cacheViagem(updated)
+      dbOk = true
     } else {
       saveOfflineAction({ type: 'UPDATE_VIAGEM', viagem_id: viagemAtiva.id, updates })
       setViagemAtiva(updated); cacheViagem(updated); setPendingSync(true)
@@ -387,7 +389,9 @@ export default function Viagem() {
     }
 
     if (etapa.requireNF) {
-      // A tarefa para o Conferente agora é criada pela Portaria ao registrar entrada
+      // A tarefa para o Conferente agora é criada pela Portaria ao registrar entrada.
+      // Portaria só vai ao banco se o UPDATE da viagem também foi — senão ambos ficam
+      // na fila offline e sobem juntos no sync, evitando portaria sem viagem atualizada.
       const unidadeId  = agendamento?.revenda_id ?? viagemAtiva.unidade_descarga_id
       const portariaAtend = {
         viagem_id:       viagemAtiva.id,
@@ -398,7 +402,7 @@ export default function Viagem() {
         placa_carreta:   viagemAtiva.carreta?.placa ?? null,
         agendamento_id:  agendamento?.id ?? null,
       }
-      if (isOnline) {
+      if (dbOk) {
         await supabase.from('portaria_atendimentos').insert(portariaAtend)
         if (agendamento?.id) {
           await supabase.from('agendamentos').update({ status: 'realizado' }).eq('id', agendamento.id)
