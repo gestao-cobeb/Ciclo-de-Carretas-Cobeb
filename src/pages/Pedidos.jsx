@@ -225,8 +225,8 @@ export default function Pedidos() {
     setLoadingViagens(true)
     const { data } = await supabase
       .from('viagens')
-      .select('id, cavalo:cavalos(placa), carreta:carretas(placa), motorista:profiles(nome), unidade:unidades(nome, codigo)')
-      .eq('status', 'em_transito')
+      .select('id, status, cavalo:cavalos(placa), carreta:carretas(placa), motorista:profiles(nome), unidade:unidades(nome, codigo)')
+      .in('status', ['em_transito', 'na_fabrica', 'retornando'])
       .order('created_at', { ascending: false })
     setViagensTransito(data ?? [])
     setLoadingViagens(false)
@@ -750,7 +750,7 @@ function ModalSelecionarViagem({ grupo, viagens, loading, vinculandoId, onVincul
         <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto mb-4 shrink-0" />
 
         <div className="text-center mb-4 shrink-0">
-          <p className="text-cobeb-text font-semibold text-base">Selecionar viagem em trânsito</p>
+          <p className="text-cobeb-text font-semibold text-base">Selecionar viagem ativa</p>
           <p className="text-slate-500 text-xs mt-1">Pedido #{grupo.numero_pedido} · {grupo.fabrica}</p>
         </div>
 
@@ -763,9 +763,9 @@ function ModalSelecionarViagem({ grupo, viagens, loading, vinculandoId, onVincul
             <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
               <Truck size={20} className="text-slate-400" />
             </div>
-            <p className="text-cobeb-text font-semibold text-sm">Nenhuma viagem em trânsito</p>
+            <p className="text-cobeb-text font-semibold text-sm">Nenhuma viagem ativa</p>
             <p className="text-slate-500 text-xs mt-1 max-w-xs">
-              Não há motoristas em trânsito no momento. Aguarde o motorista iniciar a viagem.
+              Não há viagens em trânsito, na fábrica ou retornando no momento.
             </p>
           </div>
         ) : (
@@ -774,6 +774,11 @@ function ModalSelecionarViagem({ grupo, viagens, loading, vinculandoId, onVincul
               const placas = [v.cavalo?.placa, v.carreta?.placa].filter(Boolean).join(' / ')
               const unidadeLabel = v.unidade?.codigo ?? v.unidade?.nome ?? null
               const isLinking = vinculandoId === v.id
+              const statusCfg = {
+                em_transito: { label: 'Em trânsito',  cls: 'bg-blue-50 border-blue-200 text-blue-600'   },
+                na_fabrica:  { label: 'Na fábrica',   cls: 'bg-amber-50 border-amber-200 text-amber-600' },
+                retornando:  { label: 'Retornando',   cls: 'bg-green-50 border-green-200 text-green-600' },
+              }[v.status]
               return (
                 <button
                   key={v.id}
@@ -787,7 +792,14 @@ function ModalSelecionarViagem({ grupo, viagens, loading, vinculandoId, onVincul
                       : <Truck size={18} className="text-cobeb-navy" />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-cobeb-text font-semibold text-sm font-mono">{placas || '—'}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-cobeb-text font-semibold text-sm font-mono">{placas || '—'}</p>
+                      {statusCfg && (
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${statusCfg.cls}`}>
+                          {statusCfg.label}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-slate-500 text-xs mt-0.5 truncate">
                       {v.motorista?.nome ?? '—'}{unidadeLabel ? ` · ${unidadeLabel}` : ''}
                     </p>
