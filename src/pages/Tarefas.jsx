@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   LogOut, ClipboardList, MapPin, ChevronLeft, CheckCircle, Clock,
-  AlertCircle, Package, Truck, RefreshCw, Camera, AlertTriangle, Plus, X, FileText, LayoutGrid, ShoppingCart,
+  AlertCircle, Package, Truck, RefreshCw, Camera, AlertTriangle, Plus, X, FileText, LayoutGrid, ShoppingCart, ArrowLeftRight,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -11,6 +11,19 @@ import EmissaoNRI from './EmissaoNRI'
 const uid = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+function tipoManualCfg(tipo) {
+  if (tipo === 'transferencia') return {
+    Icon: ArrowLeftRight, label: 'Transferência',
+    labelCls: 'text-indigo-600', iconCls: 'text-indigo-500',
+    btnCls: 'bg-indigo-500 hover:bg-indigo-600',
+  }
+  return {
+    Icon: ShoppingCart, label: 'Marketplace',
+    labelCls: 'text-orange-600', iconCls: 'text-orange-500',
+    btnCls: 'bg-orange-500 hover:bg-orange-600',
+  }
+}
 
 const STATUS_CFG = {
   pendente:     { label: 'Pendente',     color: 'text-slate-500',  bg: 'bg-[#EBF5FF]',    border: 'border-cobeb-border' },
@@ -676,15 +689,15 @@ export default function Tarefas() {
                     <div className="px-4 py-3">
                       <div className="mb-3">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          {tarefa.tipo === 'marketplace'
-                            ? <><ShoppingCart size={13} className="text-orange-500" /><span className="text-orange-600 font-semibold text-sm">Marketplace</span></>
+                          {tarefa.tipo !== 'normal'
+                            ? (() => { const c = tipoManualCfg(tarefa.tipo); return <><c.Icon size={13} className={c.iconCls} /><span className={`${c.labelCls} font-semibold text-sm`}>{c.label}</span></> })()
                             : <span className="text-cobeb-text font-semibold text-sm">NF {tarefa.numero_nf}</span>}
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cfg.color} ${cfg.border} bg-[#EBF5FF]/60`}>
                             {cfg.label}
                           </span>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
-                          {tarefa.tipo === 'marketplace' ? (
+                          {tarefa.tipo !== 'normal' ? (
                             <span className="flex items-center gap-1 font-mono text-[11px]">
                               <Truck size={10} />
                               {[tarefa.placa_cavalo, tarefa.placa_carreta].filter(Boolean).join(' / ')}
@@ -714,7 +727,7 @@ export default function Tarefas() {
                         <div className="flex items-center gap-3 mt-1 text-[10px] text-slate-500 flex-wrap">
                           <span className="flex items-center gap-1">
                             <Clock size={10} />
-                            {tarefa.tipo === 'marketplace' ? 'Entrada: ' : 'Chegada: '}
+                            {tarefa.tipo !== 'normal' ? 'Entrada: ' : 'Chegada: '}
                             {formatTs(tarefa.viagem?.dt_chegada_revenda) ?? formatTs(tarefa.created_at)}
                           </span>
                           {tarefa.viagem?.horario_agendado && (
@@ -723,14 +736,14 @@ export default function Tarefas() {
                         </div>
                       </div>
 
-                      {tarefa.tipo === 'marketplace' ? (
+                      {tarefa.tipo !== 'normal' ? (
                         <>
                           {tarefa.status === 'pendente' && (
                             <button onClick={() => iniciarConferenciaMarketplace(tarefa)} disabled={iniciando === tarefa.id}
-                              className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                              className={`w-full disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 ${tipoManualCfg(tarefa.tipo).btnCls}`}>
                               {iniciando === tarefa.id
                                 ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                : <><FileText size={13} />Gerar NRI Marketplace</>}
+                                : <><FileText size={13} />Gerar NRI {tipoManualCfg(tarefa.tipo).label}</>}
                             </button>
                           )}
                           {tarefa.status === 'em_andamento' && (

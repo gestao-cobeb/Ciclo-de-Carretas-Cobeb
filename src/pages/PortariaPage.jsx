@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { LogOut, Clock, CheckCircle, Truck, RefreshCw, X, LayoutGrid, PlusCircle, ShoppingCart } from 'lucide-react'
+import { LogOut, Clock, CheckCircle, Truck, RefreshCw, X, LayoutGrid, PlusCircle, ShoppingCart, ArrowLeftRight } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -21,6 +21,18 @@ function formatTs(iso) {
 
 function isoToday() {
   return new Date().toISOString().split('T')[0]
+}
+
+function tipoBadge(tipo) {
+  if (tipo === 'marketplace')   return { label: 'Marketplace',  abbr: 'Mkt', cls: 'bg-orange-50 border-orange-200 text-orange-600' }
+  if (tipo === 'transferencia') return { label: 'Transferência', abbr: 'Trf', cls: 'bg-indigo-50 border-indigo-200 text-indigo-600' }
+  return null
+}
+
+function TipoIcon({ tipo, size = 16, className = '' }) {
+  if (tipo === 'marketplace')   return <ShoppingCart size={size} className={className} />
+  if (tipo === 'transferencia') return <ArrowLeftRight size={size} className={className} />
+  return <Truck size={size} className={className} />
 }
 
 function ElapsedTimer({ from }) {
@@ -54,12 +66,13 @@ export default function PortariaPage() {
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroData,   setFiltroData]   = useState(isoToday())
 
-  // marketplace
-  const [showModalMarket, setShowModalMarket] = useState(false)
-  const [placaCavaloM,    setPlacaCavaloM]    = useState('')
-  const [placaCarretaM,   setPlacaCarretaM]   = useState('')
-  const [numeroNFM,       setNumeroNFM]       = useState('')
-  const [criando,         setCriando]         = useState(false)
+  // entrada manual (marketplace / transferencia)
+  const [showModalEntrada, setShowModalEntrada] = useState(false)
+  const [tipoEntrada,      setTipoEntrada]      = useState(null) // null = seletor | 'marketplace' | 'transferencia'
+  const [placaCavaloM,     setPlacaCavaloM]     = useState('')
+  const [placaCarretaM,    setPlacaCarretaM]    = useState('')
+  const [numeroNFM,        setNumeroNFM]        = useState('')
+  const [criando,          setCriando]          = useState(false)
 
   const carregar = useCallback(async (silent = false) => {
     if (!profile?.acesso_total && !profile?.unidade_id) return
@@ -109,20 +122,26 @@ export default function PortariaPage() {
     setRegistrando(null)
   }
 
-  async function criarEntradaMarketplace() {
+  function fecharModalEntrada() {
+    setShowModalEntrada(false)
+    setTipoEntrada(null)
+    setPlacaCavaloM('')
+    setPlacaCarretaM('')
+    setNumeroNFM('')
+  }
+
+  async function criarEntrada() {
     if (!placaCavaloM.trim() || !numeroNFM.trim()) return
     setCriando(true)
-    const { error } = await supabase.rpc('criar_entrada_marketplace', {
+    const rpc = tipoEntrada === 'marketplace' ? 'criar_entrada_marketplace' : 'criar_entrada_transferencia'
+    const { error } = await supabase.rpc(rpc, {
       p_placa_cavalo:  placaCavaloM.trim().toUpperCase(),
       p_numero_nf:     numeroNFM.trim(),
       p_placa_carreta: placaCarretaM.trim().toUpperCase() || null,
     })
-    if (error) alert('Erro ao registrar entrada: ' + error.message)
-    setShowModalMarket(false)
-    setPlacaCavaloM('')
-    setPlacaCarretaM('')
-    setNumeroNFM('')
     setCriando(false)
+    if (error) { alert('Erro ao registrar entrada: ' + error.message); return }
+    fecharModalEntrada()
     await carregar()
   }
 
@@ -214,7 +233,7 @@ export default function PortariaPage() {
             ))}
           </div>
           <button
-            onClick={() => setShowModalMarket(true)}
+            onClick={() => { setShowModalEntrada(true); setTipoEntrada(null) }}
             className="shrink-0 flex items-center gap-1.5 bg-cobeb-yellow hover:bg-yellow-400 text-cobeb-navy text-xs font-bold px-3 py-1.5 rounded-full transition-colors"
           >
             <PlusCircle size={13} />
@@ -239,60 +258,106 @@ export default function PortariaPage() {
       </div>
       </div>{/* /sticky */}
 
-      {/* Modal entrada manual marketplace */}
-      {showModalMarket && (
+      {/* Modal entrada manual */}
+      {showModalEntrada && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+
+            {/* Header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <ShoppingCart size={18} className="text-cobeb-yellow" />
+                <PlusCircle size={18} className="text-cobeb-yellow" />
                 <p className="text-cobeb-text font-bold text-base">Entrada Manual</p>
               </div>
-              <button onClick={() => { setShowModalMarket(false); setPlacaCavaloM(''); setPlacaCarretaM(''); setNumeroNFM('') }}
-                className="text-slate-400 hover:text-slate-600 transition-colors">
+              <button onClick={fecharModalEntrada} className="text-slate-400 hover:text-slate-600 transition-colors">
                 <X size={18} />
               </button>
             </div>
-            <p className="text-slate-500 text-xs">Veículo terceiro — descarga marketplace sem pedido vinculado.</p>
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Número da NF *</label>
-                <input
-                  value={numeroNFM}
-                  onChange={e => setNumeroNFM(e.target.value)}
-                  placeholder="Ex: 123456"
-                  inputMode="numeric"
-                  className="w-full bg-[#EBF5FF] border border-cobeb-border rounded-xl px-4 py-2.5 text-cobeb-text text-sm placeholder-slate-400 focus:outline-none focus:border-cobeb-blue"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Placa Cavalo *</label>
-                <input
-                  value={placaCavaloM}
-                  onChange={e => setPlacaCavaloM(e.target.value.toUpperCase())}
-                  placeholder="ABC-1234"
-                  className="w-full bg-[#EBF5FF] border border-cobeb-border rounded-xl px-4 py-2.5 text-cobeb-text text-sm font-mono uppercase placeholder-slate-400 focus:outline-none focus:border-cobeb-blue"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Placa Carreta (opcional)</label>
-                <input
-                  value={placaCarretaM}
-                  onChange={e => setPlacaCarretaM(e.target.value.toUpperCase())}
-                  placeholder="DEF-5678"
-                  className="w-full bg-[#EBF5FF] border border-cobeb-border rounded-xl px-4 py-2.5 text-cobeb-text text-sm font-mono uppercase placeholder-slate-400 focus:outline-none focus:border-cobeb-blue"
-                />
-              </div>
-            </div>
-            <button
-              onClick={criarEntradaMarketplace}
-              disabled={criando || !placaCavaloM.trim() || !numeroNFM.trim()}
-              className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-bold py-3.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
-            >
-              {criando
-                ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Registrando...</>
-                : <><PlusCircle size={16} />Liberar Entrada</>}
-            </button>
+
+            {/* Step 1: selecionar tipo */}
+            {!tipoEntrada && (
+              <>
+                <p className="text-slate-500 text-xs">Qual o tipo de entrada?</p>
+                <div className="space-y-2">
+                  <button
+                    onClick={() => setTipoEntrada('marketplace')}
+                    className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl border border-cobeb-border bg-white hover:border-orange-300 hover:bg-orange-50 transition-all text-left"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center shrink-0">
+                      <ShoppingCart size={18} className="text-orange-500" />
+                    </div>
+                    <div>
+                      <p className="text-cobeb-text font-semibold text-sm">Marketplace</p>
+                      <p className="text-slate-500 text-xs mt-0.5">Veículo terceiro sem pedido vinculado</p>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setTipoEntrada('transferencia')}
+                    className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl border border-cobeb-border bg-white hover:border-indigo-300 hover:bg-indigo-50 transition-all text-left"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0">
+                      <ArrowLeftRight size={18} className="text-indigo-500" />
+                    </div>
+                    <div>
+                      <p className="text-cobeb-text font-semibold text-sm">Transferência</p>
+                      <p className="text-slate-500 text-xs mt-0.5">Transferência entre filiais</p>
+                    </div>
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Step 2: formulário */}
+            {tipoEntrada && (
+              <>
+                <div className="flex items-center gap-2 -mb-1">
+                  <button onClick={() => setTipoEntrada(null)} className="text-slate-400 hover:text-cobeb-navy text-xs flex items-center gap-1 transition-colors">
+                    ← Voltar
+                  </button>
+                  {(() => { const b = tipoBadge(tipoEntrada); return b ? <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${b.cls}`}>{b.label}</span> : null })()}
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Número da NF *</label>
+                    <input
+                      value={numeroNFM}
+                      onChange={e => setNumeroNFM(e.target.value)}
+                      placeholder="Ex: 123456"
+                      inputMode="numeric"
+                      className="w-full bg-[#EBF5FF] border border-cobeb-border rounded-xl px-4 py-2.5 text-cobeb-text text-sm placeholder-slate-400 focus:outline-none focus:border-cobeb-blue"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Placa Cavalo *</label>
+                    <input
+                      value={placaCavaloM}
+                      onChange={e => setPlacaCavaloM(e.target.value.toUpperCase())}
+                      placeholder="ABC-1234"
+                      className="w-full bg-[#EBF5FF] border border-cobeb-border rounded-xl px-4 py-2.5 text-cobeb-text text-sm font-mono uppercase placeholder-slate-400 focus:outline-none focus:border-cobeb-blue"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 uppercase tracking-widest block mb-1">Placa Carreta (opcional)</label>
+                    <input
+                      value={placaCarretaM}
+                      onChange={e => setPlacaCarretaM(e.target.value.toUpperCase())}
+                      placeholder="DEF-5678"
+                      className="w-full bg-[#EBF5FF] border border-cobeb-border rounded-xl px-4 py-2.5 text-cobeb-text text-sm font-mono uppercase placeholder-slate-400 focus:outline-none focus:border-cobeb-blue"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={criarEntrada}
+                  disabled={criando || !placaCavaloM.trim() || !numeroNFM.trim()}
+                  className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-bold py-3.5 rounded-xl text-sm transition-colors flex items-center justify-center gap-2"
+                >
+                  {criando
+                    ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Registrando...</>
+                    : <><PlusCircle size={16} />Liberar Entrada</>}
+                </button>
+              </>
+            )}
+
           </div>
         </div>
       )}
@@ -314,15 +379,13 @@ export default function PortariaPage() {
                     <div key={a.id} className="bg-white rounded-2xl border-2 border-cobeb-blue p-4">
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
-                          {a.tipo === 'marketplace'
-                            ? <ShoppingCart size={16} className="text-cobeb-yellow shrink-0" />
-                            : <Truck size={16} className="text-cobeb-yellow shrink-0" />}
+                          <TipoIcon tipo={a.tipo} size={16} className="text-cobeb-yellow shrink-0" />
                           <span className="text-cobeb-text font-bold text-sm">{a.placa_cavalo ?? '—'}</span>
                           {a.placa_carreta && <span className="text-slate-500 text-xs font-mono">/ {a.placa_carreta}</span>}
                         </div>
-                        {a.tipo === 'marketplace'
+                        {tipoBadge(a.tipo)
                           ? <div className="text-right">
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-orange-600 block">Marketplace</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border block ${tipoBadge(a.tipo).cls}`}>{tipoBadge(a.tipo).label}</span>
                               {a.numero_nf && <span className="text-cobeb-yellow text-xs font-mono font-semibold">NF {a.numero_nf}</span>}
                             </div>
                           : <div className="text-right space-y-0.5">
@@ -384,15 +447,13 @@ export default function PortariaPage() {
                     <div key={a.id} className="bg-white rounded-2xl border border-cobeb-border p-4">
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
-                          {a.tipo === 'marketplace'
-                            ? <ShoppingCart size={15} className="text-slate-500 shrink-0" />
-                            : <Truck size={15} className="text-slate-500 shrink-0" />}
+                          <TipoIcon tipo={a.tipo} size={15} className="text-slate-500 shrink-0" />
                           <span className="text-cobeb-text font-semibold text-sm">{a.placa_cavalo ?? '—'}</span>
                           {a.placa_carreta && <span className="text-slate-500 text-xs font-mono">/ {a.placa_carreta}</span>}
                         </div>
-                        {a.tipo === 'marketplace'
+                        {tipoBadge(a.tipo)
                           ? <div className="text-right">
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-orange-600 block">Marketplace</span>
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border block ${tipoBadge(a.tipo).cls}`}>{tipoBadge(a.tipo).label}</span>
                               {a.numero_nf && <span className="text-cobeb-yellow text-xs font-mono font-semibold">NF {a.numero_nf}</span>}
                             </div>
                           : <div className="text-right space-y-0.5">
@@ -463,8 +524,8 @@ export default function PortariaPage() {
                             <CheckCircle size={14} className="text-green-400 shrink-0" />
                             <span className="text-cobeb-text text-sm font-semibold font-mono">{a.placa_cavalo ?? '—'}</span>
                             {a.placa_carreta && <span className="text-slate-500 text-xs font-mono truncate">/ {a.placa_carreta}</span>}
-                            {a.tipo === 'marketplace'
-                              ? <><span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-orange-50 border border-orange-200 text-orange-600">Mkt</span>{a.numero_nf && <span className="text-slate-400 text-xs">NF {a.numero_nf}</span>}</>
+                            {tipoBadge(a.tipo)
+                              ? <><span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${tipoBadge(a.tipo).cls}`}>{tipoBadge(a.tipo).abbr}</span>{a.numero_nf && <span className="text-slate-400 text-xs">NF {a.numero_nf}</span>}</>
                               : <>
                                   {a.numero_nf_saida && <span className="text-[10px] text-slate-400 font-mono">Saída:{a.numero_nf_saida}</span>}
                                   {a.numero_nf && <span className="text-slate-400 text-xs">{a.numero_nf_saida ? ' Ent.:' : 'NF '}{a.numero_nf}</span>}
