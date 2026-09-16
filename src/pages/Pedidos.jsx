@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   ChevronDown, ChevronUp, X, Search, RefreshCw,
   CheckCircle, Clock, Package, AlertTriangle, RotateCcw,
-  Unlink2,
+  Unlink2, Truck,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -50,6 +50,12 @@ export default function Pedidos() {
 
   // ação (furo ou realizado)
   const [showAcaoModal, setShowAcaoModal] = useState(null)
+
+  // vincular a viagem em trânsito
+  const [showVincularViagem,  setShowVincularViagem]  = useState(null)
+  const [viagensTransito,     setViagensTransito]     = useState([])
+  const [loadingViagens,      setLoadingViagens]      = useState(false)
+  const [vinculandoViagemId,  setVinculandoViagemId]  = useState(null)
 
   useEffect(() => { loadData() }, [])
 
@@ -208,6 +214,41 @@ export default function Pedidos() {
       }
       return
     }
+    loadData()
+  }
+
+  // ── vincular a viagem em trânsito ───────────────────────────────────────────
+
+  async function abrirVincularViagem(grupo) {
+    setShowVincularViagem(grupo)
+    setViagensTransito([])
+    setLoadingViagens(true)
+    const { data } = await supabase
+      .from('viagens')
+      .select('id, cavalo:cavalos(placa), carreta:carretas(placa), motorista:profiles(nome), unidade:unidades(nome, codigo)')
+      .eq('status', 'em_transito')
+      .order('created_at', { ascending: false })
+    setViagensTransito(data ?? [])
+    setLoadingViagens(false)
+  }
+
+  async function vincularPedidoViagem(viagem_id) {
+    if (!showVincularViagem) return
+    setVinculandoViagemId(viagem_id)
+    const { error } = await supabase.rpc('admin_vincular_pedido_viagem', {
+      p_numero_pedido: showVincularViagem.numero_pedido,
+      p_viagem_id:     viagem_id,
+    })
+    setVinculandoViagemId(null)
+    if (error) {
+      if (error.message?.includes('Pedido já vinculado')) {
+        alert('Este pedido já está vinculado a outra viagem.')
+      } else {
+        alert('Erro ao vincular: ' + error.message)
+      }
+      return
+    }
+    setShowVincularViagem(null)
     loadData()
   }
 
@@ -560,7 +601,20 @@ export default function Pedidos() {
           grupo={showAcaoModal}
           onFuro={() => { const g = showAcaoModal; setShowAcaoModal(null); marcarFuro(g) }}
           onVincular={() => { const g = showAcaoModal; setShowAcaoModal(null); marcarRealizado(g) }}
+          onVincularViagem={() => { const g = showAcaoModal; setShowAcaoModal(null); abrirVincularViagem(g) }}
           onCancelar={() => setShowAcaoModal(null)}
+        />
+      )}
+
+      {/* ── Modal: selecionar viagem em trânsito ── */}
+      {showVincularViagem && (
+        <ModalSelecionarViagem
+          grupo={showVincularViagem}
+          viagens={viagensTransito}
+          loading={loadingViagens}
+          vinculandoId={vinculandoViagemId}
+          onVincular={vincularPedidoViagem}
+          onCancelar={() => setShowVincularViagem(null)}
         />
       )}
 
@@ -618,7 +672,7 @@ function ModalConfirmDesvincular({ grupo, desvinculando, onConfirmar, onCancelar
 
 // ── Modal: registrar situação do pedido (furo ou realizado) ───────────────────
 
-function ModalAcaoPedido({ grupo, onFuro, onVincular, onCancelar }) {
+function ModalAcaoPedido({ grupo, onFuro, onVincular, onVincularViagem, onCancelar }) {
   const isPast = grupo.data_puxada < isoToday()
 
   return (
@@ -647,6 +701,19 @@ function ModalAcaoPedido({ grupo, onFuro, onVincular, onCancelar }) {
             </div>
           </button>
 
+          <button
+            onClick={onVincularViagem}
+            className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl border border-cobeb-border bg-white hover:border-cobeb-blue/50 hover:bg-[#EBF5FF] transition-all text-left"
+          >
+            <div className="w-10 h-10 rounded-xl bg-cobeb-navy/10 flex items-center justify-center shrink-0">
+              <Truck size={20} className="text-cobeb-navy" />
+            </div>
+            <div>
+              <p className="text-cobeb-text font-semibold text-sm">Vincular a viagem em trânsito</p>
+              <p className="text-slate-500 text-xs mt-0.5">O motorista esqueceu de vincular — o pedido vai aparecer no app dele</p>
+            </div>
+          </button>
+
           {isPast && (
             <button
               onClick={onFuro}
@@ -666,6 +733,75 @@ function ModalAcaoPedido({ grupo, onFuro, onVincular, onCancelar }) {
         <button
           onClick={onCancelar}
           className="w-full bg-[#EBF5FF] border border-cobeb-border text-slate-400 font-semibold py-4 rounded-2xl text-sm transition-colors hover:bg-slate-100"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal: selecionar viagem em trânsito ──────────────────────────────────────
+
+function ModalSelecionarViagem({ grupo, viagens, loading, vinculandoId, onVincular, onCancelar }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
+      <div className="w-full max-w-lg mx-auto bg-white rounded-t-3xl px-5 pt-4 pb-8 flex flex-col max-h-[80vh]">
+        <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto mb-4 shrink-0" />
+
+        <div className="text-center mb-4 shrink-0">
+          <p className="text-cobeb-text font-semibold text-base">Selecionar viagem em trânsito</p>
+          <p className="text-slate-500 text-xs mt-1">Pedido #{grupo.numero_pedido} · {grupo.fabrica}</p>
+        </div>
+
+        {loading ? (
+          <div className="flex justify-center py-10">
+            <div className="w-7 h-7 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : viagens.length === 0 ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-8 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
+              <Truck size={20} className="text-slate-400" />
+            </div>
+            <p className="text-cobeb-text font-semibold text-sm">Nenhuma viagem em trânsito</p>
+            <p className="text-slate-500 text-xs mt-1 max-w-xs">
+              Não há motoristas em trânsito no momento. Aguarde o motorista iniciar a viagem.
+            </p>
+          </div>
+        ) : (
+          <div className="overflow-y-auto flex-1 space-y-2 mb-2">
+            {viagens.map(v => {
+              const placas = [v.cavalo?.placa, v.carreta?.placa].filter(Boolean).join(' / ')
+              const unidadeLabel = v.unidade?.codigo ?? v.unidade?.nome ?? null
+              const isLinking = vinculandoId === v.id
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => !vinculandoId && onVincular(v.id)}
+                  disabled={!!vinculandoId}
+                  className="w-full flex items-center gap-3 px-4 py-4 rounded-2xl border border-cobeb-border bg-white hover:border-cobeb-blue/40 hover:bg-[#EBF5FF]/60 transition-all text-left disabled:opacity-60"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-cobeb-navy/10 flex items-center justify-center shrink-0">
+                    {isLinking
+                      ? <div className="w-4 h-4 border-2 border-cobeb-navy/40 border-t-cobeb-navy rounded-full animate-spin" />
+                      : <Truck size={18} className="text-cobeb-navy" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-cobeb-text font-semibold text-sm font-mono">{placas || '—'}</p>
+                    <p className="text-slate-500 text-xs mt-0.5 truncate">
+                      {v.motorista?.nome ?? '—'}{unidadeLabel ? ` · ${unidadeLabel}` : ''}
+                    </p>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        )}
+
+        <button
+          onClick={onCancelar}
+          disabled={!!vinculandoId}
+          className="mt-4 shrink-0 w-full bg-[#EBF5FF] border border-cobeb-border text-slate-400 font-semibold py-4 rounded-2xl text-sm transition-colors hover:bg-slate-100 disabled:opacity-50"
         >
           Cancelar
         </button>
