@@ -75,20 +75,21 @@ export default function PortariaPage() {
   const [criando,          setCriando]          = useState(false)
 
   const carregar = useCallback(async (silent = false) => {
-    if (!profile?.acesso_total && !profile?.unidade_id) return
+    const verTodas = profile?.acesso_total || profile?.todas_unidades
+    if (!verTodas && !profile?.unidade_id) return
     if (!silent) setLoading(true)
     let q = supabase
       .from('portaria_atendimentos')
       .select('*, agendamento:agendamentos(bloco, tipo_dia, data_agendamento)')
       .is('excluido_em', null)
       .order('created_at', { ascending: false })
-    if (!profile?.acesso_total) {
+    if (!verTodas) {
       q = q.eq('unidade_id', profile.unidade_id)
     }
     const { data } = await q
     setAtendimentos(data ?? [])
     if (!silent) setLoading(false)
-  }, [profile?.unidade_id, profile?.acesso_total])
+  }, [profile?.unidade_id, profile?.acesso_total, profile?.todas_unidades])
 
   useEffect(() => { carregar() }, [carregar])
 
