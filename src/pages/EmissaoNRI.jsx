@@ -127,7 +127,11 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
     try {
       if (!validar()) return
 
-      const totalNRIs = grupos.reduce((s, gr) => s + Math.ceil(Number(gr.qtdePaletes)) * 3, 0)
+      // KEG: 1 NRI por unidade. Demais: 3 NRIs por palete.
+      const totalNRIs = grupos.reduce((s, gr) => {
+        const q = Math.ceil(Number(gr.qtdePaletes))
+        return s + (gr.isKeg ? q : q * 3)
+      }, 0)
       const { data: primeiro, error } = await supabase.rpc('get_next_nri_batch', { p_quantidade: totalNRIs })
       if (error) throw error
 
@@ -143,6 +147,7 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
             qtdeCaixas:   gr.qtdeCaixas ?? null,
             dataValidade: gr.dataValidade,
             curva:        gr.curva ?? null,
+            isKeg:        gr.isKeg ?? false,
           })),
         } : {}),
       })
@@ -151,9 +156,17 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
       const allNRIs = []
       let num = primeiro
       for (const gr of grupos) {
-        for (let p = 0; p < Math.ceil(Number(gr.qtdePaletes)); p++) {
-          for (let n = 0; n < 3; n++) {
-            allNRIs.push({ numero: num++, codigo: gr.codigo, descricao: gr.descricao, dataValidade: gr.dataValidade, curva: gr.curva ?? '' })
+        const count = Math.ceil(Number(gr.qtdePaletes))
+        if (gr.isKeg) {
+          // 1 NRI por barril; cada NRI representa 1 unidade individual
+          for (let u = 0; u < count; u++) {
+            allNRIs.push({ numero: num++, codigo: gr.codigo, descricao: gr.descricao, dataValidade: gr.dataValidade, curva: gr.curva ?? '', isKeg: true })
+          }
+        } else {
+          for (let p = 0; p < count; p++) {
+            for (let n = 0; n < 3; n++) {
+              allNRIs.push({ numero: num++, codigo: gr.codigo, descricao: gr.descricao, dataValidade: gr.dataValidade, curva: gr.curva ?? '' })
+            }
           }
         }
       }
@@ -194,7 +207,10 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
     }
   }
 
-  const totalNRIs   = grupos.reduce((s, gr) => s + (Number(gr.qtdePaletes) > 0 ? Math.ceil(Number(gr.qtdePaletes)) * 3 : 0), 0)
+  const totalNRIs   = grupos.reduce((s, gr) => {
+    const q = Number(gr.qtdePaletes) > 0 ? Math.ceil(Number(gr.qtdePaletes)) : 0
+    return s + (gr.isKeg ? q : q * 3)
+  }, 0)
   const totalFolhas = Math.ceil(totalNRIs / 3)
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -275,15 +291,19 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
                   <div className="flex items-center justify-between px-4 py-3 border-b border-cobeb-border/60 bg-[#EBF5FF]/50">
                     <span className="text-[11px] font-semibold text-cobeb-navy">Produto {idx + 1}</span>
                     <div className="flex items-center gap-2">
-                      <div className="flex rounded-lg border border-cobeb-border overflow-hidden text-[10px] font-bold">
-                        {['PLT', 'CX'].map(u => (
-                          <button key={u} type="button"
-                            onClick={() => updateGrupo(idx, 'unidade', u)}
-                            className={`px-2.5 py-1 transition-colors ${gr.unidade === u ? 'bg-cobeb-navy text-white' : 'bg-white text-slate-500 hover:bg-[#EBF5FF]'}`}>
-                            {u}
-                          </button>
-                        ))}
-                      </div>
+                      {gr.isKeg ? (
+                        <span className="px-2.5 py-1 text-[10px] font-bold bg-cobeb-navy text-white rounded-lg">UND</span>
+                      ) : (
+                        <div className="flex rounded-lg border border-cobeb-border overflow-hidden text-[10px] font-bold">
+                          {['PLT', 'CX'].map(u => (
+                            <button key={u} type="button"
+                              onClick={() => updateGrupo(idx, 'unidade', u)}
+                              className={`px-2.5 py-1 transition-colors ${gr.unidade === u ? 'bg-cobeb-navy text-white' : 'bg-white text-slate-500 hover:bg-[#EBF5FF]'}`}>
+                              {u}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                       {grupos.length > 1 && (
                         <button onClick={() => setGrupos(g => g.filter((_, i) => i !== idx))} className="text-slate-400 hover:text-red-400 transition-colors p-1">
                           <X size={14} />
@@ -313,7 +333,7 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
                     </div>
                     <div>
                       <label className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 block mb-1.5">
-                        {gr.unidade === 'CX' ? 'Qtde de Caixas' : 'Qtde de Paletes'} <span className="text-cobeb-yellow">*</span>
+                        {gr.isKeg ? 'Qtde de Unidades' : gr.unidade === 'CX' ? 'Qtde de Caixas' : 'Qtde de Paletes'} <span className="text-cobeb-yellow">*</span>
                       </label>
                       {gr.unidade === 'CX' ? (
                         <div className="space-y-1.5">
@@ -336,9 +356,13 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
                         <div className="flex items-center gap-3">
                           <input type="number" min="1" step="1" value={gr.qtdePaletes} onChange={e => updateGrupo(idx, 'qtdePaletes', e.target.value)} placeholder="0"
                             className={`w-24 bg-[#EBF5FF] border rounded-xl px-3 py-2.5 text-xs text-right text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors ${gr.erroQtd ? 'border-red-400' : 'border-cobeb-border'}`} />
-                          <span className="text-slate-500 text-xs">plt</span>
-                          {gr.qtdeCaixas !== null && <span className="text-slate-400 text-xs">= {gr.qtdeCaixas.toLocaleString('pt-BR')} cx</span>}
-                          {gr.qtdePaletes && Number(gr.qtdePaletes) > 0 && <span className="text-cobeb-navy/60 text-[10px] ml-auto">→ {Math.ceil(Number(gr.qtdePaletes)) * 3} NRIs</span>}
+                          <span className="text-slate-500 text-xs">{gr.isKeg ? 'un' : 'plt'}</span>
+                          {!gr.isKeg && gr.qtdeCaixas !== null && <span className="text-slate-400 text-xs">= {gr.qtdeCaixas.toLocaleString('pt-BR')} cx</span>}
+                          {gr.qtdePaletes && Number(gr.qtdePaletes) > 0 && (
+                            <span className="text-cobeb-navy/60 text-[10px] ml-auto">
+                              → {gr.isKeg ? Math.ceil(Number(gr.qtdePaletes)) : Math.ceil(Number(gr.qtdePaletes)) * 3} NRIs
+                            </span>
+                          )}
                         </div>
                       )}
                       {gr.erroQtd && <p className="text-red-400 text-[10px] mt-1">Informe uma quantidade válida</p>}

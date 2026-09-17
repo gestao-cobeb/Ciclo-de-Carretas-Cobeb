@@ -339,8 +339,33 @@ export default function Tarefas() {
         .filter(it => pedidoMap[it.pedido_id])
         .map(it => {
           const p        = pedidoMap[it.pedido_id]
+          const isKeg    = p.embalagem === '013 - BARRIL KEG'
           const cxPallet = (p.qtde_pallets > 0) ? p.qtde_skus / p.qtde_pallets : null
           const qtd      = Number(it.qtde_recebida)
+
+          if (isKeg) {
+            // Conferente lança em unidades (modo CX); qtde_recebida fica em fração
+            // de palete. Convertemos de volta para obter a contagem de barris reais.
+            const units = cxPallet ? Math.round(qtd * cxPallet) : Math.round(qtd)
+            return {
+              _id:          uid(),
+              isKeg:        true,
+              codigo:       p.cod_produto ?? '',
+              descricao:    p.descricao,
+              cxPallet,
+              qtdePaletes:  String(units > 0 ? units : 0),
+              qtdeCaixas:   null,
+              unidade:      'UND',
+              qtdaCxInput:  '',
+              dataValidade: it.data_validade ?? '',
+              curva:        p.curva ?? null,
+              buscando:     false,
+              erroCodigo:   null,
+              erroQtd:      false,
+              erroData:     false,
+            }
+          }
+
           return {
             _id:          uid(),
             codigo:       p.cod_produto ?? '',
