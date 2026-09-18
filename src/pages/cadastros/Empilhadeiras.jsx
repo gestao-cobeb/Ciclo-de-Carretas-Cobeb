@@ -4,33 +4,35 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import Modal from '../../components/Modal'
 import { Field, inputClass, selectClass, gerarSenha } from '../../lib/form'
+import { MODULOS } from '../SeletorModulo'
 
 export default function Empilhadeiras() {
   const { profile: meProfile } = useAuth()
   const isAdminTotal = meProfile?.acesso_total === true
-  const [lista,       setLista]       = useState([])
-  const [confirmar,   setConfirmar]   = useState(null)
-  const [excluindo,   setExcluindo]   = useState(false)
-  const [unidades,    setUnidades]    = useState([])
-  const [loading,     setLoading]     = useState(true)
-  const [busca,       setBusca]       = useState('')
-  const [modal,       setModal]       = useState(false)
-  const [editando,    setEditando]    = useState(null)
-  const [nome,        setNome]        = useState('')
-  const [emailUser,   setEmailUser]   = useState('')
-  const [telefone,    setTelefone]    = useState('')
-  const [unidadeId,   setUnidadeId]   = useState('')
-  const [senha,       setSenha]       = useState('')
-  const [salvando,    setSalvando]    = useState(false)
-  const [erro,        setErro]        = useState('')
-  const [senhaCriada, setSenhaCriada] = useState('')
-  const [copiado,     setCopiado]     = useState(false)
+  const [lista,             setLista]             = useState([])
+  const [confirmar,         setConfirmar]         = useState(null)
+  const [excluindo,         setExcluindo]         = useState(false)
+  const [unidades,          setUnidades]          = useState([])
+  const [loading,           setLoading]           = useState(true)
+  const [busca,             setBusca]             = useState('')
+  const [modal,             setModal]             = useState(false)
+  const [editando,          setEditando]          = useState(null)
+  const [nome,              setNome]              = useState('')
+  const [emailUser,         setEmailUser]         = useState('')
+  const [telefone,          setTelefone]          = useState('')
+  const [unidadeId,         setUnidadeId]         = useState('')
+  const [senha,             setSenha]             = useState('')
+  const [modulosPermitidos, setModulosPermitidos] = useState([])
+  const [salvando,          setSalvando]          = useState(false)
+  const [erro,              setErro]              = useState('')
+  const [senhaCriada,       setSenhaCriada]       = useState('')
+  const [copiado,           setCopiado]           = useState(false)
 
   const carregar = async () => {
     setLoading(true)
     const [{ data: emps }, { data: unids }] = await Promise.all([
       supabase.from('profiles')
-        .select('id, nome, email, telefone, ativo, unidade:unidades(id, nome, cidade)')
+        .select('id, nome, email, telefone, ativo, modulos_permitidos, unidade:unidades(id, nome, cidade)')
         .eq('perfil', 'empilheira').order('nome'),
       supabase.from('unidades').select('id, nome, cidade').eq('ativo', true).order('nome'),
     ])
@@ -45,6 +47,7 @@ export default function Empilhadeiras() {
     setEditando(null)
     setNome(''); setEmailUser(''); setTelefone('')
     setUnidadeId(unidades[0]?.id || '')
+    setModulosPermitidos([])
     setSenha(gerarSenha()); setErro(''); setSenhaCriada(''); setCopiado(false)
     setModal(true)
   }
@@ -53,8 +56,15 @@ export default function Empilhadeiras() {
     setEditando(c)
     setNome(c.nome); setEmailUser(c.email?.split('@')[0] || ''); setTelefone(c.telefone || '')
     setUnidadeId(c.unidade?.id || '')
+    setModulosPermitidos(c.modulos_permitidos || [])
     setSenha(''); setErro(''); setSenhaCriada(''); setCopiado(false)
     setModal(true)
+  }
+
+  const toggleModulo = (key) => {
+    setModulosPermitidos(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    )
   }
 
   const fechar  = () => { setModal(false); setEditando(null); setSenhaCriada('') }
@@ -68,7 +78,7 @@ export default function Empilhadeiras() {
 
     if (editando) {
       const { error } = await supabase.from('profiles')
-        .update({ nome, telefone, unidade_id: unidadeId }).eq('id', editando.id)
+        .update({ nome, telefone, unidade_id: unidadeId, modulos_permitidos: modulosPermitidos.length ? modulosPermitidos : null }).eq('id', editando.id)
       if (error) setErro(error.message)
       else { await carregar(); fechar() }
     } else {
@@ -81,6 +91,7 @@ export default function Empilhadeiras() {
       const { error: profileErr } = await supabase.from('profiles').insert({
         id: userId, nome, email: emailCompleto, telefone,
         perfil: 'empilheira', unidade_id: unidadeId, primeiro_acesso: true,
+        modulos_permitidos: modulosPermitidos.length ? modulosPermitidos : null,
       })
       if (profileErr) { setErro(profileErr.message); setSalvando(false); return }
 
@@ -214,6 +225,38 @@ export default function Empilhadeiras() {
                   ))}
                 </select>
               </Field>
+              <div>
+                <p className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-2">
+                  Módulos adicionais
+                </p>
+                <p className="text-slate-400 text-xs mb-2">
+                  Sem seleção, o operador abre direto no Painel Tempo Real. Com módulos, vê o seletor ao entrar.
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {MODULOS.map(m => {
+                    const checked = modulosPermitidos.includes(m.key)
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => toggleModulo(m.key)}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border text-left text-xs font-medium transition-colors ${
+                          checked
+                            ? 'bg-cobeb-navy/10 border-cobeb-navy text-cobeb-navy'
+                            : 'bg-[#EBF5FF] border-cobeb-border text-slate-500'
+                        }`}
+                      >
+                        <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 ${
+                          checked ? 'bg-cobeb-navy border-cobeb-navy' : 'border-cobeb-border bg-white'
+                        }`}>
+                          {checked && <CheckCircle size={11} className="text-white" />}
+                        </span>
+                        {m.label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
               {!editando && <SenhaDisplay senha={senha} copiado={copiado} onCopy={() => copiar(senha)} />}
               {editando && (
                 <div className="space-y-2">
