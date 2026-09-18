@@ -32,7 +32,7 @@ function newGrupo() {
 
 const isMarketplace = (tarefa) => tarefa?.tipo === 'marketplace'
 
-export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciais, onVoltar }) {
+export default function EmissaoNRI({ tarefa, pedidos, profileNome, profileId, gruposIniciais, onVoltar }) {
   const [cab, setCab]           = useState({ operador: '', conferente: profileNome, turno: '' })
   const [grupos, setGrupos]     = useState(() =>
     gruposIniciais?.length > 0 ? gruposIniciais : [newGrupo()]
@@ -152,6 +152,22 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, gruposIniciai
         } : {}),
       })
       if (errInsert) throw errInsert
+
+      // Cria tarefa para o operador organizar os paletes — fire and forget
+      if (tarefa.unidade_id) {
+        const totalPaletes = grupos.reduce((s, gr) => s + Math.ceil(Number(gr.qtdePaletes) || 0), 0)
+        supabase.from('tarefas_operador').insert({
+          unidade_id:         tarefa.unidade_id,
+          placa_cavalo:       placaCavalo || null,
+          placa_carreta:      placaCarreta || null,
+          numero_nf:          tarefa.numero_nf || null,
+          quantidade_paletes: totalPaletes || null,
+          conferente_id:      profileId || null,
+          conferente_nome:    cab.conferente.trim() || null,
+        }).then(({ error }) => {
+          if (error) console.error('Erro ao criar tarefa operador:', error)
+        })
+      }
 
       const allNRIs = []
       let num = primeiro

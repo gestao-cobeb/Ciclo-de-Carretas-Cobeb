@@ -578,6 +578,7 @@ export default function Tarefas() {
         tarefa={tarefaSel}
         pedidos={pedidos}
         profileNome={profile?.nome ?? ''}
+        profileId={profile?.id}
         gruposIniciais={gruposNRI}
         onVoltar={voltarLista}
       />
