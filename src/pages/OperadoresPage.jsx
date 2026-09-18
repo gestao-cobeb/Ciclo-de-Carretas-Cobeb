@@ -1,10 +1,9 @@
-import { Forklift } from 'lucide-react'
+import { Forklift, LayoutGrid, LogOut } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { useNavigate } from 'react-router-dom'
-import { LogOut, ChevronLeft } from 'lucide-react'
 
 export default function OperadoresPage() {
-  const { profile, signOut, setModoVisao } = useAuth()
+  const { signOut, modoVisao, setModoVisao } = useAuth()
   const navigate = useNavigate()
 
   const handleSair = async () => {
@@ -12,35 +11,33 @@ export default function OperadoresPage() {
     navigate('/login', { replace: true })
   }
 
-  const handleVoltar = () => {
-    setModoVisao(null)
-    navigate('/selecionar-modulo', { replace: true })
-  }
-
   return (
     <div className="min-h-screen bg-[#EBF5FF] flex flex-col">
       <header className="sticky top-0 z-40 bg-cobeb-navy px-3 py-3 sm:px-5 sm:py-4 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
-        <div className="flex items-center gap-3">
+        <img
+          src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
+          alt="COBEB Distribuidora"
+          className="h-7 sm:h-9 w-auto object-contain"
+          style={{ opacity: 0.92 }}
+        />
+        <div className="flex items-center gap-1">
+          {modoVisao && (
+            <button
+              onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
+              className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
+              title="Trocar Módulo"
+            >
+              <LayoutGrid size={18} />
+            </button>
+          )}
           <button
-            onClick={handleVoltar}
-            className="flex items-center gap-1.5 text-blue-300/70 hover:text-white text-xs transition-colors p-1.5 rounded-lg hover:bg-white/10"
+            onClick={handleSair}
+            className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
+            title="Sair"
           >
-            <ChevronLeft size={16} />
+            <LogOut size={16} />
           </button>
-          <img
-            src={`${import.meta.env.BASE_URL}logos/logo-cobeb-v2.png`}
-            alt="COBEB Distribuidora"
-            className="h-7 sm:h-9 w-auto object-contain"
-            style={{ opacity: 0.92 }}
-          />
         </div>
-        <button
-          onClick={handleSair}
-          className="flex items-center gap-2 text-blue-300/70 hover:text-white text-xs transition-colors p-1.5 rounded-lg hover:bg-white/10"
-        >
-          <LogOut size={16} />
-          <span className="hidden sm:inline">Sair</span>
-        </button>
       </header>
 
       <main className="flex-1 flex flex-col items-center justify-center px-5 pb-16">
