@@ -66,9 +66,11 @@ export default function OperadoresPage() {
 
   // ── Carga ────────────────────────────────────────────────────────────────────
 
+  const verTodas = profile?.acesso_total || profile?.todas_unidades
+
   const loadTarefas = async (silent = false) => {
     if (!silent) setLoading(true)
-    if (!profile?.acesso_total && !profile?.unidade_id) {
+    if (!verTodas && !profile?.unidade_id) {
       setTarefas([])
       if (!silent) setLoading(false)
       return
@@ -79,7 +81,7 @@ export default function OperadoresPage() {
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (!profile?.acesso_total) {
+    if (!verTodas) {
       q = q.eq('unidade_id', profile.unidade_id)
     }
 
