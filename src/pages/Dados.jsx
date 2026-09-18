@@ -43,8 +43,9 @@ const COLS = [
   { label: 'Chegada Fábrica',    key: 'dt_chegada_fabrica',   min: 128 },
   { label: 'Saída Fábrica',      key: 'dt_saida_fabrica',     min: 128 },
   { label: 'Chegada Revenda',    key: 'dt_chegada_revenda',   min: 128 },
-  { label: 'Entrada Portaria',   key: 'dt_entrada',           min: 128 },
-  { label: 'Início Conferência', key: 'dt_inicio_conf',       min: 128 },
+  { label: 'Entrada Portaria',      key: 'dt_entrada',           min: 128 },
+  { label: 'Finalização Descarga', key: 'dt_descarga',          min: 128 },
+  { label: 'Início Conferência',   key: 'dt_inicio_conf',       min: 128 },
   { label: 'Fim Conferência',    key: 'dt_fim_conf',          min: 128 },
   { label: 'Início Operador',    key: 'dt_inicio_op',         min: 128 },
   { label: 'Fim Operador',       key: 'dt_fim_op',            min: 128 },
@@ -55,6 +56,7 @@ const COLS = [
   { label: 'TMA Fábrica',        key: 'tma_fab',              min: 90  },
   { label: 'TMA Revenda',        key: 'tma_rev',              min: 90  },
   { label: 'Aguardo (fila)',     key: 'aguardo',              min: 100 },
+  { label: 'Descarga',           key: 'tempo_descarga',       min: 90  },
   { label: 'Conferência',        key: 'tempo_conf',           min: 95  },
   { label: 'Operador',           key: 'tempo_op',             min: 90  },
   { label: 'TMV',                key: 'tmv',                  min: 72  },
@@ -62,7 +64,7 @@ const COLS = [
 
 const METRIC_KEYS = new Set([
   'trecho_rev_fab', 'trecho_fab_rev',
-  'tma_fab', 'tma_rev', 'aguardo', 'tempo_conf', 'tempo_op', 'tmv',
+  'tma_fab', 'tma_rev', 'aguardo', 'tempo_descarga', 'tempo_conf', 'tempo_op', 'tmv',
 ])
 
 const TABLE_MIN_WIDTH = COLS.reduce((s, c) => s + c.min, 0)
@@ -84,6 +86,7 @@ function cellValue(row, key) {
     case 'dt_saida_fabrica':   return fmtTs(row.dt_saida_fabrica)
     case 'dt_chegada_revenda': return fmtTs(row.dt_chegada_revenda)
     case 'dt_entrada':         return fmtTs(p?.dt_entrada)
+    case 'dt_descarga':        return fmtTs(row._operador?.descarga_at)
     case 'dt_inicio_conf':     return fmtTs(t?.dt_inicio_conferencia)
     case 'dt_fim_conf':        return fmtTs(t?.dt_fim_conferencia)
     case 'dt_inicio_op':        return fmtTs(row._operador?.inicio_at)
@@ -94,7 +97,8 @@ function cellValue(row, key) {
     case 'trecho_fab_rev':     return diffHHMM(row.dt_saida_fabrica,    row.dt_chegada_revenda)
     case 'tma_fab':            return diffHHMM(row.dt_chegada_fabrica,  row.dt_saida_fabrica)
     case 'tma_rev':            return diffHHMM(row.dt_chegada_revenda,  p?.dt_saida)
-    case 'aguardo':            return diffHHMM(row.dt_chegada_revenda,  p?.dt_entrada)
+    case 'aguardo':            return diffHHMM(row.dt_chegada_revenda,   p?.dt_entrada)
+    case 'tempo_descarga':     return diffHHMM(p?.dt_entrada,            row._operador?.descarga_at)
     case 'tempo_conf':         return diffHHMM(t?.dt_inicio_conferencia, t?.dt_fim_conferencia)
     case 'tempo_op':           return diffHHMM(row._operador?.inicio_at, row._operador?.fim_at)
     case 'tmv':                return diffHHMM(row.dt_saida_revenda,    p?.dt_saida)
@@ -173,9 +177,9 @@ export default function Dados() {
     if (nfList.length) {
       const { data: opRows } = await supabase
         .from('tarefas_operador')
-        .select('numero_nf, unidade_id, inicio_at, fim_at, status')
+        .select('numero_nf, unidade_id, inicio_at, fim_at, descarga_at, status')
         .in('numero_nf', nfList)
-      const rank = { concluido: 2, em_andamento: 1, pendente: 0 }
+      const rank = { concluido: 4, em_andamento: 3, pendente: 2, aguardando_nri: 1, aguardando_descarga: 0 }
       ;(opRows ?? []).forEach(op => {
         if (!op.numero_nf || !op.unidade_id) return
         const key  = `${op.numero_nf}_${op.unidade_id}`

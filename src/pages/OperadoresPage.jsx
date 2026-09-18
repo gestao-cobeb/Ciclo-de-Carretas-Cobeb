@@ -118,14 +118,15 @@ export default function OperadoresPage() {
 
   const confirmarDescarga = async (tarefa) => {
     setAgindo(tarefa.id)
+    const descarga_at = new Date().toISOString()
     const { error } = await supabase
       .from('tarefas_operador')
-      .update({ status: 'aguardando_nri' })
+      .update({ status: 'aguardando_nri', descarga_at })
       .eq('id', tarefa.id)
     setAgindo(null)
     if (!error) {
       setTarefas(prev => prev.map(t =>
-        t.id === tarefa.id ? { ...t, status: 'aguardando_nri' } : t
+        t.id === tarefa.id ? { ...t, status: 'aguardando_nri', descarga_at } : t
       ))
     }
     setConfirmando(null)
