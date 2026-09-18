@@ -68,12 +68,18 @@ export default function OperadoresPage() {
 
   const loadTarefas = async (silent = false) => {
     if (!silent) setLoading(true)
+    if (!profile?.acesso_total && !profile?.unidade_id) {
+      setTarefas([])
+      if (!silent) setLoading(false)
+      return
+    }
+
     let q = supabase
       .from('tarefas_operador')
       .select('*')
       .order('created_at', { ascending: false })
 
-    if (!profile?.acesso_total && profile?.unidade_id) {
+    if (!profile?.acesso_total) {
       q = q.eq('unidade_id', profile.unidade_id)
     }
 
