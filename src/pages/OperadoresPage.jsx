@@ -228,7 +228,6 @@ export default function OperadoresPage() {
             <div className="space-y-3">
               {tarefasFiltradas.map(tarefa => {
                 const cfg = STATUS_CFG[tarefa.status] ?? STATUS_CFG.pendente
-                const placas = [tarefa.placa_cavalo, tarefa.placa_carreta].filter(Boolean).join(' / ')
                 return (
                   <div key={tarefa.id} className={`rounded-2xl border overflow-hidden ${cfg.bg} ${cfg.border}`}>
                     <div className="px-4 py-3">
@@ -239,16 +238,21 @@ export default function OperadoresPage() {
                           <span className="text-cobeb-text font-semibold text-sm">
                             {tarefa.numero_nf ? `NF ${tarefa.numero_nf}` : 'Sem NF'}
                           </span>
+                          {tarefa.placa_cavalo && (
+                            <span className="text-cobeb-text font-semibold text-sm font-mono">
+                              {tarefa.placa_cavalo}
+                            </span>
+                          )}
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${cfg.color} ${cfg.border} bg-[#EBF5FF]/60`}>
                             {cfg.label}
                           </span>
                         </div>
 
-                        {/* Placas */}
-                        {placas && (
+                        {/* Placa carreta */}
+                        {tarefa.placa_carreta && (
                           <div className="flex items-center gap-1 text-xs text-slate-500 mb-1">
                             <Truck size={10} />
-                            <span className="font-mono text-[11px]">{placas}</span>
+                            <span className="font-mono text-[11px]">{tarefa.placa_carreta}</span>
                           </div>
                         )}
 
