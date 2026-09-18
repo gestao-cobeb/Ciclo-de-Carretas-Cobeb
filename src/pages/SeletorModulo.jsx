@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet } from 'lucide-react'
+import { LayoutDashboard, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet, Forklift } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -92,6 +92,17 @@ export const MODULOS = [
     borda:  'border-green-700/30',
     texto:  'text-green-800',
     fundo:  'bg-green-700/5 hover:bg-green-700/10',
+  },
+  {
+    key:    'operadores',
+    rota:   '/operadores',
+    label:  'Operadores',
+    desc:   'Gestão de operadores e empilhadeiras',
+    Icon:   Forklift,
+    cor:    'bg-amber-500',
+    borda:  'border-amber-500/30',
+    texto:  'text-amber-600',
+    fundo:  'bg-amber-500/5 hover:bg-amber-500/10',
   },
 ]
 

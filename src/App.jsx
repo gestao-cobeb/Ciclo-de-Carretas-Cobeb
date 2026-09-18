@@ -18,6 +18,7 @@ import SeletorModulo from './pages/SeletorModulo'
 import EstoqueRealtime from './pages/EstoqueRealtime'
 import AdminLayout from './components/AdminLayout'
 import Dados from './pages/Dados'
+import OperadoresPage from './pages/OperadoresPage'
 
 const PERFIL_ROTA = {
   admin:      '/dashboard',
@@ -36,6 +37,7 @@ const MODO_ROTA = {
   dados:       '/dados',
   cadastros:   '/cadastros',
   importacao:  '/importacao',
+  operadores:  '/operadores',
 }
 
 function Spinner() {
@@ -115,6 +117,9 @@ function AppRoutes() {
       />
       <Route path="/dados"
         element={<ProtectedRoute allowedRoles={['admin']}><Dados /></ProtectedRoute>}
+      />
+      <Route path="/operadores"
+        element={<ProtectedRoute allowedRoles={['admin']}><OperadoresPage /></ProtectedRoute>}
       />
 
       <Route path="/"  element={<Navigate to={home} replace />} />
