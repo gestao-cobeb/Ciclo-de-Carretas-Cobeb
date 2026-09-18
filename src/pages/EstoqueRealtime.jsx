@@ -451,14 +451,19 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
           )}
         </div>
 
-        {/* Linha 3: agendamentos fábrica e revenda */}
-        {(viagem.horario_agendado || viagem.agendamento_bloco) && (
+        {/* Linha 3: fábrica + agendamentos */}
+        {(viagem.fab_nome || viagem.horario_agendado || viagem.agendamento_bloco) && (
           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-            {viagem.horario_agendado && (
+            {(viagem.fab_nome || viagem.horario_agendado) && (
               <span className="flex items-center gap-1 text-[11px] font-semibold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
                 <Building2 size={9} />
-                Fáb. {viagem.horario_agendado}
-                {isAdminTotal && !editHorario && (
+                {viagem.fab_nome
+                  ? viagem.horario_agendado
+                    ? `${viagem.fab_nome} · ${viagem.horario_agendado}`
+                    : viagem.fab_nome
+                  : `Fáb. ${viagem.horario_agendado}`
+                }
+                {isAdminTotal && viagem.horario_agendado && !editHorario && (
                   <span
                     role="button"
                     tabIndex={0}
