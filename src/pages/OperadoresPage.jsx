@@ -25,9 +25,11 @@ function formatDuration(startIso, endIso) {
 }
 
 const STATUS_CFG = {
-  pendente:     { label: 'Pendente',     color: 'text-slate-500',  bg: 'bg-[#EBF5FF]',    border: 'border-cobeb-border' },
-  em_andamento: { label: 'Em Andamento', color: 'text-blue-400',   bg: 'bg-blue-500/10',  border: 'border-blue-500/40' },
-  concluido:    { label: 'Concluído',    color: 'text-green-400',  bg: 'bg-green-500/10', border: 'border-green-500/40' },
+  aguardando_descarga: { label: 'Aguardando Descarga', color: 'text-orange-500', bg: 'bg-orange-500/10', border: 'border-orange-500/40' },
+  aguardando_nri:      { label: 'Aguardando NRI',      color: 'text-blue-400',   bg: 'bg-blue-500/10',  border: 'border-blue-500/40'  },
+  pendente:            { label: 'Pendente',             color: 'text-slate-500',  bg: 'bg-[#EBF5FF]',    border: 'border-cobeb-border'  },
+  em_andamento:        { label: 'Em Andamento',         color: 'text-blue-400',   bg: 'bg-blue-500/10',  border: 'border-blue-500/40'  },
+  concluido:           { label: 'Concluído',            color: 'text-green-400',  bg: 'bg-green-500/10', border: 'border-green-500/40'  },
 }
 
 // ── Cronômetro ────────────────────────────────────────────────────────────────
@@ -114,6 +116,21 @@ export default function OperadoresPage() {
     setConfirmando(null)
   }
 
+  const confirmarDescarga = async (tarefa) => {
+    setAgindo(tarefa.id)
+    const { error } = await supabase
+      .from('tarefas_operador')
+      .update({ status: 'aguardando_nri' })
+      .eq('id', tarefa.id)
+    setAgindo(null)
+    if (!error) {
+      setTarefas(prev => prev.map(t =>
+        t.id === tarefa.id ? { ...t, status: 'aguardando_nri' } : t
+      ))
+    }
+    setConfirmando(null)
+  }
+
   const concluirOrganizacao = async (tarefa) => {
     setAgindo(tarefa.id)
     const fim_at = new Date().toISOString()
@@ -137,9 +154,11 @@ export default function OperadoresPage() {
     : tarefas
 
   const counts = {
-    pendente:     tarefas.filter(t => t.status === 'pendente').length,
-    em_andamento: tarefas.filter(t => t.status === 'em_andamento').length,
-    concluido:    tarefas.filter(t => t.status === 'concluido').length,
+    aguardando_descarga: tarefas.filter(t => t.status === 'aguardando_descarga').length,
+    aguardando_nri:      tarefas.filter(t => t.status === 'aguardando_nri').length,
+    pendente:            tarefas.filter(t => t.status === 'pendente').length,
+    em_andamento:        tarefas.filter(t => t.status === 'em_andamento').length,
+    concluido:           tarefas.filter(t => t.status === 'concluido').length,
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -188,10 +207,12 @@ export default function OperadoresPage() {
         <div className="bg-[#EBF5FF] border-b border-cobeb-border/40 px-4 py-2.5">
           <div className="max-w-lg mx-auto flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
             {[
-              { value: '',             label: 'Todas',        count: tarefas.length },
-              { value: 'pendente',     label: 'Pendentes',    count: counts.pendente },
-              { value: 'em_andamento', label: 'Em Andamento', count: counts.em_andamento },
-              { value: 'concluido',    label: 'Concluídas',   count: counts.concluido },
+              { value: '',                   label: 'Todas',        count: tarefas.length },
+              { value: 'aguardando_descarga', label: 'Descarga',     count: counts.aguardando_descarga },
+              { value: 'aguardando_nri',      label: 'Aguard. NRI',  count: counts.aguardando_nri },
+              { value: 'pendente',            label: 'Pendentes',    count: counts.pendente },
+              { value: 'em_andamento',        label: 'Em Andamento', count: counts.em_andamento },
+              { value: 'concluido',           label: 'Concluídas',   count: counts.concluido },
             ].map(({ value, label, count }) => {
               const active = filtroStatus === value
               return (
@@ -300,6 +321,24 @@ export default function OperadoresPage() {
                       </div>
 
                       {/* Botões de ação */}
+                      {tarefa.status === 'aguardando_descarga' && (
+                        <button
+                          onClick={() => setConfirmando({ tarefa, tipo: 'descarga' })}
+                          disabled={agindo === tarefa.id}
+                          className="w-full bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                        >
+                          {agindo === tarefa.id
+                            ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                            : <><Truck size={13} />Descarga finalizada</>}
+                        </button>
+                      )}
+
+                      {tarefa.status === 'aguardando_nri' && (
+                        <button disabled className="w-full bg-blue-500/20 border border-blue-500/30 text-blue-400 text-xs font-semibold py-2.5 rounded-xl flex items-center justify-center gap-1.5 cursor-not-allowed">
+                          <Clock size={13} />Aguardando conferência e NRI
+                        </button>
+                      )}
+
                       {tarefa.status === 'pendente' && (
                         <button
                           onClick={() => setConfirmando({ tarefa, tipo: 'iniciar' })}
@@ -340,12 +379,16 @@ export default function OperadoresPage() {
             <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto" />
             <div>
               <p className="text-cobeb-text font-semibold text-base">
-                {confirmando.tipo === 'iniciar'
+                {confirmando.tipo === 'descarga'
+                  ? 'Descarga finalizada?'
+                  : confirmando.tipo === 'iniciar'
                   ? 'Iniciar organização?'
                   : 'Os paletes foram organizados no balizador?'}
               </p>
               <p className="text-slate-500 text-sm mt-1">
-                {confirmando.tipo === 'iniciar'
+                {confirmando.tipo === 'descarga'
+                  ? 'Confirme quando o veículo tiver descarregado completamente.'
+                  : confirmando.tipo === 'iniciar'
                   ? 'O cronômetro será iniciado e a tarefa ficará em andamento.'
                   : 'Confirme apenas quando todos os paletes estiverem posicionados.'}
               </p>
@@ -359,7 +402,9 @@ export default function OperadoresPage() {
               </button>
               <button
                 onClick={() =>
-                  confirmando.tipo === 'iniciar'
+                  confirmando.tipo === 'descarga'
+                    ? confirmarDescarga(confirmando.tarefa)
+                    : confirmando.tipo === 'iniciar'
                     ? iniciarOrganizacao(confirmando.tarefa)
                     : concluirOrganizacao(confirmando.tarefa)
                 }

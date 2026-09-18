@@ -60,6 +60,7 @@ export default function Tarefas() {
   const [filtroStatus, setFiltroStatus]   = useState('')
   const [iniciando, setIniciando]         = useState(null)
   const [portariaMap, setPortariaMap]     = useState({}) // viagem_id → status portaria
+  const [operadorMap, setOperadorMap]     = useState({}) // placa_cavalo → status tarefas_operador
   const [verificando, setVerificando]     = useState(null)
 
   // conferência
@@ -110,7 +111,7 @@ export default function Tarefas() {
 
     const lista = data ?? []
 
-    // Busca status portaria para tarefas pendentes
+    // Busca status portaria para tarefas pendentes normais
     const viagemIds = lista
       .filter(t => t.status === 'pendente' && t.viagem?.id)
       .map(t => t.viagem.id)
@@ -125,6 +126,25 @@ export default function Tarefas() {
       viagemIds.forEach(id => { map[id] = 'aguardando' })
       ;(ports ?? []).forEach(p => { map[p.viagem_id] = p.status })
       setPortariaMap(map)
+    }
+
+    // Busca status do operador para tarefas pendentes (trava "Aguardando descarga")
+    const placasPendentes = lista
+      .filter(t => t.status === 'pendente')
+      .map(t => t.tipo !== 'normal' ? t.placa_cavalo : t.viagem?.cavalo?.placa)
+      .filter(Boolean)
+    if (placasPendentes.length) {
+      const { data: opTasks } = await supabase
+        .from('tarefas_operador')
+        .select('placa_cavalo, status')
+        .in('placa_cavalo', placasPendentes)
+        .in('status', ['aguardando_descarga', 'aguardando_nri'])
+        .order('created_at', { ascending: false })
+      const opMap = {}
+      ;(opTasks ?? []).forEach(t => {
+        if (!opMap[t.placa_cavalo]) opMap[t.placa_cavalo] = t.status
+      })
+      setOperadorMap(opMap)
     }
 
     setTarefas(lista)
@@ -762,12 +782,19 @@ export default function Tarefas() {
                       {tarefa.tipo !== 'normal' ? (
                         <>
                           {tarefa.status === 'pendente' && (
-                            <button onClick={() => iniciarConferenciaMarketplace(tarefa)} disabled={iniciando === tarefa.id}
-                              className={`w-full disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 ${tipoManualCfg(tarefa.tipo).btnCls}`}>
-                              {iniciando === tarefa.id
-                                ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                : <><FileText size={13} />Gerar NRI {tipoManualCfg(tarefa.tipo).label}</>}
-                            </button>
+                            operadorMap[tarefa.placa_cavalo] === 'aguardando_descarga' ? (
+                              <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-xl px-3 py-2.5">
+                                <Clock size={13} className="text-orange-400 shrink-0" />
+                                <p className="text-orange-400 text-xs flex-1">Aguardando descarga do operador</p>
+                              </div>
+                            ) : (
+                              <button onClick={() => iniciarConferenciaMarketplace(tarefa)} disabled={iniciando === tarefa.id}
+                                className={`w-full disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 ${tipoManualCfg(tarefa.tipo).btnCls}`}>
+                                {iniciando === tarefa.id
+                                  ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                  : <><FileText size={13} />Gerar NRI {tipoManualCfg(tarefa.tipo).label}</>}
+                              </button>
+                            )
                           )}
                           {tarefa.status === 'em_andamento' && (
                             <div className="flex gap-2">
@@ -820,6 +847,11 @@ export default function Tarefas() {
                                   : 'Finalizar sem conferência'}
                               </button>
                             )}
+                          </div>
+                        ) : operadorMap[tarefa.viagem?.cavalo?.placa] === 'aguardando_descarga' ? (
+                          <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-xl px-3 py-2.5">
+                            <Clock size={13} className="text-orange-400 shrink-0" />
+                            <p className="text-orange-400 text-xs flex-1">Aguardando descarga do operador</p>
                           </div>
                         ) : profile?.acesso_total ? (
                           <div className="flex gap-2">

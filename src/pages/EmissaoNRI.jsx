@@ -153,20 +153,36 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, profileId, gr
       })
       if (errInsert) throw errInsert
 
-      // Cria tarefa para o operador organizar os paletes — fire and forget
+      // Desbloqueia card do operador criado pela portaria (aguardando_nri → pendente)
+      // ou cria um novo se não houver card prévio (dados legados / fallback)
       if (tarefa.unidade_id) {
         const totalPaletes = grupos.reduce((s, gr) => s + Math.ceil(Number(gr.qtdePaletes) || 0), 0)
-        supabase.from('tarefas_operador').insert({
-          unidade_id:         tarefa.unidade_id,
-          placa_cavalo:       placaCavalo || null,
-          placa_carreta:      placaCarreta || null,
-          numero_nf:          tarefa.numero_nf || null,
-          quantidade_paletes: totalPaletes || null,
-          conferente_id:      profileId || null,
-          conferente_nome:    cab.conferente.trim() || null,
-        }).then(({ error }) => {
-          if (error) console.error('Erro ao criar tarefa operador:', error)
-        })
+        const nf    = tarefa.numero_nf || null
+        const placa = placaCavalo || null
+        ;(async () => {
+          let desbloqueado = false
+          if (placa) {
+            let q = supabase
+              .from('tarefas_operador')
+              .update({ status: 'pendente', numero_nf: nf, quantidade_paletes: totalPaletes || null })
+              .eq('unidade_id', tarefa.unidade_id)
+              .eq('placa_cavalo', placa)
+              .eq('status', 'aguardando_nri')
+            if (nf) q = q.eq('numero_nf', nf)
+            const { data } = await q.select('id')
+            desbloqueado = (data?.length ?? 0) > 0
+          }
+          if (!desbloqueado) {
+            const { error } = await supabase.from('tarefas_operador').insert({
+              unidade_id:         tarefa.unidade_id,
+              placa_cavalo:       placa,
+              placa_carreta:      placaCarreta || null,
+              numero_nf:          nf,
+              quantidade_paletes: totalPaletes || null,
+            })
+            if (error) console.error('Erro ao criar tarefa operador:', error)
+          }
+        })()
       }
 
       const allNRIs = []
