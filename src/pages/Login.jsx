@@ -8,6 +8,7 @@ const PERFIL_ROTA = {
   admin:      '/dashboard',
   motorista:  '/viagem',
   conferente: '/tarefas',
+  operador:   '/selecionar-modulo',
 }
 
 function LogoCobeb({ baseUrl }) {

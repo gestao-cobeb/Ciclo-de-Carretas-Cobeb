@@ -134,6 +134,7 @@ export default function SeletorModulo() {
 
   const podeAcessar =
     profile?.perfil === 'admin' ||
+    profile?.perfil === 'operador' ||
     (profile?.perfil === 'conferente' && profile?.modulos_permitidos?.length > 0)
   if (!user || !podeAcessar) return <Navigate to="/login" replace />
 

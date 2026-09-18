@@ -55,6 +55,7 @@ function AppRoutes() {
   if (profile) {
     const usaSelector =
       profile.perfil === 'admin' ||
+      profile.perfil === 'operador' ||
       (profile.perfil === 'conferente' && profile.modulos_permitidos?.length > 0)
     if (usaSelector) {
       home = modoVisao ? (MODO_ROTA[modoVisao] ?? '/selecionar-modulo') : '/selecionar-modulo'
