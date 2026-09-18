@@ -46,6 +46,8 @@ const COLS = [
   { label: 'Entrada Portaria',   key: 'dt_entrada',           min: 128 },
   { label: 'Início Conferência', key: 'dt_inicio_conf',       min: 128 },
   { label: 'Fim Conferência',    key: 'dt_fim_conf',          min: 128 },
+  { label: 'Início Operador',    key: 'dt_inicio_op',         min: 128 },
+  { label: 'Fim Operador',       key: 'dt_fim_op',            min: 128 },
   { label: 'Saída Portaria',     key: 'dt_saida_portaria',    min: 128 },
   { label: 'Fim Viagem',         key: 'dt_saida_entrega',     min: 128 },
   { label: 'Rev→Fab',           key: 'trecho_rev_fab',        min: 82  },
@@ -54,12 +56,13 @@ const COLS = [
   { label: 'TMA Revenda',        key: 'tma_rev',              min: 90  },
   { label: 'Aguardo (fila)',     key: 'aguardo',              min: 100 },
   { label: 'Conferência',        key: 'tempo_conf',           min: 95  },
+  { label: 'Operador',           key: 'tempo_op',             min: 90  },
   { label: 'TMV',                key: 'tmv',                  min: 72  },
 ]
 
 const METRIC_KEYS = new Set([
   'trecho_rev_fab', 'trecho_fab_rev',
-  'tma_fab', 'tma_rev', 'aguardo', 'tempo_conf', 'tmv',
+  'tma_fab', 'tma_rev', 'aguardo', 'tempo_conf', 'tempo_op', 'tmv',
 ])
 
 const TABLE_MIN_WIDTH = COLS.reduce((s, c) => s + c.min, 0)
@@ -83,6 +86,8 @@ function cellValue(row, key) {
     case 'dt_entrada':         return fmtTs(p?.dt_entrada)
     case 'dt_inicio_conf':     return fmtTs(t?.dt_inicio_conferencia)
     case 'dt_fim_conf':        return fmtTs(t?.dt_fim_conferencia)
+    case 'dt_inicio_op':        return fmtTs(row._operador?.inicio_at)
+    case 'dt_fim_op':           return fmtTs(row._operador?.fim_at)
     case 'dt_saida_portaria':  return fmtTs(p?.dt_saida)
     case 'dt_saida_entrega':   return fmtTs(row.dt_saida_entrega)
     case 'trecho_rev_fab':     return diffHHMM(row.dt_saida_revenda,    row.dt_chegada_fabrica)
@@ -91,6 +96,7 @@ function cellValue(row, key) {
     case 'tma_rev':            return diffHHMM(row.dt_chegada_revenda,  p?.dt_saida)
     case 'aguardo':            return diffHHMM(row.dt_chegada_revenda,  p?.dt_entrada)
     case 'tempo_conf':         return diffHHMM(t?.dt_inicio_conferencia, t?.dt_fim_conferencia)
+    case 'tempo_op':           return diffHHMM(row._operador?.inicio_at, row._operador?.fim_at)
     case 'tmv':                return diffHHMM(row.dt_saida_revenda,    p?.dt_saida)
     default:                   return '—'
   }
@@ -161,6 +167,23 @@ export default function Dados() {
         .is('excluido_em', null),
     ])
 
+    // tarefas_operador: join por numero_nf + unidade_id
+    const nfList = (tarefas ?? []).map(t => t.numero_nf).filter(Boolean)
+    let opMap = {}
+    if (nfList.length) {
+      const { data: opRows } = await supabase
+        .from('tarefas_operador')
+        .select('numero_nf, unidade_id, inicio_at, fim_at, status')
+        .in('numero_nf', nfList)
+      const rank = { concluido: 2, em_andamento: 1, pendente: 0 }
+      ;(opRows ?? []).forEach(op => {
+        if (!op.numero_nf || !op.unidade_id) return
+        const key  = `${op.numero_nf}_${op.unidade_id}`
+        const prev = opMap[key]
+        if (!prev || (rank[op.status] ?? 0) > (rank[prev.status] ?? 0)) opMap[key] = op
+      })
+    }
+
     // Nomes das fábricas via codigo_ambev
     const codigos = [...new Set((peds ?? []).map(p => p.codigo_fabrica).filter(Boolean))]
     const fabMap  = {}
@@ -190,13 +213,18 @@ export default function Dados() {
     const portariaMap = {}
     ;(portarias ?? []).forEach(p => { portariaMap[p.viagem_id] = p })
 
-    const mapped = (viagens ?? []).map(v => ({
-      ...v,
-      _nf:       tarefaMap[v.id]?.numero_nf ?? '—',
-      _fabricas: [...(pedMap[v.id]?.fabricas ?? new Set())].join(' · ') || '—',
-      _tarefa:   tarefaMap[v.id]   ?? {},
-      _portaria: portariaMap[v.id] ?? {},
-    }))
+    const mapped = (viagens ?? []).map(v => {
+      const nf       = tarefaMap[v.id]?.numero_nf
+      const opKey    = nf ? `${nf}_${v.unidade?.id}` : null
+      return {
+        ...v,
+        _nf:       nf ?? '—',
+        _fabricas: [...(pedMap[v.id]?.fabricas ?? new Set())].join(' · ') || '—',
+        _tarefa:   tarefaMap[v.id]   ?? {},
+        _portaria: portariaMap[v.id] ?? {},
+        _operador: opKey ? (opMap[opKey] ?? null) : null,
+      }
+    })
 
     setRows(mapped)
     setUnidades(unids ?? [])
