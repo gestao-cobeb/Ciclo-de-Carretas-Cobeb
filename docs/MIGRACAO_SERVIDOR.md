@@ -65,7 +65,7 @@ Criar o arquivo `.env.local` na raiz do projeto com o conteúdo abaixo.
 
 ```env
 VITE_SUPABASE_URL=https://dbklyyyqyhzzcmhtzumn.supabase.co
-VITE_SUPABASE_ANON_KEY=sb_publishable_uIvSlOuBa8To1gfZYEplgQ_1uqbLDU_
+VITE_SUPABASE_ANON_KEY=<COLE_AQUI_A_ANON_KEY_DO_SUPABASE>
 VITE_SUPABASE_SERVICE_ROLE_KEY=<COLE_AQUI_A_SERVICE_ROLE_KEY_DO_SUPABASE>
 VITE_APK_URL=https://github.com/VictorHAS98/Ciclo-de-Carretas-Cobeb/releases/download/v1.0.25/cobeb-ciclo-v1.0.25.apk
 VITE_BASE_URL=/
