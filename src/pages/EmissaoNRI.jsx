@@ -167,7 +167,7 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, profileId, gr
               .update({ status: 'pendente', numero_nf: nf, quantidade_paletes: totalPaletes || null })
               .eq('unidade_id', tarefa.unidade_id)
               .eq('placa_cavalo', placa)
-              .eq('status', 'aguardando_nri')
+              .in('status', ['aguardando_nri', 'aguardando_descarga'])
             if (nf) q = q.eq('numero_nf', nf)
             const { data } = await q.select('id')
             desbloqueado = (data?.length ?? 0) > 0
