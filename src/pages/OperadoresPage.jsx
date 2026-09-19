@@ -58,6 +58,7 @@ export default function OperadoresPage() {
   const [tarefas,      setTarefas]      = useState([])
   const [loading,      setLoading]      = useState(true)
   const [filtroStatus, setFiltroStatus] = useState('')
+  const [filtroData,   setFiltroData]   = useState('hoje')
   const [agindo,       setAgindo]       = useState(null)   // id da tarefa em ação
   const [confirmando,  setConfirmando]  = useState(null)   // { tarefa, tipo: 'iniciar'|'concluir' }
 
@@ -150,16 +151,27 @@ export default function OperadoresPage() {
 
   // ── Dados ─────────────────────────────────────────────────────────────────────
 
+  // Corte de data: cards ativos sempre aparecem; concluídos só dentro do período
+  const tarefasComData = (() => {
+    if (filtroData === 'tudo') return tarefas
+    const corte = new Date()
+    corte.setHours(0, 0, 0, 0)
+    if (filtroData === '7dias') corte.setDate(corte.getDate() - 6)
+    return tarefas.filter(t =>
+      t.status !== 'concluido' || new Date(t.created_at) >= corte
+    )
+  })()
+
   const tarefasFiltradas = filtroStatus
-    ? tarefas.filter(t => t.status === filtroStatus)
-    : tarefas
+    ? tarefasComData.filter(t => t.status === filtroStatus)
+    : tarefasComData
 
   const counts = {
-    aguardando_descarga: tarefas.filter(t => t.status === 'aguardando_descarga').length,
-    aguardando_nri:      tarefas.filter(t => t.status === 'aguardando_nri').length,
-    pendente:            tarefas.filter(t => t.status === 'pendente').length,
-    em_andamento:        tarefas.filter(t => t.status === 'em_andamento').length,
-    concluido:           tarefas.filter(t => t.status === 'concluido').length,
+    aguardando_descarga: tarefasComData.filter(t => t.status === 'aguardando_descarga').length,
+    aguardando_nri:      tarefasComData.filter(t => t.status === 'aguardando_nri').length,
+    pendente:            tarefasComData.filter(t => t.status === 'pendente').length,
+    em_andamento:        tarefasComData.filter(t => t.status === 'em_andamento').length,
+    concluido:           tarefasComData.filter(t => t.status === 'concluido').length,
   }
 
   // ── Render ────────────────────────────────────────────────────────────────────
@@ -205,26 +217,49 @@ export default function OperadoresPage() {
         </header>
 
         {/* Filtros de status */}
-        <div className="bg-[#EBF5FF] border-b border-cobeb-border/40 px-4 py-2.5">
-          <div className="max-w-lg mx-auto flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+        <div className="bg-[#EBF5FF] border-b border-cobeb-border/40 px-4 py-2">
+          <div className="max-w-lg mx-auto flex flex-nowrap gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
             {[
-              { value: '',                   label: 'Todas',        count: tarefas.length },
-              { value: 'aguardando_descarga', label: 'Descarga',     count: counts.aguardando_descarga },
-              { value: 'aguardando_nri',      label: 'Aguard. NRI',  count: counts.aguardando_nri },
-              { value: 'pendente',            label: 'Pendentes',    count: counts.pendente },
-              { value: 'em_andamento',        label: 'Em Andamento', count: counts.em_andamento },
-              { value: 'concluido',           label: 'Concluídas',   count: counts.concluido },
+              { value: '',                   label: 'Todas',    count: tarefasComData.length },
+              { value: 'aguardando_descarga', label: 'Descarga', count: counts.aguardando_descarga },
+              { value: 'aguardando_nri',      label: 'NRI',      count: counts.aguardando_nri },
+              { value: 'pendente',            label: 'Pendente', count: counts.pendente },
+              { value: 'em_andamento',        label: 'Andamento',count: counts.em_andamento },
+              { value: 'concluido',           label: 'Concluído',count: counts.concluido },
             ].map(({ value, label, count }) => {
               const active = filtroStatus === value
               return (
                 <button key={value} onClick={() => setFiltroStatus(value)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors ${
+                  className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors ${
                     active
                       ? 'bg-cobeb-navy border-orange-500 text-white'
                       : 'bg-transparent border-cobeb-border text-slate-500 hover:border-cobeb-blue/40'
                   }`}>
                   {label}
                   <span className={`text-[10px] ${active ? 'text-cobeb-navy/70' : 'text-slate-500'}`}>{count}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Filtro de data */}
+        <div className="bg-[#EBF5FF] border-b border-cobeb-border/40 px-4 py-2">
+          <div className="max-w-lg mx-auto flex gap-2">
+            {[
+              { value: 'hoje',  label: 'Hoje' },
+              { value: '7dias', label: '7 dias' },
+              { value: 'tudo',  label: 'Tudo' },
+            ].map(({ value, label }) => {
+              const active = filtroData === value
+              return (
+                <button key={value} onClick={() => setFiltroData(value)}
+                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors ${
+                    active
+                      ? 'bg-cobeb-yellow border-cobeb-yellow text-cobeb-navy'
+                      : 'bg-transparent border-cobeb-border text-slate-500 hover:border-cobeb-blue/40'
+                  }`}>
+                  {label}
                 </button>
               )
             })}
