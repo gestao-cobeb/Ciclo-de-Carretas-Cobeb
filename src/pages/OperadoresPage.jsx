@@ -220,12 +220,10 @@ export default function OperadoresPage() {
         <div className="bg-[#EBF5FF] border-b border-cobeb-border/40 px-4 py-2">
           <div className="max-w-lg mx-auto flex flex-nowrap gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
             {[
-              { value: '',                   label: 'Todas',    count: tarefasComData.length },
-              { value: 'aguardando_descarga', label: 'Descarga', count: counts.aguardando_descarga },
-              { value: 'aguardando_nri',      label: 'NRI',      count: counts.aguardando_nri },
-              { value: 'pendente',            label: 'Pendente', count: counts.pendente },
-              { value: 'em_andamento',        label: 'Andamento',count: counts.em_andamento },
-              { value: 'concluido',           label: 'Concluído',count: counts.concluido },
+              { value: '',            label: 'Todas',    count: tarefasComData.length },
+              { value: 'pendente',    label: 'Pendente', count: counts.pendente },
+              { value: 'em_andamento',label: 'Andamento',count: counts.em_andamento },
+              { value: 'concluido',   label: 'Concluído',count: counts.concluido },
             ].map(({ value, label, count }) => {
               const active = filtroStatus === value
               return (
