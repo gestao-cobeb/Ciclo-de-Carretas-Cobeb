@@ -187,6 +187,20 @@ export default function Tarefas() {
   }
 
   async function iniciarConferencia(tarefa) {
+    const placa = tarefa.viagem?.cavalo?.placa
+    if (placa && tarefa.unidade_id) {
+      const { data: bloqueio } = await supabase
+        .from('tarefas_operador')
+        .select('id')
+        .eq('placa_cavalo', placa)
+        .eq('unidade_id', tarefa.unidade_id)
+        .eq('status', 'aguardando_descarga')
+        .limit(1)
+      if (bloqueio?.length) {
+        setOperadorMap(prev => ({ ...prev, [placa]: 'aguardando_descarga' }))
+        return
+      }
+    }
     setIniciando(tarefa.id)
     const { error } = await supabase.from('tarefas')
       .update({ status: 'em_andamento', conferente_id: profile.id })
@@ -444,6 +458,20 @@ export default function Tarefas() {
   }
 
   async function iniciarConferenciaMarketplace(tarefa) {
+    const placa = tarefa.placa_cavalo
+    if (placa && tarefa.unidade_id) {
+      const { data: bloqueio } = await supabase
+        .from('tarefas_operador')
+        .select('id')
+        .eq('placa_cavalo', placa)
+        .eq('unidade_id', tarefa.unidade_id)
+        .eq('status', 'aguardando_descarga')
+        .limit(1)
+      if (bloqueio?.length) {
+        setOperadorMap(prev => ({ ...prev, [placa]: 'aguardando_descarga' }))
+        return
+      }
+    }
     setIniciando(tarefa.id)
     const { error } = await supabase.from('tarefas')
       .update({ status: 'em_andamento', conferente_id: profile.id })
