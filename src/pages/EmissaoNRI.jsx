@@ -42,8 +42,9 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, profileId, gr
   const [pdfUrl, setPdfUrl]     = useState(null)
   const [pdfFilename, setPdfFn] = useState('')
 
-  const placaCarreta = tarefa.viagem?.carreta?.placa ?? tarefa.placa_carreta ?? ''
-  const placaCavalo  = tarefa.viagem?.cavalo?.placa  ?? tarefa.placa_cavalo  ?? ''
+  const portariaAtend = tarefa.viagem?.portaria_atendimentos?.[0]
+  const placaCarreta = tarefa.viagem?.carreta?.placa ?? portariaAtend?.placa_carreta ?? tarefa.placa_carreta ?? ''
+  const placaCavalo  = tarefa.viagem?.cavalo?.placa  ?? portariaAtend?.placa_cavalo  ?? tarefa.placa_cavalo  ?? ''
   const placa        = [placaCarreta, placaCavalo].filter(Boolean).join(' / ') || 'Não informada'
   const motorista    = tarefa.viagem?.motorista?.nome ?? ''
   const origem       = pedidos[0]?.fabrica ?? (tarefa.tipo === 'marketplace' ? 'Marketplace' : '')

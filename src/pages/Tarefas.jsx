@@ -100,7 +100,8 @@ export default function Tarefas() {
           id, horario_agendado, dt_chegada_revenda,
           motorista:profiles(nome, tipo),
           carreta:carretas(placa),
-          cavalo:cavalos(placa)
+          cavalo:cavalos(placa),
+          portaria_atendimentos(placa_cavalo, placa_carreta)
         )
       `)
       .order('created_at', { ascending: false })
