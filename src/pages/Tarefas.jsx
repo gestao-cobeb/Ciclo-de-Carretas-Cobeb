@@ -58,6 +58,7 @@ export default function Tarefas() {
   const [tarefas, setTarefas]             = useState([])
   const [loading, setLoading]             = useState(true)
   const [filtroStatus, setFiltroStatus]   = useState('')
+  const [filtroData,   setFiltroData]     = useState('hoje')
   const [iniciando, setIniciando]         = useState(null)
   const [portariaMap, setPortariaMap]     = useState({}) // viagem_id → status portaria
   const [operadorMap, setOperadorMap]     = useState({}) // placa_cavalo → status tarefas_operador
@@ -611,14 +612,24 @@ export default function Tarefas() {
 
   // ─── Render ──────────────────────────────────────────────────────────────────
 
+  const tarefasComData = (() => {
+    if (filtroData === 'tudo') return tarefas
+    const corte = new Date()
+    corte.setHours(0, 0, 0, 0)
+    if (filtroData === '7dias') corte.setDate(corte.getDate() - 6)
+    return tarefas.filter(t =>
+      t.status !== 'concluida' || new Date(t.created_at) >= corte
+    )
+  })()
+
   const tarefasFiltradas = filtroStatus
-    ? tarefas.filter(t => t.status === filtroStatus)
-    : tarefas
+    ? tarefasComData.filter(t => t.status === filtroStatus)
+    : tarefasComData
 
   const counts = {
-    pendente:     tarefas.filter(t => t.status === 'pendente').length,
-    em_andamento: tarefas.filter(t => t.status === 'em_andamento').length,
-    concluida:    tarefas.filter(t => t.status === 'concluida').length,
+    pendente:     tarefasComData.filter(t => t.status === 'pendente').length,
+    em_andamento: tarefasComData.filter(t => t.status === 'em_andamento').length,
+    concluida:    tarefasComData.filter(t => t.status === 'concluida').length,
   }
 
   if (view === 'nri' && tarefaSel) {
@@ -729,6 +740,29 @@ export default function Tarefas() {
                   }`}>
                   {label}
                   <span className={`text-[10px] ${active ? 'text-cobeb-navy/70' : 'text-slate-500'}`}>{count}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Filtro de data */}
+        <div className="bg-[#EBF5FF] border-b border-cobeb-border/40 px-4 py-2">
+          <div className="max-w-lg mx-auto flex gap-2">
+            {[
+              { value: 'hoje',  label: 'Hoje' },
+              { value: '7dias', label: '7 dias' },
+              { value: 'tudo',  label: 'Tudo' },
+            ].map(({ value, label }) => {
+              const active = filtroData === value
+              return (
+                <button key={value} onClick={() => setFiltroData(value)}
+                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold whitespace-nowrap border transition-colors ${
+                    active
+                      ? 'bg-cobeb-yellow border-cobeb-yellow text-cobeb-navy'
+                      : 'bg-transparent border-cobeb-border text-slate-500 hover:border-cobeb-blue/40'
+                  }`}>
+                  {label}
                 </button>
               )
             })}
