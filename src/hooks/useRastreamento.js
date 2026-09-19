@@ -32,6 +32,7 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
   const syncTimerRef    = useRef(null)
   const posRef          = useRef(null)
   const dentroFabRef    = useRef(false)
+  const pontosForaRef   = useRef(0)
   const callbackRef     = useRef(null)
   const viagemIdRef     = useRef(null)
   const isOnlineRef     = useRef(isOnline)
@@ -71,18 +72,44 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
              <= (f.raio_geofence || 100)
     })
 
+    // em_transito → na_fabrica
     if (dentroAgora && !dentroFabRef.current && status === 'em_transito') {
-      dentroFabRef.current = true
+      dentroFabRef.current  = true
+      pontosForaRef.current = 0
       callbackRef.current?.({
         key: 'chegada_fabrica', field: 'dt_chegada_fabrica',
         nextStatus: 'na_fabrica', requireNF: false, closeCycle: false,
       })
+      return
     }
+
+    // na_fabrica: dentro → resetar contador (interferência descartada)
+    if (dentroAgora && dentroFabRef.current && status === 'na_fabrica') {
+      pontosForaRef.current = 0
+      return
+    }
+
+    // na_fabrica: fora → debounce de 3 pontos consecutivos
     if (!dentroAgora && dentroFabRef.current && status === 'na_fabrica') {
-      dentroFabRef.current = false
+      pontosForaRef.current += 1
+      if (pontosForaRef.current >= 3) {
+        dentroFabRef.current  = false
+        pontosForaRef.current = 0
+        callbackRef.current?.({
+          key: 'saida_fabrica', field: 'dt_saida_fabrica',
+          nextStatus: 'retornando', requireNF: false, closeCycle: false,
+        })
+      }
+      return
+    }
+
+    // retornando → na_fabrica (voltou ao raio — sem limite de tempo)
+    if (dentroAgora && status === 'retornando') {
+      dentroFabRef.current  = true
+      pontosForaRef.current = 0
       callbackRef.current?.({
-        key: 'saida_fabrica', field: 'dt_saida_fabrica',
-        nextStatus: 'retornando', requireNF: false, closeCycle: false,
+        key: 'reentrada_fabrica', field: 'dt_saida_fabrica', fieldValue: null,
+        nextStatus: 'na_fabrica', requireNF: false, closeCycle: false,
       })
     }
   }

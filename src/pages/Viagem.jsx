@@ -362,8 +362,10 @@ export default function Viagem() {
   // ── registrar etapa ───────────────────────────────────────────────────────
 
   async function registrarEtapa(etapa, nf) {
-    const now     = etapa.closeCycle && portariaSaida ? portariaSaida : new Date().toISOString()
-    const updates = { [etapa.field]: now, status: etapa.nextStatus }
+    const fieldVal = 'fieldValue' in etapa
+      ? etapa.fieldValue
+      : (etapa.closeCycle && portariaSaida ? portariaSaida : new Date().toISOString())
+    const updates = { [etapa.field]: fieldVal, status: etapa.nextStatus }
     if (nf) updates.numero_nf = nf
     const updated = { ...viagemAtiva, ...updates }
 
