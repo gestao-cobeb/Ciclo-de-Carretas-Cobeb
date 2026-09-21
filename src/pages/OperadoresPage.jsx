@@ -119,16 +119,15 @@ export default function OperadoresPage() {
 
   const confirmarDescarga = async (tarefa) => {
     setAgindo(tarefa.id)
-    const descarga_at = new Date().toISOString()
-    const { error } = await supabase
-      .from('tarefas_operador')
-      .update({ status: 'aguardando_nri', descarga_at })
-      .eq('id', tarefa.id)
+    const { error } = await supabase.rpc('confirmar_descarga_operador', { p_id: tarefa.id })
     setAgindo(null)
     if (!error) {
+      const descarga_at = new Date().toISOString()
       setTarefas(prev => prev.map(t =>
         t.id === tarefa.id ? { ...t, status: 'aguardando_nri', descarga_at } : t
       ))
+    } else {
+      alert('Erro ao confirmar descarga: ' + error.message)
     }
     setConfirmando(null)
   }

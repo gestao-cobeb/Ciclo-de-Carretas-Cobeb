@@ -154,8 +154,10 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, profileId, gr
       })
       if (errInsert) throw errInsert
 
-      // Desbloqueia card do operador criado pela portaria (aguardando_nri → pendente)
-      // ou cria um novo se não houver card prévio (dados legados / fallback)
+      // Desbloqueia card do operador (aguardando_nri → pendente).
+      // Não filtra por numero_nf: cards criados antes de a portaria conhecer a NF
+      // chegam com numero_nf = null e seriam ignorados por um filtro direto.
+      // O par placa_cavalo + unidade_id + status já é único em condições normais.
       if (tarefa.unidade_id) {
         const totalPaletes = grupos.reduce((s, gr) => s + Math.ceil(Number(gr.qtdePaletes) || 0), 0)
         const nf    = tarefa.numero_nf || null
@@ -163,17 +165,29 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, profileId, gr
         ;(async () => {
           let desbloqueado = false
           if (placa) {
-            let q = supabase
+            const { data } = await supabase
               .from('tarefas_operador')
               .update({ status: 'pendente', numero_nf: nf, quantidade_paletes: totalPaletes || null })
               .eq('unidade_id', tarefa.unidade_id)
               .eq('placa_cavalo', placa)
               .in('status', ['aguardando_nri', 'aguardando_descarga'])
-            if (nf) q = q.eq('numero_nf', nf)
-            const { data } = await q.select('id')
+              .select('id')
             desbloqueado = (data?.length ?? 0) > 0
+
+            // Guard: re-geração de NRI não deve duplicar card já avançado
+            if (!desbloqueado) {
+              const { data: ativo } = await supabase
+                .from('tarefas_operador')
+                .select('id')
+                .eq('unidade_id', tarefa.unidade_id)
+                .eq('placa_cavalo', placa)
+                .in('status', ['pendente', 'em_andamento'])
+                .limit(1)
+              if (ativo?.length) desbloqueado = true
+            }
           }
           if (!desbloqueado) {
+            // Fallback para tarefas legadas sem card de portaria
             const { error } = await supabase.from('tarefas_operador').insert({
               unidade_id:         tarefa.unidade_id,
               placa_cavalo:       placa,

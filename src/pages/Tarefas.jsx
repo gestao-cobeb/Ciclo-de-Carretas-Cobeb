@@ -60,9 +60,6 @@ export default function Tarefas() {
   const [filtroStatus, setFiltroStatus]   = useState('')
   const [filtroData,   setFiltroData]     = useState('hoje')
   const [iniciando, setIniciando]         = useState(null)
-  const [portariaMap, setPortariaMap]     = useState({}) // viagem_id → status portaria
-  const [operadorMap, setOperadorMap]     = useState({}) // placa_cavalo → status tarefas_operador
-  const [verificando, setVerificando]     = useState(null)
 
   // conferência
   const [pedidos, setPedidos]             = useState([])
@@ -112,97 +109,11 @@ export default function Tarefas() {
     const { data } = await q
 
     const lista = data ?? []
-
-    // Busca status portaria para tarefas pendentes normais
-    const viagemIds = lista
-      .filter(t => t.status === 'pendente' && t.viagem?.id)
-      .map(t => t.viagem.id)
-    if (viagemIds.length) {
-      const { data: ports } = await supabase
-        .from('portaria_atendimentos')
-        .select('viagem_id, status')
-        .in('viagem_id', viagemIds)
-        .is('excluido_em', null)
-      // Default 'aguardando' para todas — sem registro = portaria ainda não iniciou
-      const map = {}
-      viagemIds.forEach(id => { map[id] = 'aguardando' })
-      ;(ports ?? []).forEach(p => { map[p.viagem_id] = p.status })
-      setPortariaMap(map)
-    }
-
-    // Busca status do operador para tarefas pendentes (trava "Aguardando descarga")
-    const placasPendentes = lista
-      .filter(t => t.status === 'pendente')
-      .map(t => t.tipo !== 'normal' ? t.placa_cavalo : t.viagem?.cavalo?.placa)
-      .filter(Boolean)
-    if (placasPendentes.length) {
-      const { data: opTasks } = await supabase
-        .from('tarefas_operador')
-        .select('placa_cavalo, status')
-        .in('placa_cavalo', placasPendentes)
-        .in('status', ['aguardando_descarga', 'aguardando_nri'])
-        .order('created_at', { ascending: false })
-      const opMap = {}
-      ;(opTasks ?? []).forEach(t => {
-        if (!opMap[t.placa_cavalo]) opMap[t.placa_cavalo] = t.status
-      })
-      setOperadorMap(opMap)
-    }
-
     setTarefas(lista)
     if (!silent) setLoading(false)
   }
 
-  // Polling para tarefas pendentes aguardando portaria
-  useEffect(() => {
-    const bloqueadas = tarefas.filter(t =>
-      t.status === 'pendente' && t.viagem?.id && portariaMap[t.viagem.id] === 'aguardando'
-    )
-    if (!bloqueadas.length) return
-    const ids = bloqueadas.map(t => t.viagem.id)
-    const timer = setInterval(async () => {
-      const { data: ports } = await supabase
-        .from('portaria_atendimentos')
-        .select('viagem_id, status')
-        .in('viagem_id', ids)
-        .is('excluido_em', null)
-      setPortariaMap(prev => {
-        const next = { ...prev }
-        ;(ports ?? []).forEach(p => { next[p.viagem_id] = p.status })
-        return next
-      })
-    }, 30000)
-    return () => clearInterval(timer)
-  }, [tarefas, portariaMap])
-
-  async function verificarPortaria(tarefa) {
-    if (!tarefa.viagem?.id) return
-    setVerificando(tarefa.id)
-    const { data } = await supabase
-      .from('portaria_atendimentos')
-      .select('viagem_id, status')
-      .eq('viagem_id', tarefa.viagem.id)
-      .is('excluido_em', null)
-      .maybeSingle()
-    if (data) setPortariaMap(prev => ({ ...prev, [data.viagem_id]: data.status }))
-    setVerificando(null)
-  }
-
   async function iniciarConferencia(tarefa) {
-    const placa = tarefa.viagem?.cavalo?.placa
-    if (placa && tarefa.unidade_id) {
-      const { data: bloqueio } = await supabase
-        .from('tarefas_operador')
-        .select('id')
-        .eq('placa_cavalo', placa)
-        .eq('unidade_id', tarefa.unidade_id)
-        .eq('status', 'aguardando_descarga')
-        .limit(1)
-      if (bloqueio?.length) {
-        setOperadorMap(prev => ({ ...prev, [placa]: 'aguardando_descarga' }))
-        return
-      }
-    }
     setIniciando(tarefa.id)
     const { error } = await supabase.from('tarefas')
       .update({ status: 'em_andamento', conferente_id: profile.id })
@@ -460,20 +371,6 @@ export default function Tarefas() {
   }
 
   async function iniciarConferenciaMarketplace(tarefa) {
-    const placa = tarefa.placa_cavalo
-    if (placa && tarefa.unidade_id) {
-      const { data: bloqueio } = await supabase
-        .from('tarefas_operador')
-        .select('id')
-        .eq('placa_cavalo', placa)
-        .eq('unidade_id', tarefa.unidade_id)
-        .eq('status', 'aguardando_descarga')
-        .limit(1)
-      if (bloqueio?.length) {
-        setOperadorMap(prev => ({ ...prev, [placa]: 'aguardando_descarga' }))
-        return
-      }
-    }
     setIniciando(tarefa.id)
     const { error } = await supabase.from('tarefas')
       .update({ status: 'em_andamento', conferente_id: profile.id })
@@ -845,19 +742,12 @@ export default function Tarefas() {
                       {tarefa.tipo !== 'normal' ? (
                         <>
                           {tarefa.status === 'pendente' && (
-                            operadorMap[tarefa.placa_cavalo] === 'aguardando_descarga' ? (
-                              <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-xl px-3 py-2.5">
-                                <Clock size={13} className="text-orange-400 shrink-0" />
-                                <p className="text-orange-400 text-xs flex-1">Aguardando descarga do operador</p>
-                              </div>
-                            ) : (
-                              <button onClick={() => iniciarConferenciaMarketplace(tarefa)} disabled={iniciando === tarefa.id}
-                                className={`w-full disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 ${tipoManualCfg(tarefa.tipo).btnCls}`}>
-                                {iniciando === tarefa.id
-                                  ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                  : <><FileText size={13} />Gerar NRI {tipoManualCfg(tarefa.tipo).label}</>}
-                              </button>
-                            )
+                            <button onClick={() => iniciarConferenciaMarketplace(tarefa)} disabled={iniciando === tarefa.id}
+                              className={`w-full disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 ${tipoManualCfg(tarefa.tipo).btnCls}`}>
+                              {iniciando === tarefa.id
+                                ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                : <><FileText size={13} />Gerar NRI {tipoManualCfg(tarefa.tipo).label}</>}
+                            </button>
                           )}
                           {tarefa.status === 'em_andamento' && (
                             <div className="flex gap-2">
@@ -887,36 +777,7 @@ export default function Tarefas() {
                       ) : (
                         <>
                       {tarefa.status === 'pendente' && (
-                        portariaMap[tarefa.viagem?.id] === 'aguardando' ? (
-                          <div className="space-y-2">
-                            <div className="flex items-center gap-2 bg-blue-500/10 border border-blue-500/30 rounded-xl px-3 py-2.5">
-                              <Clock size={13} className="text-blue-400 shrink-0" />
-                              <p className="text-blue-400 text-xs flex-1">Aguardando entrada portaria</p>
-                              <button
-                                onClick={() => verificarPortaria(tarefa)}
-                                disabled={verificando === tarefa.id}
-                                className="text-cobeb-yellow text-xs font-semibold flex items-center gap-1 hover:text-cobeb-blue transition-colors shrink-0">
-                                {verificando === tarefa.id
-                                  ? <div className="w-3 h-3 border border-cobeb-yellow/40 border-t-cobeb-yellow rounded-full animate-spin" />
-                                  : <RefreshCw size={11} />}
-                                Verificar
-                              </button>
-                            </div>
-                            {profile?.acesso_total && (
-                              <button onClick={() => finalizarSemConferencia(tarefa)} disabled={finalizandoSem === tarefa.id}
-                                className="w-full bg-slate-700 hover:bg-slate-800 disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
-                                {finalizandoSem === tarefa.id
-                                  ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                                  : 'Finalizar sem conferência'}
-                              </button>
-                            )}
-                          </div>
-                        ) : operadorMap[tarefa.viagem?.cavalo?.placa] === 'aguardando_descarga' ? (
-                          <div className="flex items-center gap-2 bg-orange-500/10 border border-orange-500/30 rounded-xl px-3 py-2.5">
-                            <Clock size={13} className="text-orange-400 shrink-0" />
-                            <p className="text-orange-400 text-xs flex-1">Aguardando descarga do operador</p>
-                          </div>
-                        ) : profile?.acesso_total ? (
+                        profile?.acesso_total ? (
                           <div className="flex gap-2">
                             <button onClick={() => iniciarConferencia(tarefa)} disabled={iniciando === tarefa.id}
                               className="flex-1 bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
