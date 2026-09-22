@@ -123,9 +123,11 @@ export default function PortariaPage() {
     const atends = data ?? []
 
     // Busca descarga_at para cards em_atendimento (operador confirmou descarga)
-    const idsAtivos = atends.filter(a => a.status === 'em_atendimento').map(a => a.id)
+    const emAtend = atends.filter(a => a.status === 'em_atendimento')
+    const idsAtivos = emAtend.map(a => a.id)
     let descargas = {}
     if (idsAtivos.length) {
+      // Lookup primário: portaria_atendimento_id (cards criados após script 094)
       const { data: ops } = await supabase
         .from('tarefas_operador')
         .select('portaria_atendimento_id, descarga_at')
@@ -135,6 +137,27 @@ export default function PortariaPage() {
       ;(ops ?? []).forEach(op => {
         if (op.portaria_atendimento_id) descargas[op.portaria_atendimento_id] = op.descarga_at
       })
+
+      // Fallback: busca por placa_cavalo para cards legados sem portaria_atendimento_id
+      const semDescarga = emAtend.filter(a => !descargas[a.id] && a.placa_cavalo)
+      if (semDescarga.length) {
+        const placas = semDescarga.map(a => a.placa_cavalo)
+        const { data: ops2 } = await supabase
+          .from('tarefas_operador')
+          .select('placa_cavalo, unidade_id, descarga_at')
+          .in('placa_cavalo', placas)
+          .eq('status', 'concluido')
+          .not('descarga_at', 'is', null)
+        const legMap = {}
+        ;(ops2 ?? []).forEach(op => {
+          const k = `${op.placa_cavalo}_${op.unidade_id}`
+          if (!legMap[k] || op.descarga_at > legMap[k]) legMap[k] = op.descarga_at
+        })
+        semDescarga.forEach(a => {
+          const k = `${a.placa_cavalo}_${a.unidade_id}`
+          if (legMap[k]) descargas[a.id] = legMap[k]
+        })
+      }
     }
 
     setAtendimentos(atends.map(a => ({ ...a, _descarga_at: descargas[a.id] ?? null })))
