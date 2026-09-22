@@ -51,16 +51,18 @@ function desbloquearAudio() {
 function tocarBeep() {
   try {
     const ctx = getAudioCtx()
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.frequency.setValueAtTime(880, ctx.currentTime)
-    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.12)
-    gain.gain.setValueAtTime(0.25, ctx.currentTime)
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
-    osc.start(ctx.currentTime)
-    osc.stop(ctx.currentTime + 0.5)
+    // Dois bipes curtos em sequência
+    for (const offset of [0, 0.18]) {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.frequency.setValueAtTime(1000, ctx.currentTime + offset)
+      gain.gain.setValueAtTime(0.7, ctx.currentTime + offset)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + offset + 0.14)
+      osc.start(ctx.currentTime + offset)
+      osc.stop(ctx.currentTime + offset + 0.14)
+    }
   } catch (_) {}
 }
 
@@ -157,7 +159,7 @@ export default function PortariaPage() {
     )
     if (alertas.length > 0) {
       tocarBeep()
-      beepIntervalRef.current = setInterval(tocarBeep, 7000)
+      beepIntervalRef.current = setInterval(tocarBeep, 1000)
     }
     return () => {
       if (beepIntervalRef.current) {
