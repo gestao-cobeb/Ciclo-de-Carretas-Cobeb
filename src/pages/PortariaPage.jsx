@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import { LogOut, Clock, CheckCircle, Truck, RefreshCw, X, LayoutGrid, PlusCircle, ShoppingCart, ArrowLeftRight } from 'lucide-react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { LogOut, Clock, CheckCircle, Truck, RefreshCw, X, LayoutGrid, PlusCircle, ShoppingCart, ArrowLeftRight, Volume2, VolumeX } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
@@ -35,6 +35,23 @@ function TipoIcon({ tipo, size = 16, className = '' }) {
   return <Truck size={size} className={className} />
 }
 
+function tocarBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.frequency.setValueAtTime(880, ctx.currentTime)
+    osc.frequency.setValueAtTime(660, ctx.currentTime + 0.12)
+    gain.gain.setValueAtTime(0.25, ctx.currentTime)
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
+    osc.start(ctx.currentTime)
+    osc.stop(ctx.currentTime + 0.5)
+    setTimeout(() => ctx.close(), 1000)
+  } catch (_) {}
+}
+
 function ElapsedTimer({ from }) {
   const [elapsed, setElapsed] = useState('')
   useEffect(() => {
@@ -65,6 +82,8 @@ export default function PortariaPage() {
   const [confirmando,  setConfirmando]  = useState(null) // { id, acao: 'entrada'|'saida' }
   const [filtroStatus, setFiltroStatus] = useState('todos')
   const [filtroData,   setFiltroData]   = useState(isoToday())
+  const [mutados,      setMutados]      = useState(() => new Set())
+  const beepIntervalRef = useRef(null)
 
   // entrada manual (marketplace / transferencia)
   const [showModalEntrada, setShowModalEntrada] = useState(false)
@@ -87,7 +106,24 @@ export default function PortariaPage() {
       q = q.eq('unidade_id', profile.unidade_id)
     }
     const { data } = await q
-    setAtendimentos(data ?? [])
+    const atends = data ?? []
+
+    // Busca descarga_at para cards em_atendimento (operador confirmou descarga)
+    const idsAtivos = atends.filter(a => a.status === 'em_atendimento').map(a => a.id)
+    let descargas = {}
+    if (idsAtivos.length) {
+      const { data: ops } = await supabase
+        .from('tarefas_operador')
+        .select('portaria_atendimento_id, descarga_at')
+        .in('portaria_atendimento_id', idsAtivos)
+        .eq('status', 'concluido')
+        .not('descarga_at', 'is', null)
+      ;(ops ?? []).forEach(op => {
+        if (op.portaria_atendimento_id) descargas[op.portaria_atendimento_id] = op.descarga_at
+      })
+    }
+
+    setAtendimentos(atends.map(a => ({ ...a, _descarga_at: descargas[a.id] ?? null })))
     if (!silent) setLoading(false)
   }, [profile?.unidade_id, profile?.acesso_total, profile?.todas_unidades])
 
@@ -97,6 +133,27 @@ export default function PortariaPage() {
     const timer = setInterval(() => carregar(true), 30000)
     return () => clearInterval(timer)
   }, [carregar])
+
+  // Toca beep enquanto houver cards descarregados e não mutados
+  useEffect(() => {
+    if (beepIntervalRef.current) {
+      clearInterval(beepIntervalRef.current)
+      beepIntervalRef.current = null
+    }
+    const alertas = atendimentos.filter(
+      a => a.status === 'em_atendimento' && a._descarga_at && !mutados.has(a.id)
+    )
+    if (alertas.length > 0) {
+      tocarBeep()
+      beepIntervalRef.current = setInterval(tocarBeep, 7000)
+    }
+    return () => {
+      if (beepIntervalRef.current) {
+        clearInterval(beepIntervalRef.current)
+        beepIntervalRef.current = null
+      }
+    }
+  }, [atendimentos, mutados])
 
   const handleLogout = async () => {
     await signOut()
@@ -144,6 +201,15 @@ export default function PortariaPage() {
     if (error) { alert('Erro ao registrar entrada: ' + error.message); return }
     fecharModalEntrada()
     await carregar()
+  }
+
+  function mutar(id) {
+    setMutados(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
   }
 
   async function registrarSaida(atend) {
@@ -377,7 +443,9 @@ export default function PortariaPage() {
                 <p className="text-[10px] font-semibold text-cobeb-yellow uppercase tracking-widest mb-2">Em Atendimento</p>
                 <div className="space-y-3">
                   {emAtendimento.map(a => (
-                    <div key={a.id} className="bg-white rounded-2xl border-2 border-cobeb-blue p-4">
+                    <div key={a.id} className={`bg-white rounded-2xl border-2 p-4 transition-colors ${
+                      a._descarga_at && !mutados.has(a.id) ? 'border-green-400' : 'border-cobeb-blue'
+                    }`}>
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center gap-2">
                           <TipoIcon tipo={a.tipo} size={16} className="text-cobeb-yellow shrink-0" />
@@ -399,13 +467,39 @@ export default function PortariaPage() {
                           Agendado: {a.agendamento.bloco} · {a.agendamento.tipo_dia}
                         </p>
                       )}
-                      <div className="flex items-center gap-3 mb-4">
+                      <div className="flex items-center gap-3 mb-3">
                         <span className="text-slate-500 text-xs">Entrada: {formatTs(a.dt_entrada)}</span>
                         <div className="flex items-center gap-1 text-cobeb-yellow font-mono font-bold text-lg">
                           <Clock size={14} className="shrink-0" />
                           <ElapsedTimer from={a.dt_entrada} />
                         </div>
                       </div>
+
+                      {/* Banner: veículo descarregado */}
+                      {a._descarga_at && (
+                        <div className={`mb-3 flex items-center justify-between bg-green-50 border border-green-200 rounded-xl px-3 py-2 gap-2 ${
+                          !mutados.has(a.id) ? 'animate-pulse' : 'opacity-60'
+                        }`}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <CheckCircle size={13} className="text-green-500 shrink-0" />
+                            <span className="text-green-700 text-xs font-semibold">
+                              Veículo descarregado · {formatTs(a._descarga_at)}
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => mutar(a.id)}
+                            className={`shrink-0 p-1.5 rounded-lg transition-colors ${
+                              mutados.has(a.id)
+                                ? 'bg-slate-100 text-slate-400 hover:bg-slate-200'
+                                : 'bg-green-100 text-green-600 hover:bg-green-200'
+                            }`}
+                            title={mutados.has(a.id) ? 'Reativar som' : 'Mutar som'}
+                          >
+                            {mutados.has(a.id) ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                          </button>
+                        </div>
+                      )}
+
                       {confirmando?.id === a.id && confirmando?.acao === 'saida' ? (
                         <div className="flex gap-2">
                           <button
