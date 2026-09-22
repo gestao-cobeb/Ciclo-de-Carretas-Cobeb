@@ -35,9 +35,22 @@ function TipoIcon({ tipo, size = 16, className = '' }) {
   return <Truck size={size} className={className} />
 }
 
+// AudioContext compartilhado — criado na primeira interação do usuário
+let _audioCtx = null
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  if (_audioCtx.state === 'suspended') _audioCtx.resume()
+  return _audioCtx
+}
+
+// Deve ser chamado num handler de clique para desbloquear autoplay
+function desbloquearAudio() {
+  try { getAudioCtx() } catch (_) {}
+}
+
 function tocarBeep() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)()
+    const ctx = getAudioCtx()
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
     osc.connect(gain)
@@ -48,7 +61,6 @@ function tocarBeep() {
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
     osc.start(ctx.currentTime)
     osc.stop(ctx.currentTime + 0.5)
-    setTimeout(() => ctx.close(), 1000)
   } catch (_) {}
 }
 
@@ -240,7 +252,7 @@ export default function PortariaPage() {
   const semAtividade  = filtrados.length === 0
 
   return (
-    <div className="min-h-screen bg-[#EBF5FF]">
+    <div className="min-h-screen bg-[#EBF5FF]" onClick={desbloquearAudio}>
 
       {/* Header + filtros fixos no topo */}
       <div className="sticky top-0 z-40">
