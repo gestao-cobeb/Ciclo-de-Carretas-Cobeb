@@ -181,7 +181,7 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, profileId, gr
                 .select('id')
                 .eq('unidade_id', tarefa.unidade_id)
                 .eq('placa_cavalo', placa)
-                .in('status', ['pendente', 'em_andamento'])
+                .in('status', ['pendente', 'em_andamento', 'concluido'])
                 .limit(1)
               if (ativo?.length) desbloqueado = true
             }
