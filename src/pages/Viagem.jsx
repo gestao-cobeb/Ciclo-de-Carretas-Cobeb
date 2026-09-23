@@ -1167,7 +1167,7 @@ function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerifica
       )}
 
       {/* NF Modal */}
-      {showNF && <NFModal numeroNF={numeroNF} setNumeroNF={setNumeroNF} onConfirmar={confirmarNF} onCancelar={() => { setShowNF(false); setNumeroNF('') }} />}
+      {showNF && <NFModal numeroNF={numeroNF} setNumeroNF={setNumeroNF} onConfirmar={confirmarNF} />}
 
       {/* Modal de seleção de unidade (Saída da Revenda) */}
       {showModalUnidade && (
@@ -1226,7 +1226,7 @@ function ModalUnidadeDescarga({ unidades, onConfirmar, onCancelar }) {
 
 // ── NF Modal ──────────────────────────────────────────────────────────────────
 
-function NFModal({ numeroNF, setNumeroNF, onConfirmar, onCancelar }) {
+function NFModal({ numeroNF, setNumeroNF, onConfirmar }) {
   const ref = useRef(null)
   useEffect(() => { setTimeout(() => ref.current?.focus(), 150) }, [])
 
@@ -1236,7 +1236,10 @@ function NFModal({ numeroNF, setNumeroNF, onConfirmar, onCancelar }) {
         <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto" />
         <div>
           <p className="text-cobeb-text font-semibold text-base">Chegada na Revenda</p>
-          <p className="text-slate-500 text-sm mt-1">Informe o número da Nota Fiscal a entregar</p>
+          <p className="text-slate-500 text-sm mt-1">Informe o número da NF para registrar a chegada e liberar a entrada</p>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-700 text-xs font-medium">
+          A NF é obrigatória. Sem ela, a entrada não será registrada e o veículo não será liberado na portaria.
         </div>
         <div>
           <label className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-1.5">
@@ -1247,13 +1250,10 @@ function NFModal({ numeroNF, setNumeroNF, onConfirmar, onCancelar }) {
             placeholder="Ex: 123456" inputMode="numeric"
             className="w-full bg-[#EBF5FF] border border-cobeb-border rounded-xl px-4 py-3 text-cobeb-text text-sm placeholder-slate-400 focus:outline-none focus:border-cobeb-blue" />
         </div>
-        <div className="flex gap-3">
-          <button onClick={onCancelar} className="flex-1 bg-[#EBF5FF] border border-cobeb-border text-slate-400 font-semibold py-4 rounded-2xl text-sm">Cancelar</button>
-          <button onClick={onConfirmar} disabled={!numeroNF.trim()}
-            className="flex-1 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-semibold py-4 rounded-2xl text-sm transition-colors">
-            Confirmar Chegada
-          </button>
-        </div>
+        <button onClick={onConfirmar} disabled={!numeroNF.trim()}
+          className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-semibold py-4 rounded-2xl text-sm transition-colors">
+          Confirmar Chegada
+        </button>
       </div>
     </div>
   )
