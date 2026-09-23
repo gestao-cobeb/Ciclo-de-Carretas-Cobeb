@@ -146,6 +146,7 @@ export default function PortariaPage() {
           .from('tarefas_operador')
           .select('placa_cavalo, unidade_id, descarga_at')
           .in('placa_cavalo', placas)
+          .is('portaria_atendimento_id', null)
           .eq('status', 'concluido')
           .not('descarga_at', 'is', null)
         const legMap = {}
@@ -155,7 +156,8 @@ export default function PortariaPage() {
         })
         semDescarga.forEach(a => {
           const k = `${a.placa_cavalo}_${a.unidade_id}`
-          if (legMap[k]) descargas[a.id] = legMap[k]
+          // Só aceita descarga posterior à criação deste card — evita pegar viagem anterior
+          if (legMap[k] && legMap[k] > a.created_at) descargas[a.id] = legMap[k]
         })
       }
     }
