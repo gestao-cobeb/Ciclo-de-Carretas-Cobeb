@@ -156,8 +156,10 @@ export default function PortariaPage() {
         })
         semDescarga.forEach(a => {
           const k = `${a.placa_cavalo}_${a.unidade_id}`
-          // Só aceita descarga posterior à criação deste card — evita pegar viagem anterior
-          if (legMap[k] && legMap[k] > a.created_at) descargas[a.id] = legMap[k]
+          // Ancora em dt_entrada (momento real da chegada), não em created_at
+          // (que pode ser dias antes se o atendimento foi pré-cadastrado como aguardando)
+          const anchor = a.dt_entrada ?? a.created_at
+          if (legMap[k] && legMap[k] > anchor) descargas[a.id] = legMap[k]
         })
       }
     }
