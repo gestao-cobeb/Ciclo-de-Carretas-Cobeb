@@ -171,8 +171,20 @@ export default function PortariaPage() {
   useEffect(() => { carregar() }, [carregar])
 
   useEffect(() => {
-    const timer = setInterval(() => carregar(true), 30000)
+    const timer = setInterval(() => carregar(true), 15000)
     return () => clearInterval(timer)
+  }, [carregar])
+
+  // Atualiza imediatamente ao voltar para a aba (cobre página aberta desde dia anterior)
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') {
+        setFiltroData(isoToday())
+        carregar()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [carregar])
 
   // Toca beep enquanto houver cards descarregados e não mutados
