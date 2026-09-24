@@ -239,19 +239,16 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, profileId, gr
 
   function baixarPdf() {
     if (!pdfUrl) return
-    window.open(pdfUrl, '_blank')
+    const a = document.createElement('a')
+    a.href = pdfUrl
+    a.download = pdfFilename
+    a.click()
   }
 
   function imprimirPdf() {
     if (!pdfUrl) return
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;width:0;height:0;border:none;opacity:0'
-    iframe.src = pdfUrl
-    document.body.appendChild(iframe)
-    iframe.onload = () => {
-      iframe.contentWindow.focus(); iframe.contentWindow.print()
-      setTimeout(() => document.body.removeChild(iframe), 2000)
-    }
+    const win = window.open(pdfUrl, '_blank')
+    win?.addEventListener('load', () => win.print())
   }
 
   const totalNRIs   = grupos.reduce((s, gr) => {
