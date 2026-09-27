@@ -71,6 +71,7 @@ export default function Viagem() {
   const [registrando, setRegistrando] = useState(false)
   const [showNF, setShowNF]           = useState(false)
   const [numeroNF, setNumeroNF]       = useState('')
+  const [dispensando, setDispensando] = useState(false)
 
   // rastreamento
   const [fabricasAlvo,     setFabricasAlvo]     = useState([])
@@ -161,6 +162,8 @@ export default function Viagem() {
         .select('*, unidade:unidades(*), carreta:carretas(*), cavalo:cavalos(*)')
         .eq('motorista_id', profile.id)
         .neq('status', 'concluida')
+        .order('created_at', { ascending: false })
+        .limit(1)
         .maybeSingle(),
       supabase.from('profiles').select('id, nome, tipo, cpf').eq('perfil', 'motorista').eq('ativo', true).order('nome'),
     ])
@@ -428,6 +431,24 @@ export default function Viagem() {
     }
   }
 
+  async function dispensarViagem() {
+    if (!viagemAtiva?.id) return
+    setDispensando(true)
+    const { error } = await supabase.rpc('motorista_dispensar_viagem', { p_viagem_id: viagemAtiva.id })
+    setDispensando(false)
+    if (error) { alert('Erro ao dispensar viagem: ' + error.message); return }
+    rastreamento.parar()
+    cacheViagem(null)
+    setViagemAtiva(null)
+    setPedidosDaViagem([])
+    setTarefaStatus(null)
+    setPortariaStatus(null)
+    setPortariaSaida(null)
+    setAgendamento(null)
+    resetWizard()
+    setView('wizard')
+  }
+
   function resetWizard() {
     setStep(1); setCarreta(null); setCavalo(null)
     setPedidos([]); setHorario(''); setNfSaida('')
@@ -569,6 +590,8 @@ export default function Viagem() {
               onFecharModalAgendamento={() => setShowModalAgendamento(false)}
               onCriarAgendamento={criarAgendamento}
               onDefinirUnidade={definirUnidadeDescarga}
+              onDispensar={dispensarViagem}
+              dispensando={dispensando}
             />
         }
       </main>
@@ -954,13 +977,14 @@ const STATUS_GPS_LABEL = {
   retornando:  'Rastreando — retornando à revenda',
 }
 
-function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerificarTarefa, showNF, setShowNF, numeroNF, setNumeroNF, registrando, setRegistrando, registrarEtapa, agendamento, unidades, onAbrirAgendamento, onCancelarAgendamento, showModalAgendamento, onFecharModalAgendamento, onCriarAgendamento, onDefinirUnidade }) {
+function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerificarTarefa, showNF, setShowNF, numeroNF, setNumeroNF, registrando, setRegistrando, registrarEtapa, agendamento, unidades, onAbrirAgendamento, onCancelarAgendamento, showModalAgendamento, onFecharModalAgendamento, onCriarAgendamento, onDefinirUnidade, onDispensar, dispensando }) {
   const numerosUnicos = [...new Set(pedidos.map(p => p.numero_pedido))]
   const totalPallets  = pedidos.reduce((s, p) => s + (Number(p.qtde_pallets) || 0), 0)
   const totalSkus     = pedidos.reduce((s, p) => s + (Number(p.qtde_skus)    || 0), 0)
   const etapaAtualIdx = ETAPAS.findIndex(e => !viagem?.[e.field])
 
-  const [showModalUnidade, setShowModalUnidade] = useState(false)
+  const [showModalUnidade,    setShowModalUnidade]    = useState(false)
+  const [showConfirmDispensar, setShowConfirmDispensar] = useState(false)
 
   // Bloqueio chegada_revenda sem agendamento — só aplica quando etapa ainda não está concluída
   const saidaRevenda   = !!viagem?.dt_saida_revenda
@@ -1166,6 +1190,28 @@ function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerifica
         </div>
       )}
 
+      {/* Dispensar viagem — indisponível após chegada na revenda */}
+      {viagem?.status !== 'aguardando_conferencia' && (
+        <div className="pt-2 pb-4 flex justify-center">
+          <button
+            onClick={() => setShowConfirmDispensar(true)}
+            className="text-slate-400 hover:text-red-400 text-xs flex items-center gap-1.5 transition-colors py-2 px-3"
+          >
+            <X size={12} />
+            Dispensar viagem
+          </button>
+        </div>
+      )}
+
+      {/* Modal confirmação dispensar */}
+      {showConfirmDispensar && (
+        <ModalConfirmDispensar
+          loading={dispensando}
+          onConfirmar={async () => { setShowConfirmDispensar(false); await onDispensar() }}
+          onCancelar={() => setShowConfirmDispensar(false)}
+        />
+      )}
+
       {/* NF Modal */}
       {showNF && <NFModal numeroNF={numeroNF} setNumeroNF={setNumeroNF} onConfirmar={confirmarNF} />}
 
@@ -1254,6 +1300,39 @@ function NFModal({ numeroNF, setNumeroNF, onConfirmar }) {
           className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-semibold py-4 rounded-2xl text-sm transition-colors">
           Confirmar Chegada
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal Confirmar Dispensar ─────────────────────────────────────────────────
+
+function ModalConfirmDispensar({ onConfirmar, onCancelar, loading }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
+      <div className="w-full max-w-lg mx-auto bg-white rounded-t-3xl p-6 space-y-5">
+        <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto" />
+        <div>
+          <p className="text-cobeb-text font-semibold text-base">Dispensar viagem?</p>
+          <p className="text-slate-500 text-sm mt-1">
+            Os pedidos voltam para o pool como se nunca tivessem sido vinculados. Esta ação não pode ser desfeita.
+          </p>
+        </div>
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-red-600 text-xs font-medium">
+          Todo o histórico desta viagem (datas, agendamento) será apagado.
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onCancelar} disabled={loading}
+            className="flex-1 bg-white border border-cobeb-border text-slate-400 font-semibold py-4 rounded-2xl text-sm">
+            Cancelar
+          </button>
+          <button onClick={onConfirmar} disabled={loading}
+            className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-4 rounded-2xl text-sm flex items-center justify-center gap-2 transition-colors">
+            {loading
+              ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Dispensando...</>
+              : 'Dispensar'}
+          </button>
+        </div>
       </div>
     </div>
   )
