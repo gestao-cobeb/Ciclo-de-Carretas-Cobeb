@@ -1192,15 +1192,13 @@ function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerifica
 
       {/* Dispensar viagem — indisponível após chegada na revenda */}
       {viagem?.status !== 'aguardando_conferencia' && (
-        <div className="pt-2 pb-4 flex justify-center">
-          <button
-            onClick={() => setShowConfirmDispensar(true)}
-            className="text-slate-400 hover:text-red-400 text-xs flex items-center gap-1.5 transition-colors py-2 px-3"
-          >
-            <X size={12} />
-            Dispensar viagem
-          </button>
-        </div>
+        <button
+          onClick={() => setShowConfirmDispensar(true)}
+          className="w-full bg-red-500 hover:bg-red-600 text-white font-semibold py-4 rounded-2xl text-sm flex items-center justify-center gap-2 transition-colors"
+        >
+          <X size={16} />
+          Dispensar Viagem
+        </button>
       )}
 
       {/* Modal confirmação dispensar */}
