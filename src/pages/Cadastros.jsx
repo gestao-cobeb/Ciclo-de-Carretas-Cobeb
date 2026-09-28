@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Truck, Users, ClipboardList, Tractor, Shield, DoorOpen, Forklift, Building2, LayoutGrid } from 'lucide-react'
+import { Truck, Users, ClipboardList, Tractor, Shield, DoorOpen, Forklift, Building2, LayoutGrid, Clock } from 'lucide-react'
 import AdminLayout from '../components/AdminLayout'
 import ErrorBoundary from '../components/ErrorBoundary'
 import { useAuth } from '../contexts/AuthContext'
@@ -9,6 +9,7 @@ import Portaria from './cadastros/Portaria'
 import Empilhadeiras from './cadastros/Empilhadeiras'
 import Carretas from './cadastros/Carretas'
 import Cavalos from './cadastros/Cavalos'
+import Turnos from './cadastros/Turnos'
 import Admins from './cadastros/Admins'
 import Unidades from './cadastros/Unidades'
 import Grade from './cadastros/Grade'
@@ -20,6 +21,7 @@ const TABS_BASE = [
   { id: 'empilhadeiras', label: 'Empilhadeiras', icon: Forklift,     adminTotal: false },
   { id: 'carretas',      label: 'Carretas',      icon: Truck,        adminTotal: false },
   { id: 'cavalos',       label: 'Cavalos',       icon: Tractor,      adminTotal: false },
+  { id: 'turnos',        label: 'Turnos',        icon: Clock,        adminTotal: false },
   { id: 'admins',        label: 'Usuários',      icon: Shield,       adminTotal: true  },
   { id: 'unidades',      label: 'Unidades',      icon: Building2,    adminTotal: true  },
   { id: 'grade',         label: 'Grade',         icon: LayoutGrid,   adminTotal: false, gradeOnly: true },
@@ -68,6 +70,7 @@ export default function Cadastros() {
         {abaAtiva === 'empilhadeiras' && <Empilhadeiras />}
         {abaAtiva === 'carretas'      && <Carretas />}
         {abaAtiva === 'cavalos'       && <Cavalos />}
+        {abaAtiva === 'turnos'        && <Turnos />}
         {abaAtiva === 'admins'        && <Admins />}
         {abaAtiva === 'unidades'      && <Unidades />}
         {abaAtiva === 'grade'         && <Grade />}
