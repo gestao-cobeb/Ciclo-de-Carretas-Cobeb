@@ -47,6 +47,21 @@ function calcAvg(data) {
   return Math.round(valid.reduce((s, d) => s + d.value, 0) / valid.length)
 }
 
+function resolverTurno(dt, turnos) {
+  if (!dt || !turnos.length) return '—'
+  const d    = new Date(dt)
+  const hora = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  for (const t of turnos) {
+    const ini = t.hora_inicio.slice(0, 5)
+    const fim = t.hora_fim.slice(0, 5)
+    const match = ini < fim
+      ? hora >= ini && hora < fim
+      : hora >= ini || hora < fim
+    if (match) return `Turno ${t.nome}`
+  }
+  return '—'
+}
+
 // ── Componentes de gráfico ────────────────────────────────────────────────────
 
 function renderBarLabel({ x, y, width, value }) {
@@ -162,6 +177,7 @@ export default function Dashboard() {
   const [optUnidades, setOptUnidades] = useState([])
   const [optFabricas, setOptFabricas] = useState([])
   const [optCavalos,  setOptCavalos]  = useState([])
+  const [turnosMap,   setTurnosMap]   = useState({})
 
   // valores dos filtros
   const [dataInicio,    setDataInicio]    = useState(DEFAULT_INICIO)
@@ -170,18 +186,28 @@ export default function Dashboard() {
   const [filtroFrota,   setFiltroFrota]   = useState('')
   const [filtroFabrica, setFiltroFabrica] = useState('')
   const [filtroCavalo,  setFiltroCavalo]  = useState('')
+  const [filtroTurno,   setFiltroTurno]   = useState('')
 
   // opções dos selects — carregadas uma vez
   useEffect(() => {
     async function loadOpts() {
-      const [{ data: u }, { data: f }, { data: c }] = await Promise.all([
+      const [{ data: u }, { data: f }, { data: c }, { data: turnData }] = await Promise.all([
         supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
         supabase.from('unidades').select('id, nome, codigo_ambev').eq('tipo', 'fabrica').eq('ativo', true).order('nome'),
         supabase.from('cavalos').select('id, placa, tipo').eq('ativo', true).order('placa'),
+        supabase.from('turnos').select('unidade_id, nome, hora_inicio, hora_fim').eq('ativo', true),
       ])
       if (u) setOptUnidades(u)
       if (f) setOptFabricas(f)
       if (c) setOptCavalos(c)
+      if (turnData) {
+        const tMap = {}
+        turnData.forEach(t => {
+          if (!tMap[t.unidade_id]) tMap[t.unidade_id] = []
+          tMap[t.unidade_id].push(t)
+        })
+        setTurnosMap(tMap)
+      }
     }
     loadOpts()
   }, [])
@@ -260,35 +286,37 @@ export default function Dashboard() {
       : null
 
     return viagens
-      .filter(v => {
-        if (filtroUnidade && v.unidade?.id !== filtroUnidade) return false
-        if (filtroFrota   && v.cavalo?.tipo !== filtroFrota)  return false
-        if (filtroCavalo  && v.cavalo?.id   !== filtroCavalo) return false
-        if (fabCodigo && !fabricaViagemMap[v.id]?.has(fabCodigo)) return false
-        return true
-      })
       .map(v => {
         const p    = portariaMap[v.id]
         const disp = dispersaoMap[v.id]
         return {
           ...v,
+          _turno:   resolverTurno(v.dt_chegada_revenda, turnosMap[v.unidade?.id] ?? []),
           _tmv:     disp?.has('tmv')     ? null : diffMin(v.dt_saida_revenda,   p?.dt_saida),
           _tmaRev:  disp?.has('tma_rev') ? null : diffMin(v.dt_chegada_revenda,  p?.dt_saida),
           _tmaFab:  disp?.has('tma_fab') ? null : diffMin(v.dt_chegada_fabrica,  v.dt_saida_fabrica),
           _aguardo: disp?.has('aguardo') ? null : diffMin(v.dt_chegada_revenda,  p?.dt_entrada),
         }
       })
-  }, [viagens, portariaMap, fabricaViagemMap, dispersaoMap, filtroUnidade, filtroFrota, filtroCavalo, filtroFabrica, optFabricas])
+      .filter(v => {
+        if (filtroUnidade && v.unidade?.id !== filtroUnidade) return false
+        if (filtroFrota   && v.cavalo?.tipo !== filtroFrota)  return false
+        if (filtroCavalo  && v.cavalo?.id   !== filtroCavalo) return false
+        if (fabCodigo && !fabricaViagemMap[v.id]?.has(fabCodigo)) return false
+        if (filtroTurno && v._turno !== `Turno ${filtroTurno}`)   return false
+        return true
+      })
+  }, [viagens, portariaMap, fabricaViagemMap, dispersaoMap, turnosMap, filtroUnidade, filtroFrota, filtroCavalo, filtroFabrica, filtroTurno, optFabricas])
 
   const dadosTMV     = useMemo(() => groupByDay(rows, r => r._tmv),     [rows])
   const dadosTMARev  = useMemo(() => groupByDay(rows, r => r._tmaRev),  [rows])
   const dadosTMAFab  = useMemo(() => groupByDay(rows, r => r._tmaFab),  [rows])
   const dadosAguardo = useMemo(() => groupByDay(rows, r => r._aguardo), [rows])
 
-  const temFiltro = filtroUnidade || filtroFrota || filtroFabrica || filtroCavalo
+  const temFiltro = filtroUnidade || filtroFrota || filtroFabrica || filtroCavalo || filtroTurno
 
   function resetFiltros() {
-    setFiltroUnidade(''); setFiltroFrota(''); setFiltroFabrica(''); setFiltroCavalo('')
+    setFiltroUnidade(''); setFiltroFrota(''); setFiltroFabrica(''); setFiltroCavalo(''); setFiltroTurno('')
   }
 
   return (
@@ -339,6 +367,20 @@ export default function Dashboard() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Turno */}
+          <div className="flex gap-1.5">
+            {[['', 'Todos os turnos'], ['A', 'Turno A'], ['B', 'Turno B'], ['C', 'Turno C']].map(([val, lbl]) => (
+              <button key={val} onClick={() => setFiltroTurno(val)}
+                className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                  filtroTurno === val
+                    ? 'bg-cobeb-navy text-white border-cobeb-navy'
+                    : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
+                }`}>
+                {lbl}
+              </button>
+            ))}
           </div>
 
           {temFiltro && (
