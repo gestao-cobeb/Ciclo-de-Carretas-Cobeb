@@ -1,65 +1,379 @@
-import { LayoutDashboard, Shield, MapPin } from 'lucide-react'
-import { useAuth } from '../contexts/AuthContext'
+import { useState, useEffect, useMemo } from 'react'
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ReferenceLine, ResponsiveContainer, LabelList,
+} from 'recharts'
+import { X } from 'lucide-react'
 import AdminLayout from '../components/AdminLayout'
+import { supabase } from '../lib/supabase'
 
-export default function Dashboard() {
-  const { profile } = useAuth()
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
+function diffMin(start, end) {
+  if (!start || !end) return null
+  const ms = new Date(end) - new Date(start)
+  return ms > 0 ? ms / 60000 : null
+}
+
+function minutesToHHMM(min) {
+  if (min == null || isNaN(min)) return '—'
+  const h = Math.floor(min / 60)
+  const m = Math.floor(min % 60)
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
+}
+
+function groupByDay(rows, metricFn) {
+  const map = {}
+  rows.forEach(v => {
+    const val = metricFn(v)
+    if (val == null) return
+    const isoDay = v.dt_saida_revenda?.slice(0, 10)
+    if (!isoDay) return
+    if (!map[isoDay]) map[isoDay] = { sum: 0, count: 0 }
+    map[isoDay].sum += val
+    map[isoDay].count++
+  })
+  return Object.entries(map)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([isoDay, { sum, count }]) => {
+      const [, mm, dd] = isoDay.split('-')
+      return { day: `${dd}/${mm}`, value: Math.round(sum / count), count }
+    })
+}
+
+function calcAvg(data) {
+  const valid = data.filter(d => d.value != null)
+  if (!valid.length) return null
+  return Math.round(valid.reduce((s, d) => s + d.value, 0) / valid.length)
+}
+
+// ── Componentes de gráfico ────────────────────────────────────────────────────
+
+function renderBarLabel({ x, y, width, value }) {
+  if (!value) return null
   return (
-    <AdminLayout title="Dashboard">
-      <div className="px-5 py-6 max-w-lg mx-auto">
-
-        {/* Card do usuário */}
-        <div className="bg-white rounded-2xl p-5 border border-cobeb-border shadow-sm mb-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-cobeb-navy/10 flex items-center justify-center shrink-0">
-              <Shield size={18} className="text-cobeb-navy" />
-            </div>
-            <div>
-              <p className="text-cobeb-text font-semibold text-sm">{profile?.nome}</p>
-              <p className="text-cobeb-blue text-[11px] font-semibold uppercase tracking-widest mt-0.5">
-                {profile?.perfil}
-                {profile?.acesso_total && ' · Acesso Total'}
-              </p>
-            </div>
-          </div>
-
-          <div className="border-t border-cobeb-border pt-4 space-y-3">
-            <Row label="Email" value={profile?.email} />
-            <Row
-              label="Acesso"
-              value={profile?.acesso_total ? '✦ Todas as unidades' : (
-                <span className="flex items-center gap-1">
-                  <MapPin size={11} className="text-cobeb-yellow" />
-                  {profile?.unidade?.nome} — {profile?.unidade?.cidade}
-                </span>
-              )}
-              highlight={profile?.acesso_total}
-            />
-          </div>
-        </div>
-
-        {/* Placeholder módulos futuros */}
-        <div className="text-center py-14">
-          <div className="w-14 h-14 rounded-2xl bg-white border border-cobeb-border shadow-sm flex items-center justify-center mx-auto mb-4">
-            <LayoutDashboard size={22} className="text-cobeb-border" />
-          </div>
-          <p className="text-slate-500 text-sm font-medium">Relatórios em desenvolvimento</p>
-          <p className="text-cobeb-border text-xs mt-1">Os próximos módulos aparecerão aqui</p>
-        </div>
-
-      </div>
-    </AdminLayout>
+    <text x={x + width / 2} y={y - 5}
+      textAnchor="middle" fontSize={10} fontWeight={600} fill="#1E3A6E">
+      {minutesToHHMM(value)}
+    </text>
   )
 }
 
-function Row({ label, value, highlight }) {
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
   return (
-    <div className="flex justify-between items-center gap-4">
-      <span className="text-slate-400 text-xs shrink-0">{label}</span>
-      <span className={`text-xs font-medium text-right flex items-center gap-1 ${highlight ? 'text-cobeb-yellow' : 'text-cobeb-text'}`}>
-        {value}
-      </span>
+    <div style={{
+      background: '#fff', border: '1px solid #BFDBFE',
+      borderRadius: 12, padding: '10px 14px', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,.08)',
+    }}>
+      <p style={{ fontWeight: 600, color: '#1E3A6E', marginBottom: 4 }}>{label}</p>
+      <p style={{ color: '#003DA5', fontWeight: 700 }}>{minutesToHHMM(payload[0].value)}</p>
+      <p style={{ color: '#94A3B8', marginTop: 2 }}>
+        {payload[0].payload.count} viagem{payload[0].payload.count !== 1 ? 's' : ''}
+      </p>
     </div>
+  )
+}
+
+function GraficoMetrica({ title, data, color }) {
+  const avg         = calcAvg(data)
+  const tickInterval = Math.max(0, Math.ceil(data.length / 12) - 1)
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="text-cobeb-text font-semibold text-sm">{title}</h2>
+        {avg != null && (
+          <span className="shrink-0 text-xs font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border rounded-lg px-2.5 py-1">
+            Média: {minutesToHHMM(avg)}
+          </span>
+        )}
+      </div>
+
+      {data.length === 0 ? (
+        <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
+          Sem dados para o período
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={data} margin={{ top: 20, right: 12, left: 4, bottom: 32 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
+            <XAxis
+              dataKey="day"
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={{ stroke: '#BFDBFE' }}
+              angle={-35}
+              textAnchor="end"
+              interval={tickInterval}
+            />
+            <YAxis
+              tickFormatter={minutesToHHMM}
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={false}
+              width={50}
+            />
+            <Tooltip content={<ChartTooltip />} cursor={{ fill: '#EBF5FF' }} />
+            {avg != null && (
+              <ReferenceLine
+                y={avg}
+                stroke="#EF4444"
+                strokeDasharray="5 3"
+                strokeWidth={1.5}
+                label={{
+                  value: `⌀ ${minutesToHHMM(avg)}`,
+                  position: 'insideTopRight',
+                  fontSize: 10,
+                  fill: '#EF4444',
+                  fontWeight: 600,
+                }}
+              />
+            )}
+            <Bar dataKey="value" fill={color} radius={[4, 4, 0, 0]} maxBarSize={44}>
+              <LabelList dataKey="value" content={renderBarLabel} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
+// ── Estilos ───────────────────────────────────────────────────────────────────
+
+const selCls  = 'bg-white border border-cobeb-border rounded-xl px-3 py-2 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue appearance-none cursor-pointer w-full'
+const dateCls = 'flex-1 bg-white border border-cobeb-border rounded-xl px-3 py-1.5 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue [color-scheme:light]'
+
+const DEFAULT_FIM   = new Date().toISOString().slice(0, 10)
+const DEFAULT_INICIO = new Date(Date.now() - 29 * 24 * 3600000).toISOString().slice(0, 10)
+
+// ── Componente principal ──────────────────────────────────────────────────────
+
+export default function Dashboard() {
+  // dados
+  const [viagens,          setViagens]          = useState([])
+  const [portariaMap,      setPortariaMap]      = useState({})
+  const [fabricaViagemMap, setFabricaViagemMap] = useState({})
+  const [loading,          setLoading]          = useState(true)
+
+  // opções dos filtros
+  const [optUnidades, setOptUnidades] = useState([])
+  const [optFabricas, setOptFabricas] = useState([])
+  const [optCavalos,  setOptCavalos]  = useState([])
+
+  // valores dos filtros
+  const [dataInicio,    setDataInicio]    = useState(DEFAULT_INICIO)
+  const [dataFim,       setDataFim]       = useState(DEFAULT_FIM)
+  const [filtroUnidade, setFiltroUnidade] = useState('')
+  const [filtroFrota,   setFiltroFrota]   = useState('')
+  const [filtroFabrica, setFiltroFabrica] = useState('')
+  const [filtroCavalo,  setFiltroCavalo]  = useState('')
+
+  // opções dos selects — carregadas uma vez
+  useEffect(() => {
+    async function loadOpts() {
+      const [{ data: u }, { data: f }, { data: c }] = await Promise.all([
+        supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
+        supabase.from('unidades').select('id, nome, codigo_ambev').eq('tipo', 'fabrica').eq('ativo', true).order('nome'),
+        supabase.from('cavalos').select('id, placa, tipo').eq('ativo', true).order('placa'),
+      ])
+      if (u) setOptUnidades(u)
+      if (f) setOptFabricas(f)
+      if (c) setOptCavalos(c)
+    }
+    loadOpts()
+  }, [])
+
+  // dados — recarregam quando o período muda
+  useEffect(() => { carregar() }, [dataInicio, dataFim])
+
+  async function carregar() {
+    setLoading(true)
+
+    const { data: vData } = await supabase
+      .from('viagens')
+      .select(`
+        id,
+        dt_saida_revenda, dt_chegada_fabrica, dt_saida_fabrica,
+        dt_chegada_revenda, dt_saida_entrega,
+        unidade:unidades(id, nome),
+        cavalo:cavalos(id, placa, tipo)
+      `)
+      .not('dt_saida_revenda', 'is', null)
+      .gte('dt_saida_revenda', dataInicio + 'T00:00:00')
+      .lte('dt_saida_revenda', dataFim + 'T23:59:59')
+      .order('dt_saida_revenda')
+
+    const vids = (vData ?? []).map(v => v.id)
+
+    if (!vids.length) {
+      setViagens([]); setPortariaMap({}); setFabricaViagemMap({})
+      setLoading(false)
+      return
+    }
+
+    const [{ data: pData }, { data: pedData }] = await Promise.all([
+      supabase
+        .from('portaria_atendimentos')
+        .select('viagem_id, dt_entrada, dt_saida')
+        .in('viagem_id', vids)
+        .is('excluido_em', null),
+      supabase
+        .from('pedidos')
+        .select('viagem_id, codigo_fabrica')
+        .in('viagem_id', vids)
+        .not('codigo_fabrica', 'is', null),
+    ])
+
+    const pMap = {}
+    ;(pData ?? []).forEach(p => { pMap[p.viagem_id] = p })
+
+    const fabVMap = {}
+    ;(pedData ?? []).forEach(p => {
+      if (!fabVMap[p.viagem_id]) fabVMap[p.viagem_id] = new Set()
+      fabVMap[p.viagem_id].add(p.codigo_fabrica)
+    })
+
+    setViagens(vData ?? [])
+    setPortariaMap(pMap)
+    setFabricaViagemMap(fabVMap)
+    setLoading(false)
+  }
+
+  // filtros client-side + métricas pré-computadas
+  const rows = useMemo(() => {
+    const fabCodigo = filtroFabrica
+      ? optFabricas.find(f => f.id === filtroFabrica)?.codigo_ambev ?? null
+      : null
+
+    return viagens
+      .filter(v => {
+        if (filtroUnidade && v.unidade?.id !== filtroUnidade) return false
+        if (filtroFrota   && v.cavalo?.tipo !== filtroFrota)  return false
+        if (filtroCavalo  && v.cavalo?.id   !== filtroCavalo) return false
+        if (fabCodigo && !fabricaViagemMap[v.id]?.has(fabCodigo)) return false
+        return true
+      })
+      .map(v => {
+        const p = portariaMap[v.id]
+        return {
+          ...v,
+          _tmv:     diffMin(v.dt_saida_revenda,   p?.dt_saida),
+          _tmaRev:  diffMin(v.dt_chegada_revenda,  p?.dt_saida),
+          _tmaFab:  diffMin(v.dt_chegada_fabrica,  v.dt_saida_fabrica),
+          _aguardo: diffMin(v.dt_chegada_revenda,  p?.dt_entrada),
+        }
+      })
+  }, [viagens, portariaMap, fabricaViagemMap, filtroUnidade, filtroFrota, filtroCavalo, filtroFabrica, optFabricas])
+
+  const dadosTMV     = useMemo(() => groupByDay(rows, r => r._tmv),     [rows])
+  const dadosTMARev  = useMemo(() => groupByDay(rows, r => r._tmaRev),  [rows])
+  const dadosTMAFab  = useMemo(() => groupByDay(rows, r => r._tmaFab),  [rows])
+  const dadosAguardo = useMemo(() => groupByDay(rows, r => r._aguardo), [rows])
+
+  const temFiltro = filtroUnidade || filtroFrota || filtroFabrica || filtroCavalo
+
+  function resetFiltros() {
+    setFiltroUnidade(''); setFiltroFrota(''); setFiltroFabrica(''); setFiltroCavalo('')
+  }
+
+  return (
+    <AdminLayout title="Dashboard">
+      <div className="px-4 pt-5 pb-8 space-y-5">
+
+        {/* ── Filtros ──────────────────────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 space-y-3">
+
+          {/* Período */}
+          <div className="flex items-center gap-2">
+            <input type="date" value={dataInicio} max={dataFim || undefined}
+              onChange={e => setDataInicio(e.target.value)} className={dateCls} />
+            <span className="text-slate-400 text-xs shrink-0">até</span>
+            <input type="date" value={dataFim} min={dataInicio || undefined}
+              onChange={e => setDataFim(e.target.value)} className={dateCls} />
+          </div>
+
+          {/* Unidade + Fábrica */}
+          <div className="grid grid-cols-2 gap-2">
+            <select value={filtroUnidade} onChange={e => setFiltroUnidade(e.target.value)} className={selCls}>
+              <option value="">Todos os CDs</option>
+              {optUnidades.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+            </select>
+            <select value={filtroFabrica} onChange={e => setFiltroFabrica(e.target.value)} className={selCls}>
+              <option value="">Todas as fábricas</option>
+              {optFabricas.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
+            </select>
+          </div>
+
+          {/* Cavalo + Frota */}
+          <div className="grid grid-cols-2 gap-2">
+            <select value={filtroCavalo} onChange={e => setFiltroCavalo(e.target.value)} className={selCls}>
+              <option value="">Todos os cavalos</option>
+              {optCavalos.map(c => (
+                <option key={c.id} value={c.id}>{c.placa} ({c.tipo})</option>
+              ))}
+            </select>
+            <div className="flex gap-1.5">
+              {[['', 'Todos'], ['FF', 'FF'], ['SPOT', 'SPOT']].map(([val, lbl]) => (
+                <button key={val} onClick={() => setFiltroFrota(val)}
+                  className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                    filtroFrota === val
+                      ? 'bg-cobeb-navy text-white border-cobeb-navy'
+                      : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
+                  }`}>
+                  {lbl}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {temFiltro && (
+            <button onClick={resetFiltros}
+              className="flex items-center gap-1 text-xs text-slate-500 hover:text-cobeb-yellow transition-colors">
+              <X size={12} /> Limpar filtros
+            </button>
+          )}
+        </div>
+
+        {/* ── Contagem ─────────────────────────────────────────────────────── */}
+        <p className="text-slate-400 text-xs">
+          {loading
+            ? 'Carregando...'
+            : `${rows.length} viagem${rows.length !== 1 ? 's' : ''} no período`}
+        </p>
+
+        {/* ── Gráficos ─────────────────────────────────────────────────────── */}
+        {loading ? (
+          <div className="flex justify-center py-20">
+            <div className="w-6 h-6 border-2 border-cobeb-blue border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <GraficoMetrica
+              title="TMV por Dia — Saída Revenda → Saída Portaria"
+              data={dadosTMV}
+              color="#003DA5"
+            />
+            <GraficoMetrica
+              title="TMA Revenda por Dia — Chegada Revenda → Saída Portaria"
+              data={dadosTMARev}
+              color="#1D6AD4"
+            />
+            <GraficoMetrica
+              title="TMA Fábrica por Dia — Chegada Fábrica → Saída Fábrica"
+              data={dadosTMAFab}
+              color="#FFB81C"
+            />
+            <GraficoMetrica
+              title="Fila por Dia — Chegada Revenda → Entrada Portaria"
+              data={dadosAguardo}
+              color="#EF4444"
+            />
+          </div>
+        )}
+
+      </div>
+    </AdminLayout>
   )
 }
