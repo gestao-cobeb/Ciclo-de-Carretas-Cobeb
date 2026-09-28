@@ -1,4 +1,6 @@
 {
   "java.import.exclusions": ["**/android/**"],
-  "gradle.nestedProjects": false
+  "gradle.nestedProjects": false,
+  "java.compile.nullAnalysis.mode": "automatic",
+  "java.configuration.updateBuildConfiguration": "interactive"
 }
