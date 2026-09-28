@@ -216,10 +216,13 @@ export default function Turnos() {
               </select>
             </Field>
 
-            <Field label="Nome do Turno" required>
-              <input type="text" value={nome} onChange={e => setNome(e.target.value)}
-                required maxLength={30} placeholder="Ex: A, Manhã, Noturno"
-                className={inputClass} />
+            <Field label="Turno" required>
+              <select value={nome} onChange={e => setNome(e.target.value)} required className={selectClass}>
+                <option value="">Selecione o turno</option>
+                <option value="A">Turno A</option>
+                <option value="B">Turno B</option>
+                <option value="C">Turno C</option>
+              </select>
             </Field>
 
             <div className="grid grid-cols-2 gap-3">
