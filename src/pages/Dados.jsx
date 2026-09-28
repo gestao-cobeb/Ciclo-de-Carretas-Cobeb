@@ -4,6 +4,21 @@ import * as XLSX from 'xlsx'
 import AdminLayout from '../components/AdminLayout'
 import { supabase } from '../lib/supabase'
 
+function resolverTurno(dt, turnos) {
+  if (!dt || !turnos.length) return '—'
+  const d    = new Date(dt)
+  const hora = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+  for (const t of turnos) {
+    const ini = t.hora_inicio.slice(0, 5)
+    const fim = t.hora_fim.slice(0, 5)
+    const match = ini < fim
+      ? hora >= ini && hora < fim          // turno normal
+      : hora >= ini || hora < fim          // cruza meia-noite
+    if (match) return `Turno ${t.nome}`
+  }
+  return '—'
+}
+
 function diffHHMM(start, end) {
   if (!start || !end) return '—'
   const ms = new Date(end) - new Date(start)
@@ -39,6 +54,7 @@ const COLS = [
   { label: 'NF',                  key: 'nf',                   min: 100 },
   { label: 'Fábrica',            key: 'fabrica',              min: 160 },
   { label: 'Revenda (CD)',       key: 'revenda',              min: 150 },
+  { label: 'Turno',              key: 'turno',                min: 82  },
   { label: 'Saída Revenda',      key: 'dt_saida_revenda',     min: 128 },
   { label: 'Chegada Fábrica',    key: 'dt_chegada_fabrica',   min: 128 },
   { label: 'Saída Fábrica',      key: 'dt_saida_fabrica',     min: 128 },
@@ -78,6 +94,7 @@ function cellValue(row, key) {
     case 'nf':                 return row._nf
     case 'fabrica':            return row._fabricas
     case 'revenda':            return row.unidade?.nome   ?? '—'
+    case 'turno':              return row._turno          ?? '—'
     case 'dt_saida_revenda':   return fmtTs(row.dt_saida_revenda)
     case 'dt_chegada_fabrica': return fmtTs(row.dt_chegada_fabrica)
     case 'dt_saida_fabrica':   return fmtTs(row.dt_saida_fabrica)
@@ -120,7 +137,7 @@ export default function Dados() {
   async function carregar(silent = false) {
     if (!silent) setLoading(true)
 
-    const [{ data: viagens }, { data: unids }] = await Promise.all([
+    const [{ data: viagens }, { data: unids }, { data: turnosData }] = await Promise.all([
       supabase
         .from('viagens')
         .select(`
@@ -138,7 +155,17 @@ export default function Dados() {
         .select('id, nome, cidade')
         .eq('tipo', 'revenda')
         .order('nome'),
+      supabase
+        .from('turnos')
+        .select('unidade_id, nome, hora_inicio, hora_fim')
+        .eq('ativo', true),
     ])
+
+    const turnosMap = {}
+    ;(turnosData ?? []).forEach(t => {
+      if (!turnosMap[t.unidade_id]) turnosMap[t.unidade_id] = []
+      turnosMap[t.unidade_id].push(t)
+    })
 
     const viagemIds = (viagens ?? []).map(v => v.id)
 
@@ -221,6 +248,7 @@ export default function Dados() {
         _tarefa:   tarefaMap[v.id]   ?? {},
         _portaria: portariaMap[v.id] ?? {},
         _operador: opKey ? (opMap[opKey] ?? null) : null,
+        _turno:    resolverTurno(v.dt_chegada_revenda, turnosMap[v.unidade?.id] ?? []),
       }
     })
 
