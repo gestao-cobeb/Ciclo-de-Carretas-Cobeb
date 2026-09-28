@@ -4,7 +4,7 @@ import {
   ReferenceLine, ResponsiveContainer, LabelList,
 } from 'recharts'
 import { X } from 'lucide-react'
-import AdminLayout from '../components/AdminLayout'
+import DashboardLayout from '../components/DashboardLayout'
 import { supabase } from '../lib/supabase'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -320,7 +320,7 @@ export default function Dashboard() {
   }
 
   return (
-    <AdminLayout title="Dashboard">
+    <DashboardLayout>
       <div className="px-4 pt-5 pb-8 space-y-5">
 
         {/* ── Filtros ──────────────────────────────────────────────────────── */}
@@ -429,6 +429,6 @@ export default function Dashboard() {
         )}
 
       </div>
-    </AdminLayout>
+    </DashboardLayout>
   )
 }
