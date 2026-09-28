@@ -155,6 +155,7 @@ export default function Dashboard() {
   const [viagens,          setViagens]          = useState([])
   const [portariaMap,      setPortariaMap]      = useState({})
   const [fabricaViagemMap, setFabricaViagemMap] = useState({})
+  const [dispersaoMap,     setDispersaoMap]     = useState({})
   const [loading,          setLoading]          = useState(true)
 
   // opções dos filtros
@@ -208,12 +209,12 @@ export default function Dashboard() {
     const vids = (vData ?? []).map(v => v.id)
 
     if (!vids.length) {
-      setViagens([]); setPortariaMap({}); setFabricaViagemMap({})
+      setViagens([]); setPortariaMap({}); setFabricaViagemMap({}); setDispersaoMap({})
       setLoading(false)
       return
     }
 
-    const [{ data: pData }, { data: pedData }] = await Promise.all([
+    const [{ data: pData }, { data: pedData }, { data: dispData }] = await Promise.all([
       supabase
         .from('portaria_atendimentos')
         .select('viagem_id, dt_entrada, dt_saida')
@@ -224,6 +225,10 @@ export default function Dashboard() {
         .select('viagem_id, codigo_fabrica')
         .in('viagem_id', vids)
         .not('codigo_fabrica', 'is', null),
+      supabase
+        .from('viagens_dispersao')
+        .select('viagem_id, metrica')
+        .in('viagem_id', vids),
     ])
 
     const pMap = {}
@@ -235,9 +240,16 @@ export default function Dashboard() {
       fabVMap[p.viagem_id].add(p.codigo_fabrica)
     })
 
+    const dMap = {}
+    ;(dispData ?? []).forEach(d => {
+      if (!dMap[d.viagem_id]) dMap[d.viagem_id] = new Set()
+      dMap[d.viagem_id].add(d.metrica)
+    })
+
     setViagens(vData ?? [])
     setPortariaMap(pMap)
     setFabricaViagemMap(fabVMap)
+    setDispersaoMap(dMap)
     setLoading(false)
   }
 
@@ -256,16 +268,17 @@ export default function Dashboard() {
         return true
       })
       .map(v => {
-        const p = portariaMap[v.id]
+        const p    = portariaMap[v.id]
+        const disp = dispersaoMap[v.id]
         return {
           ...v,
-          _tmv:     diffMin(v.dt_saida_revenda,   p?.dt_saida),
-          _tmaRev:  diffMin(v.dt_chegada_revenda,  p?.dt_saida),
-          _tmaFab:  diffMin(v.dt_chegada_fabrica,  v.dt_saida_fabrica),
-          _aguardo: diffMin(v.dt_chegada_revenda,  p?.dt_entrada),
+          _tmv:     disp?.has('tmv')     ? null : diffMin(v.dt_saida_revenda,   p?.dt_saida),
+          _tmaRev:  disp?.has('tma_rev') ? null : diffMin(v.dt_chegada_revenda,  p?.dt_saida),
+          _tmaFab:  disp?.has('tma_fab') ? null : diffMin(v.dt_chegada_fabrica,  v.dt_saida_fabrica),
+          _aguardo: disp?.has('aguardo') ? null : diffMin(v.dt_chegada_revenda,  p?.dt_entrada),
         }
       })
-  }, [viagens, portariaMap, fabricaViagemMap, filtroUnidade, filtroFrota, filtroCavalo, filtroFabrica, optFabricas])
+  }, [viagens, portariaMap, fabricaViagemMap, dispersaoMap, filtroUnidade, filtroFrota, filtroCavalo, filtroFabrica, optFabricas])
 
   const dadosTMV     = useMemo(() => groupByDay(rows, r => r._tmv),     [rows])
   const dadosTMARev  = useMemo(() => groupByDay(rows, r => r._tmaRev),  [rows])

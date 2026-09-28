@@ -73,12 +73,16 @@ const COLS = [
   { label: 'Descarga',           key: 'tempo_descarga',       min: 90  },
   { label: 'Conferência',        key: 'tempo_conf',           min: 95  },
   { label: 'TMV',                key: 'tmv',                  min: 72  },
+  { label: 'Dispersão',          key: 'dispersao',            min: 130 },
 ]
 
 const METRIC_KEYS = new Set([
   'trecho_rev_fab', 'trecho_fab_rev',
   'tma_fab', 'tma_rev', 'aguardo', 'tempo_descarga', 'tempo_conf', 'tmv',
 ])
+
+// Fonte de verdade dos itens sujeitos a dispersão — derivado de COLS × METRIC_KEYS
+const METRICS_DISPERSAO = COLS.filter(c => METRIC_KEYS.has(c.key))
 
 const TABLE_MIN_WIDTH = COLS.reduce((s, c) => s + c.min, 0)
 
@@ -113,6 +117,11 @@ function cellValue(row, key) {
     case 'tempo_descarga':     return diffHHMM(p?.dt_entrada,            row._operador?.descarga_at)
     case 'tempo_conf':         return diffHHMM(t?.dt_inicio_conferencia, t?.dt_fim_conferencia)
     case 'tmv':                return diffHHMM(row.dt_saida_revenda,    p?.dt_saida)
+    case 'dispersao': {
+      const d = row._dispersao
+      if (!d || d.size === 0) return 'OK'
+      return [...d].map(k => METRICS_DISPERSAO.find(m => m.key === k)?.label ?? k).join(' · ')
+    }
     default:                   return '—'
   }
 }
@@ -120,9 +129,12 @@ function cellValue(row, key) {
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function Dados() {
-  const [rows,     setRows]     = useState([])
-  const [unidades, setUnidades] = useState([])
-  const [loading,  setLoading]  = useState(true)
+  const [rows,         setRows]         = useState([])
+  const [unidades,     setUnidades]     = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [dispersaoMap, setDispersaoMap] = useState({})
+  const [modalDisp,    setModalDisp]    = useState(null)
+  const [salvandoDisp, setSalvandoDisp] = useState(false)
 
   const [filtroUnidade, setFiltroUnidade] = useState('')
   const [filtroDataDe,  setFiltroDataDe]  = useState('')
@@ -171,12 +183,13 @@ export default function Dados() {
 
     if (!viagemIds.length) {
       setRows([])
+      setDispersaoMap({})
       setUnidades(unids ?? [])
       if (!silent) setLoading(false)
       return
     }
 
-    const [{ data: peds }, { data: tarefas }, { data: portarias }] = await Promise.all([
+    const [{ data: peds }, { data: tarefas }, { data: portarias }, { data: dispData }] = await Promise.all([
       supabase
         .from('pedidos')
         .select('viagem_id, numero_pedido, codigo_fabrica')
@@ -190,6 +203,10 @@ export default function Dados() {
         .select('viagem_id, dt_entrada, dt_saida')
         .in('viagem_id', viagemIds)
         .is('excluido_em', null),
+      supabase
+        .from('viagens_dispersao')
+        .select('viagem_id, metrica')
+        .in('viagem_id', viagemIds),
     ])
 
     // tarefas_operador: join por numero_nf + unidade_id
@@ -238,21 +255,29 @@ export default function Dados() {
     const portariaMap = {}
     ;(portarias ?? []).forEach(p => { portariaMap[p.viagem_id] = p })
 
+    const dispMap = {}
+    ;(dispData ?? []).forEach(d => {
+      if (!dispMap[d.viagem_id]) dispMap[d.viagem_id] = new Set()
+      dispMap[d.viagem_id].add(d.metrica)
+    })
+
     const mapped = (viagens ?? []).map(v => {
       const nf       = tarefaMap[v.id]?.numero_nf
       const opKey    = nf ? `${nf}_${v.unidade?.id}` : null
       return {
         ...v,
-        _nf:       nf ?? '—',
-        _fabricas: [...(pedMap[v.id]?.fabricas ?? new Set())].join(' · ') || '—',
-        _tarefa:   tarefaMap[v.id]   ?? {},
-        _portaria: portariaMap[v.id] ?? {},
-        _operador: opKey ? (opMap[opKey] ?? null) : null,
-        _turno:    resolverTurno(v.dt_chegada_revenda, turnosMap[v.unidade?.id] ?? []),
+        _nf:        nf ?? '—',
+        _fabricas:  [...(pedMap[v.id]?.fabricas ?? new Set())].join(' · ') || '—',
+        _tarefa:    tarefaMap[v.id]   ?? {},
+        _portaria:  portariaMap[v.id] ?? {},
+        _operador:  opKey ? (opMap[opKey] ?? null) : null,
+        _turno:     resolverTurno(v.dt_chegada_revenda, turnosMap[v.unidade?.id] ?? []),
+        _dispersao: dispMap[v.id] ?? new Set(),
       }
     })
 
     setRows(mapped)
+    setDispersaoMap(dispMap)
     setUnidades(unids ?? [])
     if (!silent) setLoading(false)
   }
@@ -273,6 +298,29 @@ export default function Dados() {
     setFiltroUnidade('')
     setFiltroDataDe('')
     setFiltroDataAte('')
+  }
+
+  async function toggleDispersao(viagemId, metricKey) {
+    setSalvandoDisp(true)
+    const currentSet = new Set(dispersaoMap[viagemId] ?? [])
+
+    if (currentSet.has(metricKey)) {
+      const { error } = await supabase.from('viagens_dispersao')
+        .delete().eq('viagem_id', viagemId).eq('metrica', metricKey)
+      if (error) { setSalvandoDisp(false); return }
+      currentSet.delete(metricKey)
+    } else {
+      const { error } = await supabase.from('viagens_dispersao')
+        .insert({ viagem_id: viagemId, metrica: metricKey })
+      if (error) { setSalvandoDisp(false); return }
+      currentSet.add(metricKey)
+    }
+
+    const newSet = new Set(currentSet)
+    setDispersaoMap(prev => ({ ...prev, [viagemId]: newSet }))
+    setRows(prev => prev.map(r => r.id === viagemId ? { ...r, _dispersao: newSet } : r))
+    setModalDisp(prev => prev?.id === viagemId ? { ...prev, _dispersao: newSet } : prev)
+    setSalvandoDisp(false)
   }
 
   function exportarXlsx() {
@@ -413,6 +461,24 @@ export default function Dados() {
                       const val      = cellValue(row, col.key)
                       const isMetric = METRIC_KEYS.has(col.key)
                       const isEmpty  = val === '—'
+
+                      if (col.key === 'dispersao') {
+                        const temDisp = row._dispersao?.size > 0
+                        return (
+                          <td key={col.key}
+                            className="px-3 py-2 whitespace-nowrap border-r border-cobeb-border/50 last:border-r-0">
+                            <button onClick={() => setModalDisp(row)}
+                              className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border transition-colors ${
+                                temDisp
+                                  ? 'bg-amber-500/10 text-amber-600 border-amber-400/30 hover:bg-amber-500/20'
+                                  : 'bg-green-500/10 text-green-600 border-green-500/20 hover:bg-green-500/20'
+                              }`}>
+                              {temDisp ? val : 'OK'}
+                            </button>
+                          </td>
+                        )
+                      }
+
                       return (
                         <td
                           key={col.key}
@@ -439,6 +505,47 @@ export default function Dados() {
           </div>
         )}
       </div>
+
+      {/* ── Modal dispersão ──────────────────────────────────────────────── */}
+      {modalDisp && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end">
+          <div className="w-full max-w-lg mx-auto bg-white rounded-t-2xl p-5">
+            <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto mb-4" />
+            <p className="text-cobeb-text font-semibold text-sm mb-0.5">
+              Dispersão — NF {modalDisp._nf}
+            </p>
+            <p className="text-slate-400 text-xs mb-4">
+              Marque as métricas com problema. Elas serão excluídas das análises nos gráficos.
+            </p>
+            <div className="space-y-2 mb-5">
+              {METRICS_DISPERSAO.map(m => {
+                const marcada = modalDisp._dispersao?.has(m.key) ?? false
+                return (
+                  <button key={m.key}
+                    onClick={() => toggleDispersao(modalDisp.id, m.key)}
+                    disabled={salvandoDisp}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border text-sm font-semibold transition-colors disabled:opacity-60 ${
+                      marcada
+                        ? 'bg-amber-500/10 border-amber-400/40 text-amber-700'
+                        : 'bg-white border-cobeb-border text-slate-500 hover:border-cobeb-blue/40'
+                    }`}>
+                    <span>{m.label}</span>
+                    {marcada && (
+                      <span className="text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-semibold">
+                        Dispersão
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+            <button onClick={() => setModalDisp(null)}
+              className="w-full bg-cobeb-navy hover:bg-cobeb-blue text-white font-semibold py-3 rounded-xl text-sm transition-colors">
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   )
 }
