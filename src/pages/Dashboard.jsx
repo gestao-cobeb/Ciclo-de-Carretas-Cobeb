@@ -109,6 +109,21 @@ function groupRows(rows, metricFn, agrupamento) {
   return groupByDay(rows, metricFn)
 }
 
+const SLOTS = [
+  '00–02','02–04','04–06','06–08','08–10','10–12',
+  '12–14','14–16','16–18','18–20','20–22','22–24',
+]
+
+function groupBySlot(rows) {
+  const counts = Array(12).fill(0)
+  rows.forEach(v => {
+    if (!v.dt_chegada_revenda) return
+    const h = new Date(v.dt_chegada_revenda).getHours()
+    counts[Math.floor(h / 2)]++
+  })
+  return SLOTS.map((slot, i) => ({ slot, count: counts[i] }))
+}
+
 function calcAvg(data) {
   const valid = data.filter(d => d.value != null)
   if (!valid.length) return null
@@ -154,6 +169,97 @@ function ChartTooltip({ active, payload, label }) {
       <p style={{ color: '#94A3B8', marginTop: 2 }}>
         {payload[0].payload.count} viagem{payload[0].payload.count !== 1 ? 's' : ''}
       </p>
+    </div>
+  )
+}
+
+function renderCountLabel({ x, y, width, value }) {
+  if (!value) return null
+  return (
+    <text x={x + width / 2} y={y - 5}
+      textAnchor="middle" fontSize={10} fontWeight={600} fill="#1E3A6E">
+      {value}
+    </text>
+  )
+}
+
+function TooltipHistograma({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid #BFDBFE',
+      borderRadius: 12, padding: '10px 14px', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,.08)',
+    }}>
+      <p style={{ fontWeight: 600, color: '#1E3A6E', marginBottom: 4 }}>{label}h</p>
+      <p style={{ color: '#0D9488', fontWeight: 700 }}>{payload[0].value} chegada{payload[0].value !== 1 ? 's' : ''}</p>
+    </div>
+  )
+}
+
+function GraficoHistograma({ data }) {
+  const total  = data.reduce((s, d) => s + d.count, 0)
+  const avg    = total ? Math.round(total / data.length) : null
+  const semDados = !total
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="text-cobeb-text font-semibold text-sm">
+          Histograma de Chegada — Distribuição por Islote de 2h
+        </h2>
+        {avg != null && (
+          <span className="shrink-0 text-xs font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border rounded-lg px-2.5 py-1">
+            Média: {avg} / islote
+          </span>
+        )}
+      </div>
+
+      {semDados ? (
+        <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
+          Sem dados para o período
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={data} margin={{ top: 20, right: 12, left: 4, bottom: 32 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
+            <XAxis
+              dataKey="slot"
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={{ stroke: '#BFDBFE' }}
+              angle={-35}
+              textAnchor="end"
+              interval={0}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={false}
+              width={32}
+            />
+            <Tooltip content={<TooltipHistograma />} cursor={{ fill: '#EBF5FF' }} />
+            {avg != null && (
+              <ReferenceLine
+                y={avg}
+                stroke="#EF4444"
+                strokeDasharray="5 3"
+                strokeWidth={1.5}
+                label={{
+                  value: `⌀ ${avg}`,
+                  position: 'insideTopRight',
+                  fontSize: 10,
+                  fill: '#EF4444',
+                  fontWeight: 600,
+                }}
+              />
+            )}
+            <Bar dataKey="count" fill="#0D9488" radius={[4, 4, 0, 0]} maxBarSize={44}>
+              <LabelList dataKey="count" content={renderCountLabel} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
     </div>
   )
 }
@@ -408,10 +514,11 @@ export default function Dashboard() {
       })
   }, [viagens, portariaMap, fabricaViagemMap, dispersaoMap, turnosMap, filtroUnidade, filtroFrota, filtroCavalo, filtroFabrica, filtroTurno, optFabricas])
 
-  const dadosTMV     = useMemo(() => groupRows(rows, r => r._tmv,     filtroAgrupamento), [rows, filtroAgrupamento])
-  const dadosTMARev  = useMemo(() => groupRows(rows, r => r._tmaRev,  filtroAgrupamento), [rows, filtroAgrupamento])
-  const dadosTMAFab  = useMemo(() => groupRows(rows, r => r._tmaFab,  filtroAgrupamento), [rows, filtroAgrupamento])
-  const dadosAguardo = useMemo(() => groupRows(rows, r => r._aguardo, filtroAgrupamento), [rows, filtroAgrupamento])
+  const dadosTMV        = useMemo(() => groupRows(rows, r => r._tmv,     filtroAgrupamento), [rows, filtroAgrupamento])
+  const dadosTMARev     = useMemo(() => groupRows(rows, r => r._tmaRev,  filtroAgrupamento), [rows, filtroAgrupamento])
+  const dadosTMAFab     = useMemo(() => groupRows(rows, r => r._tmaFab,  filtroAgrupamento), [rows, filtroAgrupamento])
+  const dadosAguardo    = useMemo(() => groupRows(rows, r => r._aguardo, filtroAgrupamento), [rows, filtroAgrupamento])
+  const dadosHistograma = useMemo(() => groupBySlot(rows), [rows])
 
   const temFiltro   = filtroUnidade || filtroFrota || filtroFabrica || filtroCavalo || filtroTurno
   const datesLocked = filtroAgrupamento !== 'dia'
@@ -564,6 +671,7 @@ export default function Dashboard() {
               data={dadosAguardo}
               color="#EF4444"
             />
+            <GraficoHistograma data={dadosHistograma} />
           </div>
         )}
 
