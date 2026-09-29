@@ -689,10 +689,24 @@ export default function Dashboard() {
   const dadosHistograma  = useMemo(() => groupBySlot(rows), [rows])
 
   const dadosOciosidade = useMemo(() => {
+    // Placas que passaram em todos os filtros ativos (inclusive unidade)
+    const placasOk = new Set(rows.map(v => v.cavalo?.placa).filter(Boolean))
+
+    // Quando há filtro por unidade, usamos TODAS as viagens do período para
+    // essas placas — não só as da unidade filtrada — para não criar gaps
+    // artificiais entre viagens de unidades diferentes.
+    const fonte = filtroUnidade
+      ? viagens.filter(v =>
+          v.cavalo?.placa &&
+          v.dt_saida_revenda &&
+          placasOk.has(v.cavalo.placa)
+        )
+      : rows
+
     const byPlaca = {}
-    rows.forEach(v => {
-      if (!v.cavalo?.placa || !v.dt_saida_revenda) return
-      const placa = v.cavalo.placa
+    fonte.forEach(v => {
+      const placa = v.cavalo?.placa
+      if (!placa || !v.dt_saida_revenda) return
       if (!byPlaca[placa]) byPlaca[placa] = []
       byPlaca[placa].push({
         dt_saida_revenda: v.dt_saida_revenda,
@@ -702,6 +716,7 @@ export default function Dashboard() {
 
     const result = []
     Object.entries(byPlaca).forEach(([placa, trips]) => {
+      if (!placasOk.has(placa)) return // garante que só exibe placas qualificadas
       if (trips.length < 2) return
       trips.sort((a, b) => new Date(a.dt_saida_revenda) - new Date(b.dt_saida_revenda))
       const gaps = []
@@ -720,7 +735,7 @@ export default function Dashboard() {
     })
 
     return result.sort((a, b) => b.value - a.value)
-  }, [rows, portariaMap])
+  }, [rows, viagens, portariaMap, filtroUnidade])
 
   const descFiltros = useMemo(() => {
     const fmt = iso => {
