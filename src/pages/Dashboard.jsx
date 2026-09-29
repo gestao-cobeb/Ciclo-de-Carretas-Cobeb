@@ -512,11 +512,13 @@ const LABEL_AGRUP = { dia: 'por Dia', semana: 'por Semana', mes: 'por Mês', ano
 
 export default function Dashboard() {
   // dados
-  const [viagens,          setViagens]          = useState([])
-  const [portariaMap,      setPortariaMap]      = useState({})
-  const [fabricaViagemMap, setFabricaViagemMap] = useState({})
-  const [dispersaoMap,     setDispersaoMap]     = useState({})
-  const [loading,          setLoading]          = useState(true)
+  const [viagens,             setViagens]             = useState([])
+  const [portariaMap,         setPortariaMap]         = useState({})
+  const [fabricaViagemMap,    setFabricaViagemMap]    = useState({})
+  const [dispersaoMap,        setDispersaoMap]        = useState({})
+  const [loading,             setLoading]             = useState(true)
+  const [mktpViagens,         setMktpViagens]         = useState([])
+  const [filtroEntradaManual, setFiltroEntradaManual] = useState(false)
 
   // opções dos filtros
   const [optUnidades, setOptUnidades] = useState([])
@@ -588,6 +590,31 @@ export default function Dashboard() {
 
   // dados — recarregam quando o período muda
   useEffect(() => { carregar() }, [dataInicio, dataFim])
+  useEffect(() => { carregarMktp() }, [dataInicio, dataFim])
+
+  async function carregarMktp() {
+    const { data } = await supabase
+      .from('portaria_atendimentos')
+      .select('id, unidade_id, placa_cavalo, placa_carreta, dt_entrada, dt_saida, unidade:unidades(id, nome)')
+      .eq('tipo', 'marketplace')
+      .is('viagem_id', null)
+      .is('excluido_em', null)
+      .gte('dt_entrada', dataInicio + 'T00:00:00')
+      .lte('dt_entrada', dataFim + 'T23:59:59')
+      .order('dt_entrada')
+    setMktpViagens((data ?? []).map(atend => ({
+      id: atend.id,
+      dt_saida_revenda:   atend.dt_entrada,
+      dt_chegada_revenda: null,
+      dt_chegada_fabrica: null,
+      dt_saida_fabrica:   null,
+      unidade: atend.unidade,
+      cavalo:  atend.placa_cavalo ? { placa: atend.placa_cavalo, tipo: null } : null,
+      _tmaRev: diffMin(atend.dt_entrada, atend.dt_saida),
+      _tmv: null, _tmaFab: null, _aguardo: null,
+      _turno: '—',
+    })))
+  }
 
   async function carregar() {
     setLoading(true)
@@ -655,6 +682,13 @@ export default function Dashboard() {
 
   // filtros client-side + métricas pré-computadas
   const rows = useMemo(() => {
+    if (filtroEntradaManual) {
+      return mktpViagens.filter(v => {
+        if (filtroUnidade && v.unidade?.id !== filtroUnidade) return false
+        return true
+      })
+    }
+
     const fabCodigo = filtroFabrica
       ? optFabricas.find(f => f.id === filtroFabrica)?.codigo_ambev ?? null
       : null
@@ -680,7 +714,7 @@ export default function Dashboard() {
         if (filtroTurno && v._turno !== `Turno ${filtroTurno}`)   return false
         return true
       })
-  }, [viagens, portariaMap, fabricaViagemMap, dispersaoMap, turnosMap, filtroUnidade, filtroFrota, filtroCavalo, filtroFabrica, filtroTurno, optFabricas])
+  }, [viagens, mktpViagens, filtroEntradaManual, portariaMap, fabricaViagemMap, dispersaoMap, turnosMap, filtroUnidade, filtroFrota, filtroCavalo, filtroFabrica, filtroTurno, optFabricas])
 
   const dadosTMV        = useMemo(() => groupRows(rows, r => r._tmv,     filtroAgrupamento), [rows, filtroAgrupamento])
   const dadosTMARev     = useMemo(() => groupRows(rows, r => r._tmaRev,  filtroAgrupamento), [rows, filtroAgrupamento])
@@ -769,17 +803,19 @@ export default function Dashboard() {
       const c = optCavalos.find(c => c.id === filtroCavalo)
       if (c) tags.push(`Cavalo: ${c.placa}`)
     }
-    if (filtroTurno) tags.push(`Turno ${filtroTurno}`)
+    if (filtroTurno)          tags.push(`Turno ${filtroTurno}`)
+    if (filtroEntradaManual)  tags.push('Entrada Manual')
 
     return tags
-  }, [filtroAgrupamento, dataInicio, dataFim, filtroUnidade, filtroFabrica, filtroFrota, filtroCavalo, filtroTurno, optUnidades, optFabricas, optCavalos])
+  }, [filtroAgrupamento, dataInicio, dataFim, filtroUnidade, filtroFabrica, filtroFrota, filtroCavalo, filtroTurno, filtroEntradaManual, optUnidades, optFabricas, optCavalos])
 
-  const temFiltro   = filtroUnidade || filtroFrota || filtroFabrica || filtroCavalo || filtroTurno
+  const temFiltro   = filtroUnidade || filtroFrota || filtroFabrica || filtroCavalo || filtroTurno || filtroEntradaManual
   const datesLocked = filtroAgrupamento !== 'dia'
   const [filtrosVisiveis, setFiltrosVisiveis] = useState(true)
 
   function resetFiltros() {
     setFiltroUnidade(''); setFiltroFrota(''); setFiltroFabrica(''); setFiltroCavalo(''); setFiltroTurno('')
+    setFiltroEntradaManual(false)
   }
 
   const lbl = LABEL_AGRUP[filtroAgrupamento]
@@ -800,7 +836,7 @@ export default function Dashboard() {
               Filtros
               {temFiltro && (
                 <span className="bg-cobeb-navy text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                  {[filtroUnidade, filtroFrota, filtroFabrica, filtroCavalo, filtroTurno].filter(Boolean).length}
+                  {[filtroUnidade, filtroFrota, filtroFabrica, filtroCavalo, filtroTurno].filter(Boolean).length + (filtroEntradaManual ? 1 : 0)}
                 </span>
               )}
             </div>
@@ -882,6 +918,18 @@ export default function Dashboard() {
             ))}
           </div>
 
+          {/* Entrada Manual */}
+          <button
+            onClick={() => setFiltroEntradaManual(v => !v)}
+            className={`w-full py-2 rounded-xl text-xs font-semibold border transition-colors ${
+              filtroEntradaManual
+                ? 'bg-violet-600 text-white border-violet-600'
+                : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
+            }`}
+          >
+            {filtroEntradaManual ? 'Entrada Manual (MKTP) ✓' : 'Entrada Manual (MKTP)'}
+          </button>
+
           {temFiltro && (
             <button onClick={resetFiltros}
               className="flex items-center gap-1 text-xs text-slate-500 hover:text-cobeb-yellow transition-colors">
@@ -895,7 +943,9 @@ export default function Dashboard() {
         <p className="text-slate-400 text-xs">
           {loading
             ? 'Carregando...'
-            : `${rows.length} viagem${rows.length !== 1 ? 's' : ''} no período`}
+            : filtroEntradaManual
+              ? `${rows.length} entrada${rows.length !== 1 ? 's' : ''} manual${rows.length !== 1 ? 's' : ''} no período`
+              : `${rows.length} viagem${rows.length !== 1 ? 's' : ''} no período`}
         </p>
 
         {/* ── Gráficos ─────────────────────────────────────────────────────── */}

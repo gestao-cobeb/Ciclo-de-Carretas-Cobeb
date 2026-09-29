@@ -91,6 +91,10 @@ const TABLE_MIN_WIDTH = COLS.reduce((s, c) => s + c.min, 0)
 function cellValue(row, key) {
   const t = row._tarefa
   const p = row._portaria
+  if (row._tipo === 'marketplace') {
+    if (key === 'dt_saida_revenda') return '—'
+    if (key === 'tma_rev')          return diffHHMM(p?.dt_entrada, p?.dt_saida)
+  }
   switch (key) {
     case 'data_viagem':        return fmtDate(row.dt_saida_revenda)
     case 'carreta':            return row.carreta?.placa  ?? '—'
@@ -135,6 +139,8 @@ export default function Dados() {
   const [dispersaoMap, setDispersaoMap] = useState({})
   const [modalDisp,    setModalDisp]    = useState(null)
   const [salvandoDisp, setSalvandoDisp] = useState(false)
+  const [mktpRows,     setMktpRows]     = useState([])
+  const [mostrarMktp,  setMostrarMktp]  = useState(true)
 
   const [filtroUnidade, setFiltroUnidade] = useState('')
   const [filtroDataDe,  setFiltroDataDe]  = useState('')
@@ -149,7 +155,7 @@ export default function Dados() {
   async function carregar(silent = false) {
     if (!silent) setLoading(true)
 
-    const [{ data: viagens }, { data: unids }, { data: turnosData }] = await Promise.all([
+    const [{ data: viagens }, { data: unids }, { data: turnosData }, { data: mktpData }] = await Promise.all([
       supabase
         .from('viagens')
         .select(`
@@ -171,6 +177,13 @@ export default function Dados() {
         .from('turnos')
         .select('unidade_id, nome, hora_inicio, hora_fim')
         .eq('ativo', true),
+      supabase
+        .from('portaria_atendimentos')
+        .select('id, unidade_id, placa_cavalo, placa_carreta, dt_entrada, dt_saida, unidade:unidades(id, nome)')
+        .eq('tipo', 'marketplace')
+        .is('viagem_id', null)
+        .is('excluido_em', null)
+        .order('dt_entrada', { ascending: false }),
     ])
 
     const turnosMap = {}
@@ -179,10 +192,25 @@ export default function Dados() {
       turnosMap[t.unidade_id].push(t)
     })
 
+    const mktpMapped = (mktpData ?? []).map(atend => ({
+      id: `mktp_${atend.id}`,
+      _tipo: 'marketplace',
+      _portaria: { dt_entrada: atend.dt_entrada, dt_saida: atend.dt_saida },
+      unidade: atend.unidade,
+      dt_saida_revenda: atend.dt_entrada,
+      dt_chegada_fabrica: null, dt_saida_fabrica: null,
+      dt_chegada_revenda: null, dt_saida_entrega: null,
+      carreta: atend.placa_carreta ? { placa: atend.placa_carreta } : null,
+      cavalo:  atend.placa_cavalo  ? { placa: atend.placa_cavalo  } : null,
+      _nf: '—', _fabricas: '—', _tarefa: {}, _operador: null,
+      _turno: '—', _dispersao: new Set(),
+    }))
+
     const viagemIds = (viagens ?? []).map(v => v.id)
 
     if (!viagemIds.length) {
       setRows([])
+      setMktpRows(mktpMapped)
       setDispersaoMap({})
       setUnidades(unids ?? [])
       if (!silent) setLoading(false)
@@ -277,20 +305,24 @@ export default function Dados() {
     })
 
     setRows(mapped)
+    setMktpRows(mktpMapped)
     setDispersaoMap(dispMap)
     setUnidades(unids ?? [])
     if (!silent) setLoading(false)
   }
 
   const rowsFiltradas = useMemo(() => {
-    return rows.filter(r => {
-      if (filtroUnidade && r.unidade?.id !== filtroUnidade) return false
-      const ref = (r.dt_saida_revenda ?? '').slice(0, 10)
-      if (filtroDataDe  && ref < filtroDataDe)  return false
-      if (filtroDataAte && ref > filtroDataAte) return false
-      return true
-    })
-  }, [rows, filtroUnidade, filtroDataDe, filtroDataAte])
+    const base = mostrarMktp ? [...rows, ...mktpRows] : rows
+    return base
+      .filter(r => {
+        if (filtroUnidade && r.unidade?.id !== filtroUnidade) return false
+        const ref = (r.dt_saida_revenda ?? '').slice(0, 10)
+        if (filtroDataDe  && ref < filtroDataDe)  return false
+        if (filtroDataAte && ref > filtroDataAte) return false
+        return true
+      })
+      .sort((a, b) => (b.dt_saida_revenda ?? '').localeCompare(a.dt_saida_revenda ?? ''))
+  }, [rows, mktpRows, mostrarMktp, filtroUnidade, filtroDataDe, filtroDataAte])
 
   const temFiltro = filtroUnidade || filtroDataDe || filtroDataAte
 
@@ -381,6 +413,17 @@ export default function Dados() {
             )}
           </div>
 
+          <button
+            onClick={() => setMostrarMktp(v => !v)}
+            className={`self-start text-xs font-semibold px-3 py-1.5 rounded-xl border transition-colors ${
+              mostrarMktp
+                ? 'bg-violet-600 text-white border-violet-600'
+                : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
+            }`}
+          >
+            Entrada Manual
+          </button>
+
           {temFiltro && (
             <button
               onClick={resetFiltros}
@@ -463,6 +506,14 @@ export default function Dados() {
                       const isEmpty  = val === '—'
 
                       if (col.key === 'dispersao') {
+                        if (row._tipo === 'marketplace') {
+                          return (
+                            <td key={col.key}
+                              className="px-3 py-2 whitespace-nowrap border-r border-cobeb-border/50 last:border-r-0 text-slate-300">
+                              —
+                            </td>
+                          )
+                        }
                         const temDisp = row._dispersao?.size > 0
                         return (
                           <td key={col.key}
@@ -475,6 +526,20 @@ export default function Dados() {
                               }`}>
                               {temDisp ? val : 'OK'}
                             </button>
+                          </td>
+                        )
+                      }
+
+                      if (col.key === 'data_viagem' && row._tipo === 'marketplace') {
+                        return (
+                          <td key={col.key}
+                            className="px-3 py-2 whitespace-nowrap border-r border-cobeb-border/50 last:border-r-0 text-cobeb-text">
+                            <div className="flex items-center gap-1.5">
+                              <span>{val}</span>
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-700 border border-violet-400/30 shrink-0">
+                                MKTP
+                              </span>
+                            </div>
                           </td>
                         )
                       }
