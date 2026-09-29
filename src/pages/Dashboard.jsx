@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, LabelList,
 } from 'recharts'
 import { X, SlidersHorizontal } from 'lucide-react'
@@ -220,7 +221,7 @@ function GraficoHistograma({ data }) {
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={data} margin={{ top: 20, right: 12, left: 4, bottom: 32 }}>
+          <LineChart data={data} margin={{ top: 20, right: 12, left: 4, bottom: 32 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
             <XAxis
               dataKey="slot"
@@ -238,7 +239,7 @@ function GraficoHistograma({ data }) {
               axisLine={false}
               width={32}
             />
-            <Tooltip content={<TooltipHistograma />} cursor={{ fill: '#EBF5FF' }} />
+            <Tooltip content={<TooltipHistograma />} />
             {avg != null && (
               <ReferenceLine
                 y={avg}
@@ -254,10 +255,17 @@ function GraficoHistograma({ data }) {
                 }}
               />
             )}
-            <Bar dataKey="count" fill="#0D9488" radius={[4, 4, 0, 0]} maxBarSize={44}>
+            <Line
+              type="monotone"
+              dataKey="count"
+              stroke="#0D9488"
+              strokeWidth={2}
+              dot={{ r: 4, fill: '#0D9488', strokeWidth: 0 }}
+              activeDot={{ r: 6 }}
+            >
               <LabelList dataKey="count" content={renderCountLabel} />
-            </Bar>
-          </BarChart>
+            </Line>
+          </LineChart>
         </ResponsiveContainer>
       )}
     </div>
