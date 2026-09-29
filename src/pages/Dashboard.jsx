@@ -287,6 +287,150 @@ function FiltrosTags({ filtros }) {
   )
 }
 
+function GraficoOciosidade({ data, filtros }) {
+  const [sel, setSel] = useState(null)
+
+  const avg         = calcAvg(data)
+  const semDados    = data.length === 0
+  const tickInterval = Math.max(0, Math.ceil(data.length / 12) - 1)
+
+  const fmtDT = iso => {
+    if (!iso) return '—'
+    const d = new Date(iso)
+    const dd = String(d.getDate()).padStart(2, '0')
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mi = String(d.getMinutes()).padStart(2, '0')
+    return `${dd}/${mm}/${d.getFullYear()} às ${hh}:${mi}`
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="text-cobeb-text font-semibold text-sm">
+          Ociosidade por Veículo — Saída Portaria → Próxima Saída para Fábrica
+        </h2>
+        {avg != null && (
+          <span className="shrink-0 text-xs font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border rounded-lg px-2.5 py-1">
+            Média: {minutesToHHMM(avg)}
+          </span>
+        )}
+      </div>
+      <FiltrosTags filtros={filtros} />
+
+      {semDados ? (
+        <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
+          Sem dados para o período
+        </div>
+      ) : (
+        <>
+          <p className="text-[10px] text-slate-400 mb-3">Toque em uma barra para ver o pior período do veículo</p>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={data} margin={{ top: 20, right: 12, left: 4, bottom: 32 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
+              <XAxis
+                dataKey="day"
+                tick={{ fontSize: 10, fill: '#94A3B8' }}
+                tickLine={false}
+                axisLine={{ stroke: '#BFDBFE' }}
+                angle={-35}
+                textAnchor="end"
+                interval={tickInterval}
+              />
+              <YAxis
+                tickFormatter={minutesToHHMM}
+                tick={{ fontSize: 10, fill: '#94A3B8' }}
+                tickLine={false}
+                axisLine={false}
+                width={50}
+              />
+              <Tooltip content={<ChartTooltip />} cursor={{ fill: '#EBF5FF' }} />
+              {avg != null && (
+                <ReferenceLine
+                  y={avg}
+                  stroke="#EF4444"
+                  strokeDasharray="5 3"
+                  strokeWidth={1.5}
+                  label={{
+                    value: `⌀ ${minutesToHHMM(avg)}`,
+                    position: 'insideTopRight',
+                    fontSize: 10,
+                    fill: '#EF4444',
+                    fontWeight: 600,
+                  }}
+                />
+              )}
+              <Bar
+                dataKey="value"
+                fill="#7C3AED"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={44}
+                cursor="pointer"
+                onClick={payload => setSel(payload)}
+              >
+                <LabelList dataKey="value" content={renderBarLabel} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </>
+      )}
+
+      {/* Bottom sheet — pior período */}
+      {sel && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end"
+          onClick={() => setSel(null)}>
+          <div className="w-full max-w-lg mx-auto bg-white rounded-t-2xl p-5 space-y-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto" />
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-cobeb-text font-bold text-base">{sel.day}</p>
+                <p className="text-slate-500 text-xs mt-0.5">
+                  {sel.count} medição{sel.count !== 1 ? 'ões' : ''} · Média {minutesToHHMM(sel.value)}
+                </p>
+              </div>
+              <span className="bg-violet-500/10 text-violet-700 border border-violet-400/30 text-xs font-semibold px-3 py-1 rounded-full">
+                Pior período
+              </span>
+            </div>
+
+            <div className="bg-[#EBF5FF] rounded-2xl p-4 space-y-3">
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-0.5">
+                  Fim da viagem anterior
+                </p>
+                <p className="text-cobeb-text font-semibold text-sm">{fmtDT(sel._pior?.fimViagem)}</p>
+              </div>
+              <div className="border-t border-cobeb-border/60" />
+              <div>
+                <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide mb-0.5">
+                  Início da próxima viagem
+                </p>
+                <p className="text-cobeb-text font-semibold text-sm">{fmtDT(sel._pior?.inicioProxima)}</p>
+              </div>
+              <div className="border-t border-cobeb-border/60" />
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] text-slate-400 uppercase font-semibold tracking-wide">
+                  Ociosidade do período
+                </p>
+                <span className="text-violet-700 font-black text-xl">
+                  {minutesToHHMM(sel._pior?.gap)}
+                </span>
+              </div>
+            </div>
+
+            <button onClick={() => setSel(null)}
+              className="w-full bg-[#EBF5FF] border border-cobeb-border text-slate-500 font-semibold py-3 rounded-xl text-sm">
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function GraficoMetrica({ title, data, color, filtros }) {
   const avg         = calcAvg(data)
   const semDados    = data.length === 0 || data.every(d => d.value == null)
@@ -563,11 +707,16 @@ export default function Dashboard() {
       const gaps = []
       for (let i = 1; i < trips.length; i++) {
         const gap = diffMin(trips[i - 1].portariaSaida, trips[i].dt_saida_revenda)
-        if (gap != null && gap >= 0) gaps.push(gap)
+        if (gap != null && gap >= 0) gaps.push({
+          gap,
+          fimViagem:     trips[i - 1].portariaSaida,
+          inicioProxima: trips[i].dt_saida_revenda,
+        })
       }
       if (!gaps.length) return
-      const avg = Math.round(gaps.reduce((s, g) => s + g, 0) / gaps.length)
-      result.push({ day: placa, value: avg, count: gaps.length })
+      const avg  = Math.round(gaps.reduce((s, g) => s + g.gap, 0) / gaps.length)
+      const pior = gaps.reduce((m, g) => g.gap > m.gap ? g : m, gaps[0])
+      result.push({ day: placa, value: avg, count: gaps.length, _pior: pior })
     })
 
     return result.sort((a, b) => b.value - a.value)
@@ -766,12 +915,7 @@ export default function Dashboard() {
               filtros={descFiltros}
             />
             <GraficoHistograma data={dadosHistograma} filtros={descFiltros} />
-            <GraficoMetrica
-              title="Ociosidade por Veículo — Saída Portaria → Próxima Saída para Fábrica"
-              data={dadosOciosidade}
-              color="#7C3AED"
-              filtros={descFiltros}
-            />
+            <GraficoOciosidade data={dadosOciosidade} filtros={descFiltros} />
           </div>
         )}
 
