@@ -197,7 +197,7 @@ function TooltipHistograma({ active, payload, label }) {
   )
 }
 
-function GraficoHistograma({ data }) {
+function GraficoHistograma({ data, filtros }) {
   const total  = data.reduce((s, d) => s + d.count, 0)
   const avg    = total ? Math.round(total / data.length) : null
   const semDados = !total
@@ -214,6 +214,7 @@ function GraficoHistograma({ data }) {
           </span>
         )}
       </div>
+      <FiltrosTags filtros={filtros} />
 
       {semDados ? (
         <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
@@ -272,7 +273,21 @@ function GraficoHistograma({ data }) {
   )
 }
 
-function GraficoMetrica({ title, data, color }) {
+function FiltrosTags({ filtros }) {
+  if (!filtros?.length) return null
+  return (
+    <div className="flex flex-wrap gap-1 mb-3 -mt-1">
+      {filtros.map((tag, i) => (
+        <span key={i}
+          className="text-[10px] bg-cobeb-sky text-cobeb-navy border border-cobeb-border rounded-full px-2 py-0.5 font-medium">
+          {tag}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function GraficoMetrica({ title, data, color, filtros }) {
   const avg         = calcAvg(data)
   const semDados    = data.length === 0 || data.every(d => d.value == null)
   const tickInterval = Math.max(0, Math.ceil(data.length / 12) - 1)
@@ -287,6 +302,7 @@ function GraficoMetrica({ title, data, color }) {
           </span>
         )}
       </div>
+      <FiltrosTags filtros={filtros} />
 
       {semDados ? (
         <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
@@ -528,6 +544,43 @@ export default function Dashboard() {
   const dadosAguardo    = useMemo(() => groupRows(rows, r => r._aguardo, filtroAgrupamento), [rows, filtroAgrupamento])
   const dadosHistograma = useMemo(() => groupBySlot(rows), [rows])
 
+  const descFiltros = useMemo(() => {
+    const fmt = iso => {
+      if (!iso) return ''
+      const [y, m, d] = iso.split('-')
+      return `${d}/${m}/${y.slice(2)}`
+    }
+    const tags = []
+
+    if (filtroAgrupamento === 'semana') {
+      tags.push(`Semana: ${fmt(dataInicio)} – ${fmt(dataFim)}`)
+    } else if (filtroAgrupamento === 'mes') {
+      const ano = dataInicio ? dataInicio.split('-')[0] : new Date().getFullYear()
+      tags.push(`Meses de ${ano}`)
+    } else if (filtroAgrupamento === 'ano') {
+      tags.push('Todos os anos')
+    } else {
+      tags.push(`${fmt(dataInicio)} – ${fmt(dataFim)}`)
+    }
+
+    if (filtroUnidade) {
+      const u = optUnidades.find(u => u.id === filtroUnidade)
+      if (u) tags.push(`CD: ${u.nome}`)
+    }
+    if (filtroFabrica) {
+      const f = optFabricas.find(f => f.id === filtroFabrica)
+      if (f) tags.push(`Fábrica: ${f.nome}`)
+    }
+    if (filtroFrota)  tags.push(`Frota: ${filtroFrota}`)
+    if (filtroCavalo) {
+      const c = optCavalos.find(c => c.id === filtroCavalo)
+      if (c) tags.push(`Cavalo: ${c.placa}`)
+    }
+    if (filtroTurno) tags.push(`Turno ${filtroTurno}`)
+
+    return tags
+  }, [filtroAgrupamento, dataInicio, dataFim, filtroUnidade, filtroFabrica, filtroFrota, filtroCavalo, filtroTurno, optUnidades, optFabricas, optCavalos])
+
   const temFiltro   = filtroUnidade || filtroFrota || filtroFabrica || filtroCavalo || filtroTurno
   const datesLocked = filtroAgrupamento !== 'dia'
   const [filtrosVisiveis, setFiltrosVisiveis] = useState(true)
@@ -663,23 +716,27 @@ export default function Dashboard() {
               title={`TMV ${lbl} — Saída Revenda → Saída Portaria`}
               data={dadosTMV}
               color="#003DA5"
+              filtros={descFiltros}
             />
             <GraficoMetrica
               title={`TMA Revenda ${lbl} — Chegada Revenda → Saída Portaria`}
               data={dadosTMARev}
               color="#1D6AD4"
+              filtros={descFiltros}
             />
             <GraficoMetrica
               title={`TMA Fábrica ${lbl} — Chegada Fábrica → Saída Fábrica`}
               data={dadosTMAFab}
               color="#FFB81C"
+              filtros={descFiltros}
             />
             <GraficoMetrica
               title={`Fila ${lbl} — Chegada Revenda → Entrada Portaria`}
               data={dadosAguardo}
               color="#EF4444"
+              filtros={descFiltros}
             />
-            <GraficoHistograma data={dadosHistograma} />
+            <GraficoHistograma data={dadosHistograma} filtros={descFiltros} />
           </div>
         )}
 
