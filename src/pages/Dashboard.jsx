@@ -542,7 +542,36 @@ export default function Dashboard() {
   const dadosTMARev     = useMemo(() => groupRows(rows, r => r._tmaRev,  filtroAgrupamento), [rows, filtroAgrupamento])
   const dadosTMAFab     = useMemo(() => groupRows(rows, r => r._tmaFab,  filtroAgrupamento), [rows, filtroAgrupamento])
   const dadosAguardo    = useMemo(() => groupRows(rows, r => r._aguardo, filtroAgrupamento), [rows, filtroAgrupamento])
-  const dadosHistograma = useMemo(() => groupBySlot(rows), [rows])
+  const dadosHistograma  = useMemo(() => groupBySlot(rows), [rows])
+
+  const dadosOciosidade = useMemo(() => {
+    const byPlaca = {}
+    rows.forEach(v => {
+      if (!v.cavalo?.placa || !v.dt_saida_revenda) return
+      const placa = v.cavalo.placa
+      if (!byPlaca[placa]) byPlaca[placa] = []
+      byPlaca[placa].push({
+        dt_saida_revenda: v.dt_saida_revenda,
+        portariaSaida:    portariaMap[v.id]?.dt_saida ?? null,
+      })
+    })
+
+    const result = []
+    Object.entries(byPlaca).forEach(([placa, trips]) => {
+      if (trips.length < 2) return
+      trips.sort((a, b) => new Date(a.dt_saida_revenda) - new Date(b.dt_saida_revenda))
+      const gaps = []
+      for (let i = 1; i < trips.length; i++) {
+        const gap = diffMin(trips[i - 1].portariaSaida, trips[i].dt_saida_revenda)
+        if (gap != null && gap >= 0) gaps.push(gap)
+      }
+      if (!gaps.length) return
+      const avg = Math.round(gaps.reduce((s, g) => s + g, 0) / gaps.length)
+      result.push({ day: placa, value: avg, count: gaps.length })
+    })
+
+    return result.sort((a, b) => b.value - a.value)
+  }, [rows, portariaMap])
 
   const descFiltros = useMemo(() => {
     const fmt = iso => {
@@ -737,6 +766,12 @@ export default function Dashboard() {
               filtros={descFiltros}
             />
             <GraficoHistograma data={dadosHistograma} filtros={descFiltros} />
+            <GraficoMetrica
+              title="Ociosidade por Veículo — Saída Portaria → Próxima Saída para Fábrica"
+              data={dadosOciosidade}
+              color="#7C3AED"
+              filtros={descFiltros}
+            />
           </div>
         )}
 
