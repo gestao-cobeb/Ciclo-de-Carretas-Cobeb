@@ -228,7 +228,6 @@ function GraficoMetrica({ title, data, color }) {
 
 const selCls   = 'bg-white border border-cobeb-border rounded-xl px-3 py-2 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue appearance-none cursor-pointer w-full'
 const dateCls  = 'flex-1 bg-white border border-cobeb-border rounded-xl px-3 py-1.5 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue [color-scheme:light]'
-const dateClsOff = 'flex-1 bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-1.5 text-slate-400 text-xs cursor-not-allowed [color-scheme:light]'
 
 const DEFAULT_FIM    = new Date().toISOString().slice(0, 10)
 const DEFAULT_INICIO = new Date(Date.now() - 29 * 24 * 3600000).toISOString().slice(0, 10)
@@ -444,18 +443,16 @@ export default function Dashboard() {
             ))}
           </div>
 
-          {/* Período */}
-          <div className="flex items-center gap-2">
-            <input type="date" value={dataInicio} max={dataFim || undefined}
-              disabled={datesLocked}
-              onChange={e => setDataInicio(e.target.value)}
-              className={datesLocked ? dateClsOff : dateCls} />
-            <span className="text-slate-400 text-xs shrink-0">até</span>
-            <input type="date" value={dataFim} min={dataInicio || undefined}
-              disabled={datesLocked}
-              onChange={e => setDataFim(e.target.value)}
-              className={datesLocked ? dateClsOff : dateCls} />
-          </div>
+          {/* Período — visível apenas no modo Por Dia */}
+          {!datesLocked && (
+            <div className="flex items-center gap-2">
+              <input type="date" value={dataInicio} max={dataFim || undefined}
+                onChange={e => setDataInicio(e.target.value)} className={dateCls} />
+              <span className="text-slate-400 text-xs shrink-0">até</span>
+              <input type="date" value={dataFim} min={dataInicio || undefined}
+                onChange={e => setDataFim(e.target.value)} className={dateCls} />
+            </div>
+          )}
 
           {/* Unidade + Fábrica */}
           <div className="grid grid-cols-2 gap-2">
