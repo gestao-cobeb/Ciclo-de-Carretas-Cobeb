@@ -41,6 +41,74 @@ function groupByDay(rows, metricFn) {
     })
 }
 
+const LABEL_MES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+
+function groupByMonth(rows, metricFn) {
+  const map = {}
+  rows.forEach(v => {
+    const val = metricFn(v)
+    if (val == null) return
+    const date = v.dt_saida_revenda
+    if (!date) return
+    const month = new Date(date).getMonth()
+    if (!map[month]) map[month] = { sum: 0, count: 0 }
+    map[month].sum += val
+    map[month].count++
+  })
+  return LABEL_MES.map((label, i) => ({
+    day:   label,
+    value: map[i] ? Math.round(map[i].sum / map[i].count) : null,
+    count: map[i]?.count ?? 0,
+  }))
+}
+
+const LABEL_SEMANA = ['Seg','Ter','Qua','Qui','Sex','Sáb','Dom']
+
+function groupByWeek(rows, metricFn) {
+  const map = {}
+  rows.forEach(v => {
+    const val = metricFn(v)
+    if (val == null) return
+    const date = v.dt_saida_revenda
+    if (!date) return
+    const dow = (new Date(date).getDay() + 6) % 7 // 0=Seg … 6=Dom
+    if (!map[dow]) map[dow] = { sum: 0, count: 0 }
+    map[dow].sum += val
+    map[dow].count++
+  })
+  return LABEL_SEMANA.map((label, i) => ({
+    day:   label,
+    value: map[i] ? Math.round(map[i].sum / map[i].count) : null,
+    count: map[i]?.count ?? 0,
+  }))
+}
+
+function groupByYear(rows, metricFn) {
+  const map = {}
+  rows.forEach(v => {
+    const val = metricFn(v)
+    if (val == null) return
+    const date = v.dt_saida_revenda
+    if (!date) return
+    const year = String(new Date(date).getFullYear())
+    if (!map[year]) map[year] = { sum: 0, count: 0 }
+    map[year].sum += val
+    map[year].count++
+  })
+  return Object.entries(map)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([year, { sum, count }]) => ({
+      day: year, value: Math.round(sum / count), count,
+    }))
+}
+
+function groupRows(rows, metricFn, agrupamento) {
+  if (agrupamento === 'ano')    return groupByYear(rows, metricFn)
+  if (agrupamento === 'mes')    return groupByMonth(rows, metricFn)
+  if (agrupamento === 'semana') return groupByWeek(rows, metricFn)
+  return groupByDay(rows, metricFn)
+}
+
 function calcAvg(data) {
   const valid = data.filter(d => d.value != null)
   if (!valid.length) return null
@@ -92,6 +160,7 @@ function ChartTooltip({ active, payload, label }) {
 
 function GraficoMetrica({ title, data, color }) {
   const avg         = calcAvg(data)
+  const semDados    = data.length === 0 || data.every(d => d.value == null)
   const tickInterval = Math.max(0, Math.ceil(data.length / 12) - 1)
 
   return (
@@ -105,7 +174,7 @@ function GraficoMetrica({ title, data, color }) {
         )}
       </div>
 
-      {data.length === 0 ? (
+      {semDados ? (
         <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
           Sem dados para o período
         </div>
@@ -157,11 +226,14 @@ function GraficoMetrica({ title, data, color }) {
 
 // ── Estilos ───────────────────────────────────────────────────────────────────
 
-const selCls  = 'bg-white border border-cobeb-border rounded-xl px-3 py-2 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue appearance-none cursor-pointer w-full'
-const dateCls = 'flex-1 bg-white border border-cobeb-border rounded-xl px-3 py-1.5 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue [color-scheme:light]'
+const selCls   = 'bg-white border border-cobeb-border rounded-xl px-3 py-2 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue appearance-none cursor-pointer w-full'
+const dateCls  = 'flex-1 bg-white border border-cobeb-border rounded-xl px-3 py-1.5 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue [color-scheme:light]'
+const dateClsOff = 'flex-1 bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-1.5 text-slate-400 text-xs cursor-not-allowed [color-scheme:light]'
 
-const DEFAULT_FIM   = new Date().toISOString().slice(0, 10)
+const DEFAULT_FIM    = new Date().toISOString().slice(0, 10)
 const DEFAULT_INICIO = new Date(Date.now() - 29 * 24 * 3600000).toISOString().slice(0, 10)
+
+const LABEL_AGRUP = { dia: 'por Dia', semana: 'por Semana', mes: 'por Mês', ano: 'por Ano' }
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
@@ -180,13 +252,14 @@ export default function Dashboard() {
   const [turnosMap,   setTurnosMap]   = useState({})
 
   // valores dos filtros
-  const [dataInicio,    setDataInicio]    = useState(DEFAULT_INICIO)
-  const [dataFim,       setDataFim]       = useState(DEFAULT_FIM)
-  const [filtroUnidade, setFiltroUnidade] = useState('')
-  const [filtroFrota,   setFiltroFrota]   = useState('')
-  const [filtroFabrica, setFiltroFabrica] = useState('')
-  const [filtroCavalo,  setFiltroCavalo]  = useState('')
-  const [filtroTurno,   setFiltroTurno]   = useState('')
+  const [dataInicio,       setDataInicio]       = useState(DEFAULT_INICIO)
+  const [dataFim,          setDataFim]          = useState(DEFAULT_FIM)
+  const [filtroUnidade,    setFiltroUnidade]    = useState('')
+  const [filtroFrota,      setFiltroFrota]      = useState('')
+  const [filtroFabrica,    setFiltroFabrica]    = useState('')
+  const [filtroCavalo,     setFiltroCavalo]     = useState('')
+  const [filtroTurno,      setFiltroTurno]      = useState('')
+  const [filtroAgrupamento, setFiltroAgrupamento] = useState('dia')
 
   // opções dos selects — carregadas uma vez
   useEffect(() => {
@@ -211,6 +284,34 @@ export default function Dashboard() {
     }
     loadOpts()
   }, [])
+
+  // auto-ajuste do período ao mudar agrupamento
+  useEffect(() => {
+    const today   = new Date()
+    const todayStr = today.toISOString().slice(0, 10)
+
+    if (filtroAgrupamento === 'dia') {
+      setDataInicio(DEFAULT_INICIO)
+      setDataFim(DEFAULT_FIM)
+    } else if (filtroAgrupamento === 'ano') {
+      setDataInicio('2020-01-01')
+      setDataFim(todayStr)
+    } else if (filtroAgrupamento === 'mes') {
+      setDataInicio(`${today.getFullYear()}-01-01`)
+      setDataFim(todayStr)
+    } else if (filtroAgrupamento === 'semana') {
+      const dow         = today.getDay() // 0=Dom
+      const sinceMonday = dow === 0 ? 6 : dow - 1
+      const thisMonday  = new Date(today)
+      thisMonday.setDate(today.getDate() - sinceMonday)
+      const lastMonday  = new Date(thisMonday)
+      lastMonday.setDate(thisMonday.getDate() - 7)
+      const lastSunday  = new Date(thisMonday)
+      lastSunday.setDate(thisMonday.getDate() - 1)
+      setDataInicio(lastMonday.toISOString().slice(0, 10))
+      setDataFim(lastSunday.toISOString().slice(0, 10))
+    }
+  }, [filtroAgrupamento])
 
   // dados — recarregam quando o período muda
   useEffect(() => { carregar() }, [dataInicio, dataFim])
@@ -308,16 +409,19 @@ export default function Dashboard() {
       })
   }, [viagens, portariaMap, fabricaViagemMap, dispersaoMap, turnosMap, filtroUnidade, filtroFrota, filtroCavalo, filtroFabrica, filtroTurno, optFabricas])
 
-  const dadosTMV     = useMemo(() => groupByDay(rows, r => r._tmv),     [rows])
-  const dadosTMARev  = useMemo(() => groupByDay(rows, r => r._tmaRev),  [rows])
-  const dadosTMAFab  = useMemo(() => groupByDay(rows, r => r._tmaFab),  [rows])
-  const dadosAguardo = useMemo(() => groupByDay(rows, r => r._aguardo), [rows])
+  const dadosTMV     = useMemo(() => groupRows(rows, r => r._tmv,     filtroAgrupamento), [rows, filtroAgrupamento])
+  const dadosTMARev  = useMemo(() => groupRows(rows, r => r._tmaRev,  filtroAgrupamento), [rows, filtroAgrupamento])
+  const dadosTMAFab  = useMemo(() => groupRows(rows, r => r._tmaFab,  filtroAgrupamento), [rows, filtroAgrupamento])
+  const dadosAguardo = useMemo(() => groupRows(rows, r => r._aguardo, filtroAgrupamento), [rows, filtroAgrupamento])
 
   const temFiltro = filtroUnidade || filtroFrota || filtroFabrica || filtroCavalo || filtroTurno
+  const datesLocked = filtroAgrupamento !== 'dia'
 
   function resetFiltros() {
     setFiltroUnidade(''); setFiltroFrota(''); setFiltroFabrica(''); setFiltroCavalo(''); setFiltroTurno('')
   }
+
+  const lbl = LABEL_AGRUP[filtroAgrupamento]
 
   return (
     <DashboardLayout>
@@ -326,13 +430,31 @@ export default function Dashboard() {
         {/* ── Filtros ──────────────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 space-y-3">
 
+          {/* Agrupamento */}
+          <div className="flex gap-1.5">
+            {[['dia', 'Por Dia'], ['semana', 'Semana'], ['mes', 'Mês'], ['ano', 'Ano']].map(([val, label]) => (
+              <button key={val} onClick={() => setFiltroAgrupamento(val)}
+                className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                  filtroAgrupamento === val
+                    ? 'bg-cobeb-navy text-white border-cobeb-navy'
+                    : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
           {/* Período */}
           <div className="flex items-center gap-2">
             <input type="date" value={dataInicio} max={dataFim || undefined}
-              onChange={e => setDataInicio(e.target.value)} className={dateCls} />
+              disabled={datesLocked}
+              onChange={e => setDataInicio(e.target.value)}
+              className={datesLocked ? dateClsOff : dateCls} />
             <span className="text-slate-400 text-xs shrink-0">até</span>
             <input type="date" value={dataFim} min={dataInicio || undefined}
-              onChange={e => setDataFim(e.target.value)} className={dateCls} />
+              disabled={datesLocked}
+              onChange={e => setDataFim(e.target.value)}
+              className={datesLocked ? dateClsOff : dateCls} />
           </div>
 
           {/* Unidade + Fábrica */}
@@ -356,14 +478,14 @@ export default function Dashboard() {
               ))}
             </select>
             <div className="flex gap-1.5">
-              {[['', 'Todos'], ['FF', 'FF'], ['SPOT', 'SPOT']].map(([val, lbl]) => (
+              {[['', 'Todos'], ['FF', 'FF'], ['SPOT', 'SPOT']].map(([val, label]) => (
                 <button key={val} onClick={() => setFiltroFrota(val)}
                   className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
                     filtroFrota === val
                       ? 'bg-cobeb-navy text-white border-cobeb-navy'
                       : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
                   }`}>
-                  {lbl}
+                  {label}
                 </button>
               ))}
             </div>
@@ -371,14 +493,14 @@ export default function Dashboard() {
 
           {/* Turno */}
           <div className="flex gap-1.5">
-            {[['', 'Todos os turnos'], ['A', 'Turno A'], ['B', 'Turno B'], ['C', 'Turno C']].map(([val, lbl]) => (
+            {[['', 'Todos os turnos'], ['A', 'Turno A'], ['B', 'Turno B'], ['C', 'Turno C']].map(([val, label]) => (
               <button key={val} onClick={() => setFiltroTurno(val)}
                 className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
                   filtroTurno === val
                     ? 'bg-cobeb-navy text-white border-cobeb-navy'
                     : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
                 }`}>
-                {lbl}
+                {label}
               </button>
             ))}
           </div>
@@ -406,22 +528,22 @@ export default function Dashboard() {
         ) : (
           <div className="space-y-5">
             <GraficoMetrica
-              title="TMV por Dia — Saída Revenda → Saída Portaria"
+              title={`TMV ${lbl} — Saída Revenda → Saída Portaria`}
               data={dadosTMV}
               color="#003DA5"
             />
             <GraficoMetrica
-              title="TMA Revenda por Dia — Chegada Revenda → Saída Portaria"
+              title={`TMA Revenda ${lbl} — Chegada Revenda → Saída Portaria`}
               data={dadosTMARev}
               color="#1D6AD4"
             />
             <GraficoMetrica
-              title="TMA Fábrica por Dia — Chegada Fábrica → Saída Fábrica"
+              title={`TMA Fábrica ${lbl} — Chegada Fábrica → Saída Fábrica`}
               data={dadosTMAFab}
               color="#FFB81C"
             />
             <GraficoMetrica
-              title="Fila por Dia — Chegada Revenda → Entrada Portaria"
+              title={`Fila ${lbl} — Chegada Revenda → Entrada Portaria`}
               data={dadosAguardo}
               color="#EF4444"
             />
