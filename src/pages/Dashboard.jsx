@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, LabelList,
 } from 'recharts'
-import { X } from 'lucide-react'
+import { X, SlidersHorizontal } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import { supabase } from '../lib/supabase'
 
@@ -413,8 +413,9 @@ export default function Dashboard() {
   const dadosTMAFab  = useMemo(() => groupRows(rows, r => r._tmaFab,  filtroAgrupamento), [rows, filtroAgrupamento])
   const dadosAguardo = useMemo(() => groupRows(rows, r => r._aguardo, filtroAgrupamento), [rows, filtroAgrupamento])
 
-  const temFiltro = filtroUnidade || filtroFrota || filtroFabrica || filtroCavalo || filtroTurno
+  const temFiltro   = filtroUnidade || filtroFrota || filtroFabrica || filtroCavalo || filtroTurno
   const datesLocked = filtroAgrupamento !== 'dia'
+  const [filtrosVisiveis, setFiltrosVisiveis] = useState(true)
 
   function resetFiltros() {
     setFiltroUnidade(''); setFiltroFrota(''); setFiltroFabrica(''); setFiltroCavalo(''); setFiltroTurno('')
@@ -427,7 +428,25 @@ export default function Dashboard() {
       <div className="px-4 pt-5 pb-8 space-y-5">
 
         {/* ── Filtros ──────────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 space-y-3">
+        <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
+          {/* Cabeçalho do card — sempre visível */}
+          <button
+            onClick={() => setFiltrosVisiveis(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-cobeb-sky/50 transition-colors"
+          >
+            <div className="flex items-center gap-2 text-cobeb-text text-xs font-semibold">
+              <SlidersHorizontal size={13} />
+              Filtros
+              {temFiltro && (
+                <span className="bg-cobeb-navy text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {[filtroUnidade, filtroFrota, filtroFabrica, filtroCavalo, filtroTurno].filter(Boolean).length}
+                </span>
+              )}
+            </div>
+            <span className="text-slate-400 text-[10px]">{filtrosVisiveis ? 'Ocultar' : 'Mostrar'}</span>
+          </button>
+
+        {filtrosVisiveis && <div className="px-4 pb-4 space-y-3">
 
           {/* Agrupamento */}
           <div className="flex gap-1.5">
@@ -508,6 +527,7 @@ export default function Dashboard() {
               <X size={12} /> Limpar filtros
             </button>
           )}
+        </div>}
         </div>
 
         {/* ── Contagem ─────────────────────────────────────────────────────── */}
