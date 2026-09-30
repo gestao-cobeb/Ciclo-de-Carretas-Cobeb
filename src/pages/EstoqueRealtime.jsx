@@ -4,6 +4,7 @@ import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, Refresh
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import MapaRealtime from './MapaRealtime'
+import ModalAgendamento from '../components/ModalAgendamento'
 
 // ── Configuração de status ────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ export default function EstoqueRealtime({ adminMode = false }) {
 
   useEffect(() => {
     supabase.from('unidades')
-      .select('id, nome')
+      .select('id, nome, cidade')
       .eq('tipo', 'revenda')
       .eq('ativo', true)
       .order('nome')
@@ -273,9 +274,11 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
   const [showRollback, setShowRollback] = useState(false)
   const [adminLoading, setAdminLoading] = useState(false)
 
-  const [editDestino,   setEditDestino]   = useState(false)
-  const [novaDest,      setNovaDest]      = useState('')
-  const [savingDestino, setSavingDestino] = useState(false)
+  const [editDestino,      setEditDestino]      = useState(false)
+  const [novaDest,         setNovaDest]         = useState('')
+  const [savingDestino,    setSavingDestino]    = useState(false)
+
+  const [showModalAgendRev, setShowModalAgendRev] = useState(false)
 
   // Estado de substituição de produto
   const [substituindo,     setSubstituindo]     = useState(null)  // id do pedido sendo substituído
@@ -305,6 +308,22 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
     setSavingDestino(false)
     setEditDestino(false)
     setNovaDest('')
+    onRefresh?.()
+  }
+
+  async function salvarAgendamentoRev({ revendaId, gradeId, dataAgendamento, tipoDia, bloco }) {
+    setAdminLoading(true)
+    const { error } = await supabase.rpc('admin_reagendar_revenda', {
+      p_viagem_id:  viagem.id,
+      p_grade_id:   gradeId,
+      p_data:       dataAgendamento,
+      p_tipo_dia:   tipoDia,
+      p_bloco:      bloco,
+      p_revenda_id: revendaId,
+    })
+    setAdminLoading(false)
+    if (error) { alert('Erro ao reagendar: ' + error.message); return }
+    setShowModalAgendRev(false)
     onRefresh?.()
   }
 
@@ -487,6 +506,18 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
                 {viagem.agendamento_data && (
                   <span className="font-normal text-emerald-600">
                     {' · '}{new Date(viagem.agendamento_data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                  </span>
+                )}
+                {isAdminTotal && !showModalAgendRev && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    onClick={e => { e.stopPropagation(); setShowModalAgendRev(true) }}
+                    onKeyDown={e => e.key === 'Enter' && setShowModalAgendRev(true)}
+                    className="ml-0.5 cursor-pointer text-emerald-500 hover:text-emerald-700 transition-colors leading-none"
+                    title="Alterar agendamento revenda"
+                  >
+                    <Pencil size={8} />
                   </span>
                 )}
               </span>
@@ -778,6 +809,17 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
                   </button>
                 )}
 
+                {/* Opção de definir agendamento de revenda quando ainda não existe */}
+                {!viagem.agendamento_bloco && !showModalAgendRev && viagem.unidade_descarga_id && (
+                  <button
+                    onClick={() => setShowModalAgendRev(true)}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 transition-colors"
+                  >
+                    <Pencil size={11} />
+                    Definir agendamento revenda
+                  </button>
+                )}
+
                 {/* Rollback de fase */}
                 {podeReverter && (
                   !showRollback ? (
@@ -850,7 +892,7 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
                 )}
 
                 {/* Mensagem quando nenhuma ação admin está disponível */}
-                {!podeReverter && viagem.horario_agendado && (
+                {!podeReverter && viagem.horario_agendado && !viagem.agendamento_bloco && (
                   <p className="text-[10px] text-slate-400">
                     Clique no ✏ ao lado do horário para editá-lo.
                   </p>
@@ -859,6 +901,22 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
             </div>
           )}
         </div>
+      )}
+
+      {/* Modal de agendamento de revenda (admin) */}
+      {showModalAgendRev && (
+        <ModalAgendamento
+          unidades={unidades}
+          unidadePreSelecionada={
+            unidades.find(u => u.id === viagem.unidade_descarga_id)
+            ?? (viagem.unidade_descarga_id
+                ? { id: viagem.unidade_descarga_id, nome: viagem.unidade_descarga_nome }
+                : undefined)
+          }
+          noRevendaBack={!!viagem.unidade_descarga_id}
+          onConfirmar={salvarAgendamentoRev}
+          onCancelar={() => setShowModalAgendRev(false)}
+        />
       )}
     </div>
   )
