@@ -251,6 +251,11 @@ CREATE POLICY "pol_produtos_delete"
 
 
 -- ── 14. RPC: admin_reverter_status_viagem ─────────────────────────────────────
+--
+-- Versão sincronizada com 078_rollback_cheguei.sql.
+-- Inclui o caso aguardando_conferencia → retornando (requer acesso_total).
+-- ATENÇÃO: se este script for re-executado no futuro, ele sobrescreve 078.
+-- Mantenha os dois arquivos idênticos nesta função.
 
 CREATE OR REPLACE FUNCTION public.admin_reverter_status_viagem(
   p_viagem_id     UUID,
@@ -259,14 +264,21 @@ CREATE OR REPLACE FUNCTION public.admin_reverter_status_viagem(
 RETURNS void LANGUAGE plpgsql SECURITY DEFINER
 SET search_path = public AS $$
 DECLARE
-  v_status_atual TEXT;
+  v_status_atual    TEXT;
+  v_acesso_total    BOOLEAN;
+  v_portaria_id     UUID;
+  v_portaria_status TEXT;
+  v_agendamento_id  UUID;
 BEGIN
-  IF NOT is_admin() THEN
-    RAISE EXCEPTION 'Acesso negado';
+  SELECT acesso_total INTO v_acesso_total
+  FROM public.profiles WHERE id = auth.uid();
+
+  IF NOT COALESCE(v_acesso_total, false) THEN
+    RAISE EXCEPTION 'Acesso negado: recurso exclusivo para administradores totais';
   END IF;
 
-  IF p_target_status NOT IN ('em_transito', 'na_fabrica') THEN
-    RAISE EXCEPTION 'Status alvo inválido. Valores aceitos: em_transito, na_fabrica';
+  IF p_target_status NOT IN ('em_transito', 'na_fabrica', 'retornando') THEN
+    RAISE EXCEPTION 'Status alvo inválido. Valores aceitos: em_transito, na_fabrica, retornando';
   END IF;
 
   SELECT status INTO v_status_atual
@@ -276,8 +288,48 @@ BEGIN
     RAISE EXCEPTION 'Viagem não encontrada';
   END IF;
 
+  -- ── Caso 1: aguardando_conferencia → retornando ────────────────────────────
+  IF v_status_atual = 'aguardando_conferencia' AND p_target_status = 'retornando' THEN
+
+    -- Verifica se portaria ainda não iniciou o atendimento
+    SELECT id, status, agendamento_id
+    INTO v_portaria_id, v_portaria_status, v_agendamento_id
+    FROM public.portaria_atendimentos
+    WHERE viagem_id = p_viagem_id
+      AND excluido_em IS NULL
+    ORDER BY created_at DESC
+    LIMIT 1;
+
+    IF v_portaria_id IS NOT NULL AND v_portaria_status <> 'aguardando' THEN
+      RAISE EXCEPTION 'Não é possível reverter: a portaria já iniciou o atendimento (status: %).', v_portaria_status;
+    END IF;
+
+    UPDATE public.viagens
+    SET status             = 'retornando',
+        dt_chegada_revenda = NULL,
+        numero_nf          = NULL
+    WHERE id = p_viagem_id;
+
+    IF v_portaria_id IS NOT NULL THEN
+      UPDATE public.portaria_atendimentos
+      SET excluido_em  = NOW(),
+          excluido_por = auth.uid()
+      WHERE id = v_portaria_id;
+    END IF;
+
+    IF v_agendamento_id IS NOT NULL THEN
+      UPDATE public.agendamentos
+      SET status = 'pendente'
+      WHERE id = v_agendamento_id AND status = 'realizado';
+    END IF;
+
+    RETURN;
+  END IF;
+
+  -- ── Caso 2: na_fabrica / retornando → status anterior ─────────────────────
+
   IF v_status_atual NOT IN ('na_fabrica', 'retornando') THEN
-    RAISE EXCEPTION 'Não é possível reverter viagem com status "%". Apenas na_fabrica e retornando são revertíveis.', v_status_atual;
+    RAISE EXCEPTION 'Não é possível reverter viagem com status "%". Apenas na_fabrica, retornando e aguardando_conferencia são revertíveis.', v_status_atual;
   END IF;
 
   IF v_status_atual = 'na_fabrica' AND p_target_status = 'na_fabrica' THEN
@@ -286,14 +338,14 @@ BEGIN
 
   IF p_target_status = 'na_fabrica' THEN
     UPDATE public.viagens
-      SET status           = 'na_fabrica',
-          dt_saida_fabrica = NULL
+    SET status           = 'na_fabrica',
+        dt_saida_fabrica = NULL
     WHERE id = p_viagem_id;
   ELSIF p_target_status = 'em_transito' THEN
     UPDATE public.viagens
-      SET status             = 'em_transito',
-          dt_chegada_fabrica = NULL,
-          dt_saida_fabrica   = NULL
+    SET status             = 'em_transito',
+        dt_chegada_fabrica = NULL,
+        dt_saida_fabrica   = NULL
     WHERE id = p_viagem_id;
   END IF;
 END;
