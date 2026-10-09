@@ -238,12 +238,12 @@ export default function Tarefas() {
   const todosConferidos = pedidos.length > 0 &&
     pedidos.every(p => {
       const entries = itenState[p.id] ?? []
-      return entries.some(e => e.qtde_recebida && Number(e.qtde_recebida) > 0)
+      return entries.some(e => e.qtde_recebida !== '')
     })
 
   const divergencias = pedidos.filter(p => {
     const entries = itenState[p.id] ?? []
-    const hasAnyQty = entries.some(e => e.qtde_recebida && Number(e.qtde_recebida) > 0)
+    const hasAnyQty = entries.some(e => e.qtde_recebida !== '')
     if (!hasAnyQty) return false
     const totalRec = entries.reduce((s, e) => s + (Number(e.qtde_recebida) || 0), 0)
     return Math.abs(totalRec - Number(p.qtde_pallets)) > 0.001
@@ -955,7 +955,7 @@ function ConferenciaView({
                   const cxPallet  = pedido.qtde_pallets > 0 ? pedido.qtde_skus / pedido.qtde_pallets : null
                   const unidade   = getUnidade(pedido.id)
                   const totalRec  = entries.reduce((s, e) => s + (Number(e.qtde_recebida) || 0), 0)
-                  const hasAnyQty = entries.some(e => e.qtde_recebida && Number(e.qtde_recebida) > 0)
+                  const hasAnyQty = entries.some(e => e.qtde_recebida !== '')
                   const cxRec     = hasAnyQty ? calcCaixas(totalRec, pedido) : null
                   const hasDiverg = hasAnyQty && Math.abs(totalRec - Number(pedido.qtde_pallets)) > 0.001
                   const anomaliaRegistrada = hasDiverg && anomalias.some(a => a.pedido_id === pedido.id)
