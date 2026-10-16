@@ -533,24 +533,37 @@ function TooltipPlanejadoVsReal({ active, payload, label }) {
   )
 }
 
-function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros }) {
-  const [planejado, setPlanejado] = useLocalStorage('cobeb_dashboard_planejado_dia', 14)
-  const [editando, setEditando]   = useState(false)
-  const [inputVal, setInputVal]   = useState(String(planejado))
+function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros, filtroUnidade, optUnidades }) {
+  const [planejadoMap, setPlanejadoMap] = useLocalStorage('cobeb_dashboard_planejado_v2', {})
+  const [configurando, setConfigurando] = useState(false)
+  const [draftMap, setDraftMap]         = useState({})
+
+  const totalPlanejado    = optUnidades.reduce((s, u) => s + (planejadoMap[u.id] || 0), 0)
+  const planejadoEfetivo  = filtroUnidade ? (planejadoMap[filtroUnidade] || 0) : totalPlanejado
+  const unidadeNome       = filtroUnidade ? (optUnidades.find(u => u.id === filtroUnidade)?.nome ?? '') : null
+
+  function abrirConfigurar() {
+    const draft = {}
+    optUnidades.forEach(u => { draft[u.id] = planejadoMap[u.id] ?? '' })
+    setDraftMap(draft)
+    setConfigurando(true)
+  }
+
+  function salvar() {
+    const clean = {}
+    optUnidades.forEach(u => { clean[u.id] = Math.max(0, parseInt(draftMap[u.id], 10) || 0) })
+    setPlanejadoMap(clean)
+    setConfigurando(false)
+  }
 
   const data = useMemo(
-    () => calcPlanejaVsReal(rows, planejado, agrupamento, dataInicio, dataFim),
-    [rows, planejado, agrupamento, dataInicio, dataFim]
+    () => calcPlanejaVsReal(rows, planejadoEfetivo, agrupamento, dataInicio, dataFim),
+    [rows, planejadoEfetivo, agrupamento, dataInicio, dataFim]
   )
 
-  const semDados    = !data?.length
+  const semDados     = !data?.length
   const tickInterval = Math.max(0, Math.ceil((data?.length || 0) / 12) - 1)
-
-  function confirmar() {
-    const v = parseInt(inputVal, 10)
-    if (!isNaN(v) && v > 0) setPlanejado(v)
-    setEditando(false)
-  }
+  const draftTotal   = optUnidades.reduce((s, u) => s + (parseInt(draftMap[u.id]) || 0), 0)
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
@@ -558,33 +571,12 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros 
         <h2 className="text-cobeb-text font-semibold text-sm">
           Planejado vs Real — Viagens por Período
         </h2>
-        <div className="shrink-0">
-          {editando ? (
-            <div className="flex items-center gap-1.5">
-              <input
-                type="number" min="1" value={inputVal}
-                onChange={e => setInputVal(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') confirmar(); if (e.key === 'Escape') setEditando(false) }}
-                className="w-16 text-xs border border-cobeb-border rounded-lg px-2 py-1 focus:outline-none focus:border-cobeb-blue [appearance:textfield]"
-                autoFocus
-              />
-              <button onClick={confirmar}
-                className="text-xs bg-cobeb-navy text-white px-2.5 py-1 rounded-lg font-semibold">
-                OK
-              </button>
-              <button onClick={() => setEditando(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={14} />
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => { setInputVal(String(planejado)); setEditando(true) }}
-              className="text-xs font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border rounded-lg px-2.5 py-1 hover:border-cobeb-blue transition-colors"
-            >
-              Planejado: {planejado} veíc./dia ✎
-            </button>
-          )}
-        </div>
+        <button
+          onClick={abrirConfigurar}
+          className="shrink-0 text-xs font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border rounded-lg px-2.5 py-1 hover:border-cobeb-blue transition-colors"
+        >
+          {unidadeNome ? `${unidadeNome}: ${planejadoEfetivo}/dia ✎` : `Total: ${totalPlanejado}/dia ✎`}
+        </button>
       </div>
       <FiltrosTags filtros={filtros} />
 
@@ -632,6 +624,54 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros 
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+      )}
+
+      {/* Bottom sheet — configurar meta por unidade */}
+      {configurando && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end"
+          onClick={() => setConfigurando(false)}>
+          <div className="w-full max-w-lg mx-auto bg-white rounded-t-2xl p-5 space-y-4"
+            onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto" />
+
+            <div className="flex items-center justify-between">
+              <p className="text-cobeb-text font-bold text-base">Meta de viagens por unidade</p>
+              <span className="text-xs text-slate-400">veíc./dia</span>
+            </div>
+
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {optUnidades.map(u => (
+                <div key={u.id} className="flex items-center gap-3">
+                  <span className="text-sm text-cobeb-text flex-1 truncate">{u.nome}</span>
+                  <input
+                    type="number" min="0"
+                    value={draftMap[u.id] ?? ''}
+                    onChange={e => setDraftMap(m => ({
+                      ...m, [u.id]: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0),
+                    }))}
+                    className="w-16 text-xs border border-cobeb-border rounded-lg px-2 py-1.5 text-center focus:outline-none focus:border-cobeb-blue [appearance:textfield]"
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between py-2 border-t border-cobeb-border">
+              <span className="text-sm font-semibold text-cobeb-text">Total</span>
+              <span className="text-sm font-bold text-cobeb-navy">{draftTotal} veíc./dia</span>
+            </div>
+
+            <div className="flex gap-2">
+              <button onClick={() => setConfigurando(false)}
+                className="flex-1 bg-[#EBF5FF] border border-cobeb-border text-slate-500 font-semibold py-3 rounded-xl text-sm">
+                Cancelar
+              </button>
+              <button onClick={salvar}
+                className="flex-1 bg-cobeb-navy text-white font-semibold py-3 rounded-xl text-sm">
+                Salvar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -1193,6 +1233,8 @@ export default function Dashboard() {
               dataInicio={dataInicio}
               dataFim={dataFim}
               filtros={descFiltros}
+              filtroUnidade={filtroUnidade}
+              optUnidades={optUnidades}
             />
           </div>
         )}
