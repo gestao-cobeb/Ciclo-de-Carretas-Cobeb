@@ -27,6 +27,24 @@ function countWeekdayOccurrences(start, end) {
   return counts
 }
 
+// Conta dias não-domingo em um mês
+function diasSemDomingoNoMes(year, month) {
+  let count = 0
+  const ultimo = new Date(year, month + 1, 0).getDate()
+  for (let d = 1; d <= ultimo; d++) {
+    if (new Date(year, month, d).getDay() !== 0) count++
+  }
+  return count
+}
+
+// Conta dias não-domingo em um ano
+function diasSemDomingoNoAno(year) {
+  let count = 0
+  const d = new Date(year, 0, 1)
+  while (d.getFullYear() === year) { if (d.getDay() !== 0) count++; d.setDate(d.getDate() + 1) }
+  return count
+}
+
 function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
   if (agrupamento === 'dia') {
     const map = {}
@@ -37,7 +55,11 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
     })
     return Object.entries(map)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([iso, real]) => { const [, mm, dd] = iso.split('-'); return { day: `${dd}/${mm}`, real, planejado: n } })
+      .map(([iso, real]) => {
+        const [y, mm, dd] = iso.split('-').map(Number)
+        const isDom = new Date(y, mm - 1, dd).getDay() === 0
+        return { day: `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}`, real, planejado: isDom ? null : n }
+      })
   }
 
   if (agrupamento === 'semana') {
@@ -48,10 +70,11 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
       totals[(new Date(date).getDay() + 6) % 7]++
     })
     const occ = countWeekdayOccurrences(dataInicio, dataFim)
+    // LABEL_SEMANA[6] = 'Dom' — planejado null para domingo
     return LABEL_SEMANA.map((label, i) => ({
       day: label,
       real: occ[i] ? Math.round(totals[i] / occ[i]) : 0,
-      planejado: n,
+      planejado: i === 6 ? null : n,
     }))
   }
 
@@ -67,7 +90,7 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
     return LABEL_MES.map((label, i) => ({
       day: label,
       real: map[i] ?? null,
-      planejado: n * new Date(year, i + 1, 0).getDate(),
+      planejado: n * diasSemDomingoNoMes(year, i),
     }))
   }
 
@@ -81,10 +104,9 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
     })
     return Object.entries(map)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([year, real]) => {
-        const isLeap = new Date(parseInt(year), 1, 29).getDate() === 29
-        return { day: year, real, planejado: n * (isLeap ? 366 : 365) }
-      })
+      .map(([year, real]) => ({
+        day: year, real, planejado: n * diasSemDomingoNoAno(parseInt(year)),
+      }))
   }
 
   return []
