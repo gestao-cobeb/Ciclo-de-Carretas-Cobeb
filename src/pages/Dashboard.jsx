@@ -10,6 +10,86 @@ import { supabase } from '../lib/supabase'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function useLocalStorage(key, initial) {
+  const [val, setVal] = useState(() => {
+    try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : initial } catch { return initial }
+  })
+  function save(v) { setVal(v); try { localStorage.setItem(key, JSON.stringify(v)) } catch {} }
+  return [val, save]
+}
+
+function countWeekdayOccurrences(start, end) {
+  const counts = Array(7).fill(0)
+  if (!start || !end) return counts.fill(1)
+  const d = new Date(start)
+  const fim = new Date(end)
+  while (d <= fim) { counts[(d.getDay() + 6) % 7]++; d.setDate(d.getDate() + 1) }
+  return counts
+}
+
+function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
+  if (agrupamento === 'dia') {
+    const map = {}
+    rows.forEach(v => {
+      const iso = v.dt_saida_revenda?.slice(0, 10)
+      if (!iso) return
+      map[iso] = (map[iso] || 0) + 1
+    })
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([iso, real]) => { const [, mm, dd] = iso.split('-'); return { day: `${dd}/${mm}`, real, planejado: n } })
+  }
+
+  if (agrupamento === 'semana') {
+    const totals = Array(7).fill(0)
+    rows.forEach(v => {
+      const date = v.dt_saida_revenda
+      if (!date) return
+      totals[(new Date(date).getDay() + 6) % 7]++
+    })
+    const occ = countWeekdayOccurrences(dataInicio, dataFim)
+    return LABEL_SEMANA.map((label, i) => ({
+      day: label,
+      real: occ[i] ? Math.round(totals[i] / occ[i]) : 0,
+      planejado: n,
+    }))
+  }
+
+  if (agrupamento === 'mes') {
+    const year = dataInicio ? parseInt(dataInicio.split('-')[0]) : new Date().getFullYear()
+    const map = {}
+    rows.forEach(v => {
+      const date = v.dt_saida_revenda
+      if (!date) return
+      const d = new Date(date)
+      if (d.getFullYear() === year) map[d.getMonth()] = (map[d.getMonth()] || 0) + 1
+    })
+    return LABEL_MES.map((label, i) => ({
+      day: label,
+      real: map[i] ?? null,
+      planejado: n * new Date(year, i + 1, 0).getDate(),
+    }))
+  }
+
+  if (agrupamento === 'ano') {
+    const map = {}
+    rows.forEach(v => {
+      const date = v.dt_saida_revenda
+      if (!date) return
+      const y = String(new Date(date).getFullYear())
+      map[y] = (map[y] || 0) + 1
+    })
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([year, real]) => {
+        const isLeap = new Date(parseInt(year), 1, 29).getDate() === 29
+        return { day: year, real, planejado: n * (isLeap ? 366 : 365) }
+      })
+  }
+
+  return []
+}
+
 function diffMin(start, end) {
   if (!start || !end) return null
   const ms = new Date(end) - new Date(start)
@@ -426,6 +506,132 @@ function GraficoOciosidade({ data, filtros }) {
             </button>
           </div>
         </div>
+      )}
+    </div>
+  )
+}
+
+function TooltipPlanejadoVsReal({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  const plan = payload.find(p => p.dataKey === 'planejado')?.value
+  const real = payload.find(p => p.dataKey === 'real')?.value
+  const diff = real != null && plan != null ? real - plan : null
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid #BFDBFE',
+      borderRadius: 12, padding: '10px 14px', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,.08)',
+    }}>
+      <p style={{ fontWeight: 600, color: '#1E3A6E', marginBottom: 4 }}>{label}</p>
+      {plan != null && <p style={{ color: '#003DA5' }}>Planejado: <strong>{plan}</strong></p>}
+      {real != null && <p style={{ color: '#10B981' }}>Real: <strong>{real}</strong></p>}
+      {diff != null && (
+        <p style={{ color: diff >= 0 ? '#10B981' : '#EF4444', marginTop: 4, fontWeight: 600 }}>
+          {diff >= 0 ? `+${diff} acima` : `${Math.abs(diff)} abaixo`}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros }) {
+  const [planejado, setPlanejado] = useLocalStorage('cobeb_dashboard_planejado_dia', 14)
+  const [editando, setEditando]   = useState(false)
+  const [inputVal, setInputVal]   = useState(String(planejado))
+
+  const data = useMemo(
+    () => calcPlanejaVsReal(rows, planejado, agrupamento, dataInicio, dataFim),
+    [rows, planejado, agrupamento, dataInicio, dataFim]
+  )
+
+  const semDados    = !data?.length
+  const tickInterval = Math.max(0, Math.ceil((data?.length || 0) / 12) - 1)
+
+  function confirmar() {
+    const v = parseInt(inputVal, 10)
+    if (!isNaN(v) && v > 0) setPlanejado(v)
+    setEditando(false)
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="text-cobeb-text font-semibold text-sm">
+          Planejado vs Real — Viagens por Período
+        </h2>
+        <div className="shrink-0">
+          {editando ? (
+            <div className="flex items-center gap-1.5">
+              <input
+                type="number" min="1" value={inputVal}
+                onChange={e => setInputVal(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') confirmar(); if (e.key === 'Escape') setEditando(false) }}
+                className="w-16 text-xs border border-cobeb-border rounded-lg px-2 py-1 focus:outline-none focus:border-cobeb-blue [appearance:textfield]"
+                autoFocus
+              />
+              <button onClick={confirmar}
+                className="text-xs bg-cobeb-navy text-white px-2.5 py-1 rounded-lg font-semibold">
+                OK
+              </button>
+              <button onClick={() => setEditando(false)} className="text-slate-400 hover:text-slate-600">
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setInputVal(String(planejado)); setEditando(true) }}
+              className="text-xs font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border rounded-lg px-2.5 py-1 hover:border-cobeb-blue transition-colors"
+            >
+              Planejado: {planejado} veíc./dia ✎
+            </button>
+          )}
+        </div>
+      </div>
+      <FiltrosTags filtros={filtros} />
+
+      <div className="flex gap-4 mb-3">
+        <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+          <span className="w-2.5 h-2.5 rounded-sm bg-[#003DA5] inline-block" />
+          Planejado
+        </span>
+        <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+          <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
+          Real
+        </span>
+      </div>
+
+      {semDados ? (
+        <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
+          Sem dados para o período
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={data} margin={{ top: 20, right: 12, left: 4, bottom: 32 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
+            <XAxis
+              dataKey="day"
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={{ stroke: '#BFDBFE' }}
+              angle={-35}
+              textAnchor="end"
+              interval={tickInterval}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={false}
+              width={32}
+            />
+            <Tooltip content={<TooltipPlanejadoVsReal />} cursor={{ fill: '#EBF5FF' }} />
+            <Bar dataKey="planejado" name="Planejado" fill="#003DA5" radius={[4, 4, 0, 0]} maxBarSize={22}>
+              <LabelList dataKey="planejado" content={renderCountLabel} />
+            </Bar>
+            <Bar dataKey="real" name="Real" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={22}>
+              <LabelList dataKey="real" content={renderCountLabel} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
       )}
     </div>
   )
@@ -981,6 +1187,13 @@ export default function Dashboard() {
             />
             <GraficoHistograma data={dadosHistograma} filtros={descFiltros} />
             <GraficoOciosidade data={dadosOciosidade} filtros={descFiltros} />
+            <GraficoPlanejaVsReal
+              rows={rows}
+              agrupamento={filtroAgrupamento}
+              dataInicio={dataInicio}
+              dataFim={dataFim}
+              filtros={descFiltros}
+            />
           </div>
         )}
 
