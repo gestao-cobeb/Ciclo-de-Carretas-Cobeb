@@ -721,8 +721,6 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
           <BarChart
             data={data}
             margin={{ top: 20, right: 12, left: 4, bottom: 32 }}
-            style={{ cursor: 'pointer' }}
-            onClick={e => { if (e?.activePayload?.length) handleBarClick(e.activePayload[0].payload) }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
             <XAxis
@@ -742,10 +740,10 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
               width={32}
             />
             <Tooltip content={<TooltipPlanejadoVsReal />} cursor={{ fill: '#EBF5FF' }} />
-            <Bar dataKey="planejado" name="Planejado" fill="#003DA5" radius={[4, 4, 0, 0]} maxBarSize={22} style={{ cursor: 'pointer' }}>
+            <Bar dataKey="planejado" name="Planejado" fill="#003DA5" radius={[4, 4, 0, 0]} maxBarSize={22} cursor="pointer" onClick={payload => handleBarClick(payload)}>
               <LabelList dataKey="planejado" content={renderCountLabel} />
             </Bar>
-            <Bar dataKey="real" name="Real" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={22} style={{ cursor: 'pointer' }}>
+            <Bar dataKey="real" name="Real" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={22} cursor="pointer" onClick={payload => handleBarClick(payload)}>
               <LabelList dataKey="real" content={renderCountLabel} />
             </Bar>
           </BarChart>
