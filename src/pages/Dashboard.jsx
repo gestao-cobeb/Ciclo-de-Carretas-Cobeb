@@ -112,6 +112,39 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
   return []
 }
 
+function getRowsForPeriod(rows, agrupamento, day) {
+  if (agrupamento === 'dia') {
+    const [dd, mm] = day.split('/')
+    return rows.filter(v => {
+      const iso = v.dt_saida_revenda?.slice(0, 10)
+      if (!iso) return false
+      const [, m, d] = iso.split('-')
+      return d === dd && m === mm
+    })
+  }
+  if (agrupamento === 'semana') {
+    const idx = LABEL_SEMANA.indexOf(day)
+    return rows.filter(v => {
+      if (!v.dt_saida_revenda) return false
+      return (new Date(v.dt_saida_revenda).getDay() + 6) % 7 === idx
+    })
+  }
+  if (agrupamento === 'mes') {
+    const idx = LABEL_MES.indexOf(day)
+    return rows.filter(v => {
+      if (!v.dt_saida_revenda) return false
+      return new Date(v.dt_saida_revenda).getMonth() === idx
+    })
+  }
+  if (agrupamento === 'ano') {
+    return rows.filter(v => {
+      if (!v.dt_saida_revenda) return false
+      return String(new Date(v.dt_saida_revenda).getFullYear()) === day
+    })
+  }
+  return []
+}
+
 function diffMin(start, end) {
   if (!start || !end) return null
   const ms = new Date(end) - new Date(start)
@@ -559,6 +592,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
   const [planejadoMap, setPlanejadoMap] = useLocalStorage('cobeb_dashboard_planejado_v2', {})
   const [configurando, setConfigurando] = useState(false)
   const [draftMap, setDraftMap]         = useState({})
+  const [detalhe, setDetalhe]           = useState(null)
 
   const totalPlanejado    = optUnidades.reduce((s, u) => s + (planejadoMap[u.id] || 0), 0)
   const planejadoEfetivo  = filtroUnidade ? (planejadoMap[filtroUnidade] || 0) : totalPlanejado
@@ -576,6 +610,57 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
     optUnidades.forEach(u => { clean[u.id] = Math.max(0, parseInt(draftMap[u.id], 10) || 0) })
     setPlanejadoMap(clean)
     setConfigurando(false)
+  }
+
+  async function handleBarClick(payload) {
+    if (!payload?.day) return
+    const periodoRows = getRowsForPeriod(rows, agrupamento, payload.day)
+    const vids = periodoRows.map(v => v.id)
+    setDetalhe({ label: payload.day, carregando: true, porTipo: [], totalHL: 0 })
+
+    if (!vids.length) {
+      setDetalhe({ label: payload.day, carregando: false, porTipo: [], totalHL: 0 })
+      return
+    }
+
+    const { data: pedData } = await supabase
+      .from('pedidos')
+      .select('cod_produto, qtde_pallets')
+      .in('viagem_id', vids)
+      .not('cod_produto', 'is', null)
+      .gt('qtde_pallets', 0)
+
+    const skus = [...new Set((pedData ?? []).map(p => p.cod_produto))]
+
+    if (!skus.length) {
+      setDetalhe({ label: payload.day, carregando: false, porTipo: [], totalHL: 0 })
+      return
+    }
+
+    const { data: catData } = await supabase
+      .from('produtos_catalogo')
+      .select('codigo, tipo_marca, caixas_pallet, nr_fator_conversao')
+      .in('codigo', skus)
+
+    const catMap = {}
+    ;(catData ?? []).forEach(c => { catMap[c.codigo] = c })
+
+    const porTipoMap = {}
+    let totalHL = 0
+    ;(pedData ?? []).forEach(p => {
+      const cat = catMap[p.cod_produto]
+      if (!cat) return
+      const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
+      const tipo = cat.tipo_marca || 'Sem classificação'
+      porTipoMap[tipo] = (porTipoMap[tipo] || 0) + hl
+      totalHL += hl
+    })
+
+    const porTipo = Object.entries(porTipoMap)
+      .sort(([, a], [, b]) => b - a)
+      .map(([tipo, hl]) => ({ tipo, hl }))
+
+    setDetalhe({ label: payload.day, carregando: false, porTipo, totalHL })
   }
 
   const data = useMemo(
@@ -633,7 +718,12 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={data} margin={{ top: 20, right: 12, left: 4, bottom: 32 }}>
+          <BarChart
+            data={data}
+            margin={{ top: 20, right: 12, left: 4, bottom: 32 }}
+            style={{ cursor: 'pointer' }}
+            onClick={e => { if (e?.activePayload?.length) handleBarClick(e.activePayload[0].payload) }}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
             <XAxis
               dataKey="day"
@@ -652,14 +742,65 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
               width={32}
             />
             <Tooltip content={<TooltipPlanejadoVsReal />} cursor={{ fill: '#EBF5FF' }} />
-            <Bar dataKey="planejado" name="Planejado" fill="#003DA5" radius={[4, 4, 0, 0]} maxBarSize={22}>
+            <Bar dataKey="planejado" name="Planejado" fill="#003DA5" radius={[4, 4, 0, 0]} maxBarSize={22} style={{ cursor: 'pointer' }}>
               <LabelList dataKey="planejado" content={renderCountLabel} />
             </Bar>
-            <Bar dataKey="real" name="Real" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={22}>
+            <Bar dataKey="real" name="Real" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={22} style={{ cursor: 'pointer' }}>
               <LabelList dataKey="real" content={renderCountLabel} />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+      )}
+
+      {/* Bottom sheet — volume por tipo de marca */}
+      {detalhe && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end" onClick={() => setDetalhe(null)}>
+          <div className="w-full max-w-lg mx-auto bg-white rounded-t-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto" />
+
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-cobeb-text font-bold text-base">Volume Puxado</p>
+                <p className="text-xs text-slate-400">{detalhe.label}</p>
+              </div>
+              <button onClick={() => setDetalhe(null)} className="text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            {detalhe.carregando ? (
+              <div className="flex items-center justify-center py-8 text-slate-400 text-sm">Carregando...</div>
+            ) : detalhe.porTipo.length === 0 ? (
+              <div className="flex items-center justify-center py-8 text-slate-400 text-sm">
+                Sem pedidos vinculados neste período
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1 max-h-64 overflow-y-auto">
+                  {detalhe.porTipo.map(({ tipo, hl }) => (
+                    <div key={tipo} className="flex items-center justify-between py-2 border-b border-cobeb-border">
+                      <span className="text-sm text-cobeb-text">{tipo}</span>
+                      <span className="text-sm font-semibold text-cobeb-navy">
+                        {hl.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HL
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t-2 border-cobeb-navy/20">
+                  <span className="text-sm font-bold text-cobeb-text">Total</span>
+                  <span className="text-sm font-bold text-cobeb-navy">
+                    {detalhe.totalHL.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HL
+                  </span>
+                </div>
+              </>
+            )}
+
+            <button onClick={() => setDetalhe(null)}
+              className="w-full bg-[#EBF5FF] border border-cobeb-border text-slate-500 font-semibold py-3 rounded-xl text-sm">
+              Fechar
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Bottom sheet — configurar meta por unidade */}
