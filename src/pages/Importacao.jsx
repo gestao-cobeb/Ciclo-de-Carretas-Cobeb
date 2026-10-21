@@ -366,7 +366,7 @@ export default function Importacao() {
         grupo:              String(r[17] ?? '').trim() || null,
         ean:                String(r[19] ?? '').trim() || null,
         caixas_pallet:      parseFloat(r[21]) || null,
-        nr_fator_conversao: parseFloat(r[22]) || null,
+        nr_fator_conversao: parseFloat(r[14]) || null,
         codigo_sap:         String(r[38] ?? '').trim() || null,
         ncm:                String(r[40] ?? '').trim() || null,
         subtipo:            String(r[47] ?? '').trim() || null,
@@ -464,8 +464,8 @@ export default function Importacao() {
         row[13] = p.fator ?? ''
         row[17] = p.grupo ?? ''
         row[19] = p.ean ?? ''
+        row[14] = p.nr_fator_conversao ?? ''
         row[21] = p.caixas_pallet ?? ''
-        row[22] = p.nr_fator_conversao ?? ''
         row[38] = p.codigo_sap ?? ''
         row[40] = p.ncm ?? ''
         row[47] = p.subtipo ?? ''
