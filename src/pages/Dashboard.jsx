@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, LabelList,
 } from 'recharts'
-import { X, SlidersHorizontal } from 'lucide-react'
+import { X, SlidersHorizontal, ChevronLeft, ChevronRight } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import { supabase } from '../lib/supabase'
 
@@ -581,7 +581,9 @@ function TooltipPlanejadoVsReal({ active, payload, label }) {
 }
 
 function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros, filtroUnidade, optUnidades, planejadoMap }) {
-  const [detalhe, setDetalhe] = useState(null)
+  const [detalhe,      setDetalhe]      = useState(null)
+  const [drillTipo,    setDrillTipo]    = useState(null)
+  const [drillUnidade, setDrillUnidade] = useState(null)
 
   const totalPlanejado    = optUnidades.reduce((s, u) => s + (planejadoMap[u.id] || 0), 0)
   const planejadoEfetivo  = filtroUnidade ? (planejadoMap[filtroUnidade] || 0) : totalPlanejado
@@ -591,16 +593,23 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
     if (!payload?.day) return
     const periodoRows = getRowsForPeriod(rows, agrupamento, payload.day)
     const vids = periodoRows.map(v => v.id)
-    setDetalhe({ label: payload.day, carregando: true, porTipo: [], totalHL: 0 })
+    setDrillTipo(null)
+    setDrillUnidade(null)
+    setDetalhe({ label: payload.day, carregando: true, porTipo: [], totalHL: 0, items: [] })
 
     if (!vids.length) {
-      setDetalhe({ label: payload.day, carregando: false, porTipo: [], totalHL: 0 })
+      setDetalhe({ label: payload.day, carregando: false, porTipo: [], totalHL: 0, items: [] })
       return
     }
 
+    const vidToUnidade = {}
+    periodoRows.forEach(v => {
+      if (v.unidade) vidToUnidade[v.id] = { id: v.unidade.id, nome: v.unidade.nome }
+    })
+
     const { data: pedData } = await supabase
       .from('pedidos')
-      .select('cod_produto, qtde_pallets')
+      .select('viagem_id, cod_produto, qtde_pallets')
       .in('viagem_id', vids)
       .not('cod_produto', 'is', null)
       .gt('qtde_pallets', 0)
@@ -608,13 +617,13 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
     const skus = [...new Set((pedData ?? []).map(p => p.cod_produto))]
 
     if (!skus.length) {
-      setDetalhe({ label: payload.day, carregando: false, porTipo: [], totalHL: 0 })
+      setDetalhe({ label: payload.day, carregando: false, porTipo: [], totalHL: 0, items: [] })
       return
     }
 
     const { data: catData } = await supabase
       .from('produtos_catalogo')
-      .select('codigo, tipo_marca, caixas_pallet, nr_fator_conversao')
+      .select('codigo, descricao, tipo_marca, caixas_pallet, nr_fator_conversao')
       .in('codigo', skus)
 
     const catMap = {}
@@ -622,20 +631,41 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
 
     const porTipoMap = {}
     let totalHL = 0
+    const items = []
+
     ;(pedData ?? []).forEach(p => {
       const cat = catMap[p.cod_produto]
       if (!cat) return
       const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
-      const tipo = cat.tipo_marca || 'Sem classificação'
+      if (hl <= 0) return
+      const tipo     = cat.tipo_marca || 'Sem classificação'
+      const unidade  = vidToUnidade[p.viagem_id] ?? { id: null, nome: '—' }
       porTipoMap[tipo] = (porTipoMap[tipo] || 0) + hl
       totalHL += hl
+      items.push({
+        viagem_id:    p.viagem_id,
+        unidade_id:   unidade.id,
+        unidade_nome: unidade.nome,
+        tipo_marca:   tipo,
+        cod_produto:  p.cod_produto,
+        descricao:    cat.descricao || p.cod_produto,
+        hl,
+      })
     })
 
     const porTipo = Object.entries(porTipoMap)
       .sort(([, a], [, b]) => b - a)
       .map(([tipo, hl]) => ({ tipo, hl }))
 
-    setDetalhe({ label: payload.day, carregando: false, porTipo, totalHL })
+    setDetalhe({ label: payload.day, carregando: false, porTipo, totalHL, items })
+  }
+
+  function fecharDetalhe() {
+    setDetalhe(null); setDrillTipo(null); setDrillUnidade(null)
+  }
+
+  function goBack() {
+    if (drillUnidade) setDrillUnidade(null); else setDrillTipo(null)
   }
 
   const data = useMemo(
@@ -647,6 +677,48 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
   const tickInterval    = Math.max(0, Math.ceil((data?.length || 0) / 12) - 1)
   const resumoPlanejado = data.reduce((s, d) => s + (d.planejado ?? 0), 0)
   const resumoReal      = data.reduce((s, d) => s + (d.real ?? 0), 0)
+
+  // Cascade drill-down — computados a partir de detalhe.items
+  const porUnidade = (() => {
+    if (!detalhe?.items?.length || !drillTipo) return []
+    const map = {}
+    detalhe.items
+      .filter(i => i.tipo_marca === drillTipo)
+      .forEach(i => {
+        if (!i.unidade_id) return
+        if (!map[i.unidade_id]) map[i.unidade_id] = { nome: i.unidade_nome, hl: 0 }
+        map[i.unidade_id].hl += i.hl
+      })
+    return Object.entries(map)
+      .sort(([, a], [, b]) => b.hl - a.hl)
+      .map(([id, v]) => ({ id, nome: v.nome, hl: v.hl }))
+  })()
+
+  const porProduto = (() => {
+    if (!detalhe?.items?.length || !drillTipo || !drillUnidade) return []
+    const map = {}
+    detalhe.items
+      .filter(i => i.tipo_marca === drillTipo && i.unidade_id === drillUnidade)
+      .forEach(i => {
+        if (!map[i.cod_produto]) map[i.cod_produto] = { descricao: i.descricao, hl: 0 }
+        map[i.cod_produto].hl += i.hl
+      })
+    return Object.entries(map)
+      .sort(([, a], [, b]) => b.hl - a.hl)
+      .map(([cod, v]) => ({ cod, descricao: v.descricao, hl: v.hl }))
+  })()
+
+  const nivelAtual     = drillUnidade ? 3 : drillTipo ? 2 : 1
+  const listaSheet     = nivelAtual === 3
+    ? porProduto.map(p  => ({ label: p.descricao, sub: p.cod,       hl: p.hl, onClick: null }))
+    : nivelAtual === 2
+      ? porUnidade.map(u => ({ label: u.nome,      sub: null,        hl: u.hl, onClick: () => setDrillUnidade(u.id) }))
+      : (detalhe?.porTipo ?? []).map(t => ({ label: t.tipo, sub: null, hl: t.hl, onClick: () => setDrillTipo(t.tipo) }))
+  const totalSheet     = listaSheet.reduce((s, i) => s + i.hl, 0)
+  const tituloSheet    = drillUnidade
+    ? (porUnidade.find(u => u.id === drillUnidade)?.nome ?? 'Unidade')
+    : (drillTipo ?? 'Volume Puxado')
+  const subtituloSheet = drillUnidade ? drillTipo : (detalhe?.label ?? '')
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
@@ -721,50 +793,78 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
         </ResponsiveContainer>
       )}
 
-      {/* Bottom sheet — volume por tipo de marca */}
+      {/* Bottom sheet — volume por tipo de marca (cascata) */}
       {detalhe && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-end" onClick={() => setDetalhe(null)}>
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end" onClick={fecharDetalhe}>
           <div className="w-full max-w-lg mx-auto bg-white rounded-t-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
             <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto" />
 
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-cobeb-text font-bold text-base">Volume Puxado</p>
-                <p className="text-xs text-slate-400">{detalhe.label}</p>
+            {/* Cabeçalho com navegação de volta */}
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {(drillTipo || drillUnidade) && (
+                  <button
+                    onClick={goBack}
+                    className="shrink-0 w-7 h-7 rounded-lg bg-cobeb-sky border border-cobeb-border flex items-center justify-center text-cobeb-navy hover:bg-cobeb-border transition-colors"
+                  >
+                    <ChevronLeft size={14} />
+                  </button>
+                )}
+                <div className="min-w-0">
+                  <p className="text-cobeb-text font-bold text-base truncate">{tituloSheet}</p>
+                  <p className="text-xs text-slate-400 truncate">{subtituloSheet}</p>
+                </div>
               </div>
-              <button onClick={() => setDetalhe(null)} className="text-slate-400 hover:text-slate-600">
+              <button onClick={fecharDetalhe} className="shrink-0 text-slate-400 hover:text-slate-600">
                 <X size={18} />
               </button>
             </div>
 
             {detalhe.carregando ? (
               <div className="flex items-center justify-center py-8 text-slate-400 text-sm">Carregando...</div>
-            ) : detalhe.porTipo.length === 0 ? (
+            ) : nivelAtual === 1 && detalhe.porTipo.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-slate-400 text-sm">
                 Sem pedidos vinculados neste período
               </div>
             ) : (
               <>
-                <div className="space-y-1 max-h-64 overflow-y-auto">
-                  {detalhe.porTipo.map(({ tipo, hl }) => (
-                    <div key={tipo} className="flex items-center justify-between py-2 border-b border-cobeb-border">
-                      <span className="text-sm text-cobeb-text">{tipo}</span>
-                      <span className="text-sm font-semibold text-cobeb-navy">
-                        {hl.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HL
-                      </span>
+                {nivelAtual < 3 && (
+                  <p className="text-[10px] text-slate-400 -mt-2">Toque em uma linha para detalhar</p>
+                )}
+                <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                  {listaSheet.map((item, i) => (
+                    <div
+                      key={i}
+                      onClick={item.onClick ?? undefined}
+                      className={`flex items-center justify-between py-2 border-b border-cobeb-border gap-2 ${
+                        item.onClick
+                          ? 'cursor-pointer -mx-1 px-1 rounded-lg hover:bg-cobeb-sky/60 transition-colors'
+                          : ''
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm text-cobeb-text truncate">{item.label}</p>
+                        {item.sub && <p className="text-[10px] text-slate-400">{item.sub}</p>}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <span className="text-sm font-semibold text-cobeb-navy">
+                          {item.hl.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HL
+                        </span>
+                        {item.onClick && <ChevronRight size={14} className="text-slate-400" />}
+                      </div>
                     </div>
                   ))}
                 </div>
                 <div className="flex items-center justify-between pt-1 border-t-2 border-cobeb-navy/20">
                   <span className="text-sm font-bold text-cobeb-text">Total</span>
                   <span className="text-sm font-bold text-cobeb-navy">
-                    {detalhe.totalHL.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HL
+                    {totalSheet.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HL
                   </span>
                 </div>
               </>
             )}
 
-            <button onClick={() => setDetalhe(null)}
+            <button onClick={fecharDetalhe}
               className="w-full bg-[#EBF5FF] border border-cobeb-border text-slate-500 font-semibold py-3 rounded-xl text-sm">
               Fechar
             </button>
