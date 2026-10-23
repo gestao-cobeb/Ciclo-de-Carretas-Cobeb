@@ -419,7 +419,6 @@ function GraficoOciosidade({ data, filtros }) {
 
   const avg         = calcAvg(data)
   const semDados    = data.length === 0
-  const tickInterval = Math.max(0, Math.ceil(data.length / 12) - 1)
 
   const fmtDT = iso => {
     if (!iso) return '—'
@@ -462,7 +461,7 @@ function GraficoOciosidade({ data, filtros }) {
                 axisLine={{ stroke: '#BFDBFE' }}
                 angle={-35}
                 textAnchor="end"
-                interval={tickInterval}
+                interval={0}
               />
               <YAxis
                 tickFormatter={minutesToHHMM}
@@ -674,7 +673,6 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
   )
 
   const semDados        = !data?.length
-  const tickInterval    = Math.max(0, Math.ceil((data?.length || 0) / 12) - 1)
   const resumoPlanejado = data.reduce((s, d) => s + (d.planejado ?? 0), 0)
   const resumoReal      = data.reduce((s, d) => s + (d.real ?? 0), 0)
 
@@ -773,7 +771,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
               axisLine={{ stroke: '#BFDBFE' }}
               angle={-35}
               textAnchor="end"
-              interval={tickInterval}
+              interval={0}
             />
             <YAxis
               allowDecimals={false}
@@ -879,7 +877,6 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
 function GraficoMetrica({ title, data, color, filtros }) {
   const avg         = calcAvg(data)
   const semDados    = data.length === 0 || data.every(d => d.value == null)
-  const tickInterval = Math.max(0, Math.ceil(data.length / 12) - 1)
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
@@ -908,7 +905,7 @@ function GraficoMetrica({ title, data, color, filtros }) {
               axisLine={{ stroke: '#BFDBFE' }}
               angle={-35}
               textAnchor="end"
-              interval={tickInterval}
+              interval={0}
             />
             <YAxis
               tickFormatter={minutesToHHMM}
