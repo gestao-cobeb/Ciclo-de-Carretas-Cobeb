@@ -815,6 +815,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
         cod_produto:  p.cod_produto,
         descricao:    cat.descricao || p.cod_produto,
         hl,
+        pallets:      p.qtde_pallets || 0,
       })
     })
 
@@ -865,21 +866,23 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
     detalhe.items
       .filter(i => i.tipo_marca === drillTipo && i.unidade_id === drillUnidade)
       .forEach(i => {
-        if (!map[i.cod_produto]) map[i.cod_produto] = { descricao: i.descricao, hl: 0 }
-        map[i.cod_produto].hl += i.hl
+        if (!map[i.cod_produto]) map[i.cod_produto] = { descricao: i.descricao, hl: 0, pallets: 0 }
+        map[i.cod_produto].hl      += i.hl
+        map[i.cod_produto].pallets += i.pallets
       })
     return Object.entries(map)
       .sort(([, a], [, b]) => b.hl - a.hl)
-      .map(([cod, v]) => ({ cod, descricao: v.descricao, hl: v.hl }))
+      .map(([cod, v]) => ({ cod, descricao: v.descricao, hl: v.hl, pallets: v.pallets }))
   })()
 
   const nivelAtual     = drillUnidade ? 3 : drillTipo ? 2 : 1
   const listaSheet     = nivelAtual === 3
-    ? porProduto.map(p  => ({ label: p.descricao, sub: p.cod,       hl: p.hl, onClick: null }))
+    ? porProduto.map(p  => ({ label: p.descricao, sub: p.cod,  hl: p.hl, pallets: p.pallets, onClick: null }))
     : nivelAtual === 2
-      ? porUnidade.map(u => ({ label: u.nome,      sub: null,        hl: u.hl, onClick: () => setDrillUnidade(u.id) }))
-      : (detalhe?.porTipo ?? []).map(t => ({ label: t.tipo, sub: null, hl: t.hl, onClick: () => setDrillTipo(t.tipo) }))
+      ? porUnidade.map(u => ({ label: u.nome,      sub: null,  hl: u.hl, onClick: () => setDrillUnidade(u.id) }))
+      : (detalhe?.porTipo ?? []).map(t => ({ label: t.tipo,    sub: null, hl: t.hl, onClick: () => setDrillTipo(t.tipo) }))
   const totalSheet     = listaSheet.reduce((s, i) => s + i.hl, 0)
+  const totalPallets   = nivelAtual === 3 ? listaSheet.reduce((s, i) => s + (i.pallets ?? 0), 0) : null
   const tituloSheet    = drillUnidade
     ? (porUnidade.find(u => u.id === drillUnidade)?.nome ?? 'Unidade')
     : (drillTipo ?? 'Volume Puxado')
@@ -1030,9 +1033,16 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
                         {item.sub && <p className="text-[10px] text-slate-400">{item.sub}</p>}
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
-                        <span className="text-sm font-semibold text-cobeb-navy">
-                          {item.hl.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HL
-                        </span>
+                        <div className="text-right">
+                          <span className="text-sm font-semibold text-cobeb-navy block">
+                            {item.hl.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HL
+                          </span>
+                          {item.pallets != null && (
+                            <span className="text-[10px] text-slate-400">
+                              {item.pallets.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} plt
+                            </span>
+                          )}
+                        </div>
                         {item.onClick && <ChevronRight size={14} className="text-slate-400" />}
                       </div>
                     </div>
@@ -1040,9 +1050,16 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
                 </div>
                 <div className="flex items-center justify-between pt-1 border-t-2 border-cobeb-navy/20">
                   <span className="text-sm font-bold text-cobeb-text">Total</span>
-                  <span className="text-sm font-bold text-cobeb-navy">
-                    {totalSheet.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HL
-                  </span>
+                  <div className="text-right">
+                    <span className="text-sm font-bold text-cobeb-navy block">
+                      {totalSheet.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HL
+                    </span>
+                    {totalPallets != null && (
+                      <span className="text-[10px] text-slate-400">
+                        {totalPallets.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} plt
+                      </span>
+                    )}
+                  </div>
                 </div>
               </>
             )}
