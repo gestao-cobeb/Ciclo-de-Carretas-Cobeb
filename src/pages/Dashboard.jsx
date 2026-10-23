@@ -650,17 +650,15 @@ function GraficoCavalosStatus({ todoCavalos, viagens, filtroUnidade, filtroFrota
     return lista
   }, [todoCavalos, viagens, filtroUnidade, filtroFrota, filtroCavalo])
 
-  const desligado  = cavalos.filter(c =>  c.desligado).length
   const ativo      = cavalos.filter(c =>  c.ativo && !c.em_manutencao && !c.desligado).length
   const manutencao = cavalos.filter(c =>  c.em_manutencao && !c.desligado).length
   const inativo    = cavalos.filter(c => !c.ativo && !c.em_manutencao && !c.desligado).length
-  const total      = ativo + manutencao + inativo + desligado
+  const total      = ativo + manutencao + inativo
 
   const slices = [
-    { name: 'Ativo',          value: ativo,      total },
-    { name: 'Manutenção',     value: manutencao, total },
-    { name: 'Inativo',        value: inativo,    total },
-    { name: 'Não vinculado',  value: desligado,  total },
+    { name: 'Ativo',      value: ativo,      total },
+    { name: 'Manutenção', value: manutencao, total },
+    { name: 'Inativo',    value: inativo,    total },
   ].filter(d => d.value > 0)
 
   return (
@@ -704,10 +702,9 @@ function GraficoCavalosStatus({ todoCavalos, viagens, filtroUnidade, filtroFrota
           {/* Legenda com contagem e % */}
           <div className="flex flex-col gap-3 flex-1 w-full">
             {[
-              { name: 'Ativo',         value: ativo      },
-              { name: 'Manutenção',    value: manutencao },
-              { name: 'Inativo',       value: inativo    },
-              { name: 'Não vinculado', value: desligado  },
+              { name: 'Ativo',      value: ativo      },
+              { name: 'Manutenção', value: manutencao },
+              { name: 'Inativo',    value: inativo    },
             ].map(s => (
               <div key={s.name} className="flex items-center gap-3">
                 <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: CORES_STATUS[s.name] }} />
