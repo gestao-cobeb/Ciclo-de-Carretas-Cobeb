@@ -37,7 +37,7 @@ function diasSemDomingoNoAno(year) {
   return count
 }
 
-function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
+function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim, pedPorDia = {}) {
   if (agrupamento === 'dia') {
     const map = {}
     rows.forEach(v => {
@@ -50,7 +50,13 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
       .map(([iso, real]) => {
         const [y, mm, dd] = iso.split('-').map(Number)
         const isDom = new Date(y, mm - 1, dd).getDay() === 0
-        return { day: `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}`, real, planejado: isDom ? 0 : n }
+        const pallets = pedPorDia[iso] || 0
+        return {
+          day: `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}`,
+          real,
+          planejado: isDom ? 0 : n,
+          programado: pallets > 0 ? Math.ceil(pallets / 28) : null,
+        }
       })
   }
 
@@ -62,11 +68,16 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
       totals[(new Date(date).getDay() + 6) % 7]++
     })
     const occ = countWeekdayOccurrences(dataInicio, dataFim)
-    // LABEL_SEMANA[6] = 'Dom' — planejado null para domingo
+    const pedByDow = Array(7).fill(0)
+    Object.entries(pedPorDia).forEach(([iso, pallets]) => {
+      pedByDow[(new Date(iso).getDay() + 6) % 7] += pallets
+    })
+    // LABEL_SEMANA[6] = 'Dom' — planejado 0 para domingo
     return LABEL_SEMANA.map((label, i) => ({
       day: label,
       real: occ[i] ? Math.round(totals[i] / occ[i]) : 0,
       planejado: i === 6 ? 0 : n,
+      programado: (occ[i] && pedByDow[i]) ? Math.ceil(pedByDow[i] / occ[i] / 28) : null,
     }))
   }
 
@@ -79,10 +90,16 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
       const d = new Date(date)
       if (d.getFullYear() === year) map[d.getMonth()] = (map[d.getMonth()] || 0) + 1
     })
+    const pedByMonth = {}
+    Object.entries(pedPorDia).forEach(([iso, pallets]) => {
+      const d = new Date(iso)
+      if (d.getFullYear() === year) pedByMonth[d.getMonth()] = (pedByMonth[d.getMonth()] || 0) + pallets
+    })
     return LABEL_MES.map((label, i) => ({
       day: label,
       real: map[i] ?? null,
       planejado: n * diasSemDomingoNoMes(year, i),
+      programado: pedByMonth[i] ? Math.ceil(pedByMonth[i] / 28) : null,
     }))
   }
 
@@ -94,10 +111,18 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
       const y = String(new Date(date).getFullYear())
       map[y] = (map[y] || 0) + 1
     })
+    const pedByYear = {}
+    Object.entries(pedPorDia).forEach(([iso, pallets]) => {
+      const y = iso.slice(0, 4)
+      pedByYear[y] = (pedByYear[y] || 0) + pallets
+    })
     return Object.entries(map)
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([year, real]) => ({
-        day: year, real, planejado: n * diasSemDomingoNoAno(parseInt(year)),
+        day: year,
+        real,
+        planejado: n * diasSemDomingoNoAno(parseInt(year)),
+        programado: pedByYear[year] ? Math.ceil(pedByYear[year] / 28) : null,
       }))
   }
 
@@ -570,6 +595,7 @@ function TooltipPlanejadoVsReal({ active, payload, label }) {
   if (!active || !payload?.length) return null
   const plan = payload.find(p => p.dataKey === 'planejado')?.value
   const real = payload.find(p => p.dataKey === 'real')?.value
+  const prog = payload.find(p => p.dataKey === 'programado')?.value
   const diff = real != null && plan != null ? real - plan : null
   return (
     <div style={{
@@ -578,6 +604,7 @@ function TooltipPlanejadoVsReal({ active, payload, label }) {
     }}>
       <p style={{ fontWeight: 600, color: '#1E3A6E', marginBottom: 4 }}>{label}</p>
       {plan != null && <p style={{ color: '#003DA5' }}>Planejado: <strong>{plan}</strong></p>}
+      {prog != null && <p style={{ color: '#D97706' }}>Programado: <strong>{prog}</strong></p>}
       {real != null && <p style={{ color: '#10B981' }}>Real: <strong>{real}</strong></p>}
       {diff != null && (
         <p style={{ color: diff >= 0 ? '#10B981' : '#EF4444', marginTop: 4, fontWeight: 600 }}>
@@ -588,7 +615,7 @@ function TooltipPlanejadoVsReal({ active, payload, label }) {
   )
 }
 
-function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros, filtroUnidade, optUnidades, planejadoMap }) {
+function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros, filtroUnidade, optUnidades, planejadoMap, pedPorDia = {} }) {
   const [detalhe,      setDetalhe]      = useState(null)
   const [drillTipo,    setDrillTipo]    = useState(null)
   const [drillUnidade, setDrillUnidade] = useState(null)
@@ -677,13 +704,14 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
   }
 
   const data = useMemo(
-    () => calcPlanejaVsReal(rows, planejadoEfetivo, agrupamento, dataInicio, dataFim),
-    [rows, planejadoEfetivo, agrupamento, dataInicio, dataFim]
+    () => calcPlanejaVsReal(rows, planejadoEfetivo, agrupamento, dataInicio, dataFim, pedPorDia),
+    [rows, planejadoEfetivo, agrupamento, dataInicio, dataFim, pedPorDia]
   )
 
-  const semDados        = !data?.length
-  const resumoPlanejado = data.reduce((s, d) => s + (d.planejado ?? 0), 0)
-  const resumoReal      = data.reduce((s, d) => s + (d.real ?? 0), 0)
+  const semDados         = !data?.length
+  const resumoPlanejado  = data.reduce((s, d) => s + (d.planejado  ?? 0), 0)
+  const resumoReal       = data.reduce((s, d) => s + (d.real       ?? 0), 0)
+  const resumoProgramado = data.reduce((s, d) => s + (d.programado ?? 0), 0)
 
   // Cascade drill-down — computados a partir de detalhe.items
   const porUnidade = (() => {
@@ -739,6 +767,11 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
               <span className="text-[11px] font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border rounded-lg px-2 py-0.5">
                 Planejado: {resumoPlanejado} viagens
               </span>
+              {resumoProgramado > 0 && (
+                <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-0.5">
+                  Programado: {resumoProgramado} viagens
+                </span>
+              )}
               <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-0.5">
                 Real: {resumoReal} viagens
               </span>
@@ -751,10 +784,14 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
       </div>
       <FiltrosTags filtros={filtros} />
 
-      <div className="flex gap-4 mb-3">
+      <div className="flex flex-wrap gap-4 mb-3">
         <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
           <span className="w-4 h-0.5 bg-[#003DA5] inline-block rounded-full" />
           Planejado
+        </span>
+        <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+          <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" />
+          Programado
         </span>
         <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
           <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
@@ -790,7 +827,8 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
               width={32}
             />
             <Tooltip content={<TooltipPlanejadoVsReal />} cursor={{ fill: '#EBF5FF' }} />
-            <Bar dataKey="real" name="Real" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={32} cursor="pointer" onClick={payload => handleBarClick(payload)}>
+            <Bar dataKey="programado" name="Programado" fill="#F59E0B" radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar dataKey="real" name="Real" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={payload => handleBarClick(payload)}>
               <LabelList dataKey="real" content={renderCountLabel} />
             </Bar>
             <Line
@@ -979,6 +1017,7 @@ export default function Dashboard({ mode = 'armazem' }) {
   const [mktpViagens,         setMktpViagens]         = useState([])
   const [filtroEntradaManual, setFiltroEntradaManual] = useState(false)
   const [planejadoMap,        setPlanejadoMap]        = useState({})
+  const [pedPorDia,           setPedPorDia]           = useState({})
 
   // opções dos filtros
   const [optUnidades, setOptUnidades] = useState([])
@@ -1089,19 +1128,37 @@ export default function Dashboard({ mode = 'armazem' }) {
   async function carregar() {
     setLoading(true)
 
-    const { data: vData } = await supabase
-      .from('viagens')
-      .select(`
-        id,
-        dt_saida_revenda, dt_chegada_fabrica, dt_saida_fabrica,
-        dt_chegada_revenda, dt_saida_entrega,
-        unidade:unidades(id, nome),
-        cavalo:cavalos(id, placa, tipo)
-      `)
-      .not('dt_saida_revenda', 'is', null)
-      .gte('dt_saida_revenda', dataInicio + 'T00:00:00')
-      .lte('dt_saida_revenda', dataFim + 'T23:59:59')
-      .order('dt_saida_revenda')
+    const [{ data: vData }, { data: rawPedsData }] = await Promise.all([
+      supabase
+        .from('viagens')
+        .select(`
+          id,
+          dt_saida_revenda, dt_chegada_fabrica, dt_saida_fabrica,
+          dt_chegada_revenda, dt_saida_entrega,
+          unidade:unidades(id, nome),
+          cavalo:cavalos(id, placa, tipo)
+        `)
+        .not('dt_saida_revenda', 'is', null)
+        .gte('dt_saida_revenda', dataInicio + 'T00:00:00')
+        .lte('dt_saida_revenda', dataFim + 'T23:59:59')
+        .order('dt_saida_revenda'),
+      supabase
+        .from('pedidos')
+        .select('data_puxada, qtde_pallets')
+        .gte('data_puxada', dataInicio)
+        .lte('data_puxada', dataFim)
+        .not('qtde_pallets', 'is', null)
+        .gt('qtde_pallets', 0)
+        .neq('status', 'cancelado'),
+    ])
+
+    const ppdMap = {}
+    ;(rawPedsData ?? []).forEach(p => {
+      if (!p.data_puxada) return
+      const iso = p.data_puxada.slice(0, 10)
+      ppdMap[iso] = (ppdMap[iso] || 0) + (p.qtde_pallets || 0)
+    })
+    setPedPorDia(ppdMap)
 
     const vids = (vData ?? []).map(v => v.id)
 
@@ -1466,6 +1523,7 @@ export default function Dashboard({ mode = 'armazem' }) {
                   filtroUnidade={filtroUnidade}
                   optUnidades={optUnidades}
                   planejadoMap={planejadoMap}
+                  pedPorDia={pedPorDia}
                 />
               </>
             )}
