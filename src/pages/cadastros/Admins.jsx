@@ -9,6 +9,7 @@ import { MODULOS } from '../SeletorModulo'
 export default function Admins() {
   const { profile: meProfile } = useAuth()
   const isAdminTotal = meProfile?.acesso_total === true
+  const podeExcluir  = isAdminTotal && meProfile?.email === 'admin@cobeb.com.br'
   const [lista, setLista] = useState([])
   const [confirmar, setConfirmar] = useState(null)
   const [excluindo, setExcluindo] = useState(false)
@@ -209,7 +210,7 @@ export default function Admins() {
                       a.ativo ? 'hover:text-red-400 hover:border-red-500/40' : 'hover:text-green-400 hover:border-green-500/40'}>
                     <Power size={14} />
                   </ActionBtn>
-                  {isAdminTotal && a.id !== meProfile?.id && (
+                  {podeExcluir && a.id !== meProfile?.id && (
                     <ActionBtn onClick={() => setConfirmar(a)} className="hover:text-red-400 hover:border-red-500/40">
                       <Trash2 size={14} />
                     </ActionBtn>

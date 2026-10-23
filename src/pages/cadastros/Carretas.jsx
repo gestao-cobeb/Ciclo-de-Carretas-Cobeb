@@ -49,6 +49,7 @@ function localNow() {
 export default function Carretas() {
   const { profile: meProfile } = useAuth()
   const isAdminTotal = meProfile?.acesso_total === true
+  const podeExcluir  = isAdminTotal && meProfile?.email === 'admin@cobeb.com.br'
 
   // Cadastro state
   const [lista, setLista] = useState([])
@@ -341,7 +342,7 @@ export default function Carretas() {
                           className={c.ativo ? 'hover:text-red-400 hover:border-red-500/40' : 'hover:text-green-400 hover:border-green-500/40'}>
                           <Power size={14} />
                         </ActionBtn>
-                        {isAdminTotal && (
+                        {podeExcluir && (
                           <ActionBtn onClick={() => setConfirmar({ ...c, nome: c.placa })}
                             className="hover:text-red-400 hover:border-red-500/40">
                             <Trash2 size={14} />
