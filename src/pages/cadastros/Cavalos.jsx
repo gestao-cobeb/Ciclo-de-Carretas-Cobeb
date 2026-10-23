@@ -61,8 +61,9 @@ export default function Cavalos() {
   const [tipo, setTipo] = useState('FF')
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
-  const [confirmar, setConfirmar] = useState(null)
-  const [excluindo, setExcluindo] = useState(false)
+  const [confirmar,   setConfirmar]   = useState(null)
+  const [excluindo,   setExcluindo]   = useState(false)
+  const [erroExcluir, setErroExcluir] = useState('')
 
   // Manutenção state
   const [manutencoesAtivas, setManutencoesAtivas] = useState([])
@@ -145,9 +146,19 @@ export default function Cavalos() {
 
   const excluir = async (item) => {
     setExcluindo(true)
+    setErroExcluir('')
     const { error } = await supabase.from('cavalos').delete().eq('id', item.id)
-    if (error) { alert('Não foi possível excluir: ' + (error.message.includes('foreign key') ? 'cavalo vinculado a viagens.' : error.message)) }
+    if (error) {
+      setErroExcluir(
+        error.message.includes('foreign key')
+          ? 'Cavalo vinculado a viagens — inative-o em vez de excluir.'
+          : error.message
+      )
+      setExcluindo(false)
+      return
+    }
     setConfirmar(null)
+    setErroExcluir('')
     setExcluindo(false)
     await carregar()
   }
@@ -457,8 +468,8 @@ export default function Cavalos() {
       )}
 
       {/* Modais */}
-      <ModalConfirmar confirmar={confirmar} excluindo={excluindo}
-        onConfirm={excluir} onCancelar={() => setConfirmar(null)} />
+      <ModalConfirmar confirmar={confirmar} excluindo={excluindo} erro={erroExcluir}
+        onConfirm={excluir} onCancelar={() => { setConfirmar(null); setErroExcluir('') }} />
 
       <ModalConfirmarBaixa confirmar={confirmarBaixa} dando={dandoBaixa}
         onConfirm={darBaixa} onCancelar={() => setConfirmarBaixa(null)} />
@@ -567,7 +578,7 @@ function ActionBtn({ onClick, children, className = '', title }) {
   )
 }
 
-function ModalConfirmar({ confirmar, excluindo, onConfirm, onCancelar }) {
+function ModalConfirmar({ confirmar, excluindo, erro, onConfirm, onCancelar }) {
   if (!confirmar) return null
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-end">
@@ -579,6 +590,9 @@ function ModalConfirmar({ confirmar, excluindo, onConfirm, onCancelar }) {
             Excluir <span className="font-semibold text-cobeb-text">{confirmar.nome}</span>? Esta ação não pode ser desfeita.
           </p>
         </div>
+        {erro && (
+          <p className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm">{erro}</p>
+        )}
         <div className="flex gap-3">
           <button onClick={onCancelar}
             className="flex-1 bg-[#EBF5FF] border border-cobeb-border text-slate-500 font-semibold py-3 rounded-xl text-sm">
