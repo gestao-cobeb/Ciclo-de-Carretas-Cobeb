@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
-  BarChart, Bar, LineChart, Line,
+  ComposedChart, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip,
   ReferenceLine, ResponsiveContainer, LabelList,
 } from 'recharts'
@@ -306,6 +306,15 @@ function renderCountLabel({ x, y, width, value }) {
   return (
     <text x={x + width / 2} y={y - 5}
       textAnchor="middle" fontSize={10} fontWeight={600} fill="#1E3A6E">
+      {value}
+    </text>
+  )
+}
+
+function renderLineLabelPlan({ x, y, value }) {
+  if (!value) return null
+  return (
+    <text x={x} y={y - 8} textAnchor="middle" fontSize={10} fontWeight={600} fill="#003DA5">
       {value}
     </text>
   )
@@ -744,7 +753,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
 
       <div className="flex gap-4 mb-3">
         <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
-          <span className="w-2.5 h-2.5 rounded-sm bg-[#003DA5] inline-block" />
+          <span className="w-4 h-0.5 bg-[#003DA5] inline-block rounded-full" />
           Planejado
         </span>
         <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
@@ -759,7 +768,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart
+          <ComposedChart
             data={data}
             margin={{ top: 20, right: 12, left: 4, bottom: 32 }}
           >
@@ -781,13 +790,22 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
               width={32}
             />
             <Tooltip content={<TooltipPlanejadoVsReal />} cursor={{ fill: '#EBF5FF' }} />
-            <Bar dataKey="planejado" name="Planejado" fill="#003DA5" radius={[4, 4, 0, 0]} maxBarSize={22} cursor="pointer" onClick={payload => handleBarClick(payload)}>
-              <LabelList dataKey="planejado" content={renderCountLabel} />
-            </Bar>
-            <Bar dataKey="real" name="Real" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={22} cursor="pointer" onClick={payload => handleBarClick(payload)}>
+            <Bar dataKey="real" name="Real" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={32} cursor="pointer" onClick={payload => handleBarClick(payload)}>
               <LabelList dataKey="real" content={renderCountLabel} />
             </Bar>
-          </BarChart>
+            <Line
+              type="monotone"
+              dataKey="planejado"
+              name="Planejado"
+              stroke="#003DA5"
+              strokeWidth={2}
+              dot={{ r: 4, fill: '#003DA5', strokeWidth: 0 }}
+              activeDot={{ r: 6 }}
+              connectNulls
+            >
+              <LabelList dataKey="planejado" content={renderLineLabelPlan} />
+            </Line>
+          </ComposedChart>
         </ResponsiveContainer>
       )}
 
