@@ -147,16 +147,29 @@ export default function Cavalos() {
   const excluir = async (item) => {
     setExcluindo(true)
     setErroExcluir('')
-    const { error } = await supabase.from('cavalos').delete().eq('id', item.id)
-    if (error) {
-      setErroExcluir(
-        error.message.includes('foreign key')
-          ? 'Cavalo vinculado a viagens — inative-o em vez de excluir.'
-          : error.message
-      )
+
+    // 1. Desvincular viagens (dados ficam, só o link some)
+    const { error: errVinculo } = await supabase
+      .from('viagens')
+      .update({ cavalo_id: null })
+      .eq('cavalo_id', item.id)
+    if (errVinculo) {
+      setErroExcluir('Erro ao desvincular viagens: ' + errVinculo.message)
       setExcluindo(false)
       return
     }
+
+    // 2. Remover manutenções do cavalo
+    await supabase.from('manutencoes_cavalos').delete().eq('cavalo_id', item.id)
+
+    // 3. Excluir o cadastro
+    const { error } = await supabase.from('cavalos').delete().eq('id', item.id)
+    if (error) {
+      setErroExcluir(error.message)
+      setExcluindo(false)
+      return
+    }
+
     setConfirmar(null)
     setErroExcluir('')
     setExcluindo(false)

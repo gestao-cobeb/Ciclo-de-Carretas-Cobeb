@@ -153,16 +153,29 @@ export default function Carretas() {
   const excluir = async (item) => {
     setExcluindo(true)
     setErroExcluir('')
-    const { error } = await supabase.from('carretas').delete().eq('id', item.id)
-    if (error) {
-      setErroExcluir(
-        error.message.includes('foreign key')
-          ? 'Carreta vinculada a viagens — inative-a em vez de excluir.'
-          : error.message
-      )
+
+    // 1. Desvincular viagens (dados ficam, só o link some)
+    const { error: errVinculo } = await supabase
+      .from('viagens')
+      .update({ carreta_id: null })
+      .eq('carreta_id', item.id)
+    if (errVinculo) {
+      setErroExcluir('Erro ao desvincular viagens: ' + errVinculo.message)
       setExcluindo(false)
       return
     }
+
+    // 2. Remover manutenções da carreta
+    await supabase.from('manutencoes_carretas').delete().eq('carreta_id', item.id)
+
+    // 3. Excluir o cadastro
+    const { error } = await supabase.from('carretas').delete().eq('id', item.id)
+    if (error) {
+      setErroExcluir(error.message)
+      setExcluindo(false)
+      return
+    }
+
     setConfirmar(null)
     setErroExcluir('')
     setExcluindo(false)
