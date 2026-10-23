@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Truck, Users, ClipboardList, Tractor, Shield, DoorOpen, Forklift, Building2, LayoutGrid, Clock } from 'lucide-react'
+import { Truck, Users, ClipboardList, Tractor, Shield, DoorOpen, Forklift, Building2, LayoutGrid, Clock, Target } from 'lucide-react'
 import AdminLayout from '../components/AdminLayout'
 import ErrorBoundary from '../components/ErrorBoundary'
 import { useAuth } from '../contexts/AuthContext'
@@ -13,6 +13,7 @@ import Turnos from './cadastros/Turnos'
 import Admins from './cadastros/Admins'
 import Unidades from './cadastros/Unidades'
 import Grade from './cadastros/Grade'
+import Metas from './cadastros/Metas'
 
 const TABS_BASE = [
   { id: 'motoristas',    label: 'Motoristas',    icon: Users,        adminTotal: false },
@@ -25,6 +26,7 @@ const TABS_BASE = [
   { id: 'admins',        label: 'Usuários',      icon: Shield,       adminTotal: true  },
   { id: 'unidades',      label: 'Unidades',      icon: Building2,    adminTotal: true  },
   { id: 'grade',         label: 'Grade',         icon: LayoutGrid,   adminTotal: false, gradeOnly: true },
+  { id: 'metas',         label: 'Metas',         icon: Target,       adminTotal: false },
 ]
 
 export default function Cadastros() {
@@ -74,6 +76,7 @@ export default function Cadastros() {
         {abaAtiva === 'admins'        && <Admins />}
         {abaAtiva === 'unidades'      && <Unidades />}
         {abaAtiva === 'grade'         && <Grade />}
+        {abaAtiva === 'metas'         && <Metas />}
       </ErrorBoundary>
     </AdminLayout>
   )

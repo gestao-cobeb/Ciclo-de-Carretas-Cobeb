@@ -589,28 +589,12 @@ function TooltipPlanejadoVsReal({ active, payload, label }) {
 }
 
 function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros, filtroUnidade, optUnidades }) {
-  const [planejadoMap, setPlanejadoMap] = useLocalStorage('cobeb_dashboard_planejado_v2', {})
-  const [configurando, setConfigurando] = useState(false)
-  const [draftMap, setDraftMap]         = useState({})
-  const [detalhe, setDetalhe]           = useState(null)
+  const [planejadoMap] = useLocalStorage('cobeb_dashboard_planejado_v2', {})
+  const [detalhe, setDetalhe] = useState(null)
 
   const totalPlanejado    = optUnidades.reduce((s, u) => s + (planejadoMap[u.id] || 0), 0)
   const planejadoEfetivo  = filtroUnidade ? (planejadoMap[filtroUnidade] || 0) : totalPlanejado
   const unidadeNome       = filtroUnidade ? (optUnidades.find(u => u.id === filtroUnidade)?.nome ?? '') : null
-
-  function abrirConfigurar() {
-    const draft = {}
-    optUnidades.forEach(u => { draft[u.id] = planejadoMap[u.id] ?? '' })
-    setDraftMap(draft)
-    setConfigurando(true)
-  }
-
-  function salvar() {
-    const clean = {}
-    optUnidades.forEach(u => { clean[u.id] = Math.max(0, parseInt(draftMap[u.id], 10) || 0) })
-    setPlanejadoMap(clean)
-    setConfigurando(false)
-  }
 
   async function handleBarClick(payload) {
     if (!payload?.day) return
@@ -670,7 +654,6 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
 
   const semDados        = !data?.length
   const tickInterval    = Math.max(0, Math.ceil((data?.length || 0) / 12) - 1)
-  const draftTotal      = optUnidades.reduce((s, u) => s + (parseInt(draftMap[u.id]) || 0), 0)
   const resumoPlanejado = data.reduce((s, d) => s + (d.planejado ?? 0), 0)
   const resumoReal      = data.reduce((s, d) => s + (d.real ?? 0), 0)
 
@@ -692,12 +675,9 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
             </div>
           )}
         </div>
-        <button
-          onClick={abrirConfigurar}
-          className="shrink-0 text-xs font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border rounded-lg px-2.5 py-1 hover:border-cobeb-blue transition-colors"
-        >
-          {unidadeNome ? `${unidadeNome}: ${planejadoEfetivo}/dia ✎` : `Total: ${totalPlanejado}/dia ✎`}
-        </button>
+        <span className="shrink-0 text-xs font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border rounded-lg px-2.5 py-1">
+          {unidadeNome ? `${unidadeNome}: ${planejadoEfetivo}/dia` : `Total: ${totalPlanejado}/dia`}
+        </span>
       </div>
       <FiltrosTags filtros={filtros} />
 
@@ -801,53 +781,6 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
         </div>
       )}
 
-      {/* Bottom sheet — configurar meta por unidade */}
-      {configurando && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-end"
-          onClick={() => setConfigurando(false)}>
-          <div className="w-full max-w-lg mx-auto bg-white rounded-t-2xl p-5 space-y-4"
-            onClick={e => e.stopPropagation()}>
-            <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto" />
-
-            <div className="flex items-center justify-between">
-              <p className="text-cobeb-text font-bold text-base">Meta de viagens por unidade</p>
-              <span className="text-xs text-slate-400">veíc./dia</span>
-            </div>
-
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {optUnidades.map(u => (
-                <div key={u.id} className="flex items-center gap-3">
-                  <span className="text-sm text-cobeb-text flex-1 truncate">{u.nome}</span>
-                  <input
-                    type="number" min="0"
-                    value={draftMap[u.id] ?? ''}
-                    onChange={e => setDraftMap(m => ({
-                      ...m, [u.id]: e.target.value === '' ? '' : Math.max(0, parseInt(e.target.value, 10) || 0),
-                    }))}
-                    className="w-16 text-xs border border-cobeb-border rounded-lg px-2 py-1.5 text-center focus:outline-none focus:border-cobeb-blue [appearance:textfield]"
-                  />
-                </div>
-              ))}
-            </div>
-
-            <div className="flex items-center justify-between py-2 border-t border-cobeb-border">
-              <span className="text-sm font-semibold text-cobeb-text">Total</span>
-              <span className="text-sm font-bold text-cobeb-navy">{draftTotal} veíc./dia</span>
-            </div>
-
-            <div className="flex gap-2">
-              <button onClick={() => setConfigurando(false)}
-                className="flex-1 bg-[#EBF5FF] border border-cobeb-border text-slate-500 font-semibold py-3 rounded-xl text-sm">
-                Cancelar
-              </button>
-              <button onClick={salvar}
-                className="flex-1 bg-cobeb-navy text-white font-semibold py-3 rounded-xl text-sm">
-                Salvar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
