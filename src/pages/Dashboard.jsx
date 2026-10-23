@@ -931,7 +931,7 @@ const LABEL_AGRUP = { dia: 'por Dia', semana: 'por Semana', mes: 'por Mês', ano
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
-export default function Dashboard() {
+export default function Dashboard({ mode = 'armazem' }) {
   // dados
   const [viagens,             setViagens]             = useState([])
   const [portariaMap,         setPortariaMap]         = useState({})
@@ -1376,41 +1376,49 @@ export default function Dashboard() {
           </div>
         ) : (
           <div className="space-y-5">
-            <GraficoMetrica
-              title={`TMV ${lbl} — Saída Revenda → Saída Portaria`}
-              data={dadosTMV}
-              color="#003DA5"
-              filtros={descFiltros}
-            />
-            <GraficoMetrica
-              title={`TMA Revenda ${lbl} — Chegada Revenda → Saída Portaria`}
-              data={dadosTMARev}
-              color="#1D6AD4"
-              filtros={descFiltros}
-            />
-            <GraficoMetrica
-              title={`TMA Fábrica ${lbl} — Chegada Fábrica → Saída Fábrica`}
-              data={dadosTMAFab}
-              color="#FFB81C"
-              filtros={descFiltros}
-            />
-            <GraficoMetrica
-              title={`Fila ${lbl} — Chegada Revenda → Entrada Portaria`}
-              data={dadosAguardo}
-              color="#EF4444"
-              filtros={descFiltros}
-            />
-            <GraficoHistograma data={dadosHistograma} filtros={descFiltros} />
-            <GraficoOciosidade data={dadosOciosidade} filtros={descFiltros} />
-            <GraficoPlanejaVsReal
-              rows={rows}
-              agrupamento={filtroAgrupamento}
-              dataInicio={dataInicio}
-              dataFim={dataFim}
-              filtros={descFiltros}
-              filtroUnidade={filtroUnidade}
-              optUnidades={optUnidades}
-            />
+            {mode === 'armazem' && (
+              <>
+                <GraficoMetrica
+                  title={`TMV ${lbl} — Saída Revenda → Saída Portaria`}
+                  data={dadosTMV}
+                  color="#003DA5"
+                  filtros={descFiltros}
+                />
+                <GraficoMetrica
+                  title={`TMA Revenda ${lbl} — Chegada Revenda → Saída Portaria`}
+                  data={dadosTMARev}
+                  color="#1D6AD4"
+                  filtros={descFiltros}
+                />
+                <GraficoMetrica
+                  title={`TMA Fábrica ${lbl} — Chegada Fábrica → Saída Fábrica`}
+                  data={dadosTMAFab}
+                  color="#FFB81C"
+                  filtros={descFiltros}
+                />
+                <GraficoMetrica
+                  title={`Fila ${lbl} — Chegada Revenda → Entrada Portaria`}
+                  data={dadosAguardo}
+                  color="#EF4444"
+                  filtros={descFiltros}
+                />
+                <GraficoHistograma data={dadosHistograma} filtros={descFiltros} />
+              </>
+            )}
+            {mode === 'puxada' && (
+              <>
+                <GraficoOciosidade data={dadosOciosidade} filtros={descFiltros} />
+                <GraficoPlanejaVsReal
+                  rows={rows}
+                  agrupamento={filtroAgrupamento}
+                  dataInicio={dataInicio}
+                  dataFim={dataFim}
+                  filtros={descFiltros}
+                  filtroUnidade={filtroUnidade}
+                  optUnidades={optUnidades}
+                />
+              </>
+            )}
           </div>
         )}
 

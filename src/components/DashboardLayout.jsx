@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import {
-  LayoutDashboard, LogOut, Package, AlertTriangle, History,
+  LogOut, Package, AlertTriangle, History,
   ClipboardCheck, DoorOpen, LayoutGrid, Monitor, Table2,
   ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen,
+  Warehouse, Truck,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -11,23 +12,31 @@ export default function DashboardLayout({ children }) {
   const { profile, signOut, setModoVisao } = useAuth()
   const navigate  = useNavigate()
   const location  = useLocation()
-  const [collapsed, setCollapsed] = useState(true)   // começa recolhido (só ícones)
-  const [hidden,    setHidden]    = useState(false)  // oculta o sidebar inteiro
+  const [collapsed, setCollapsed] = useState(true)
+  const [hidden,    setHidden]    = useState(false)
 
   const isAdminTotal = profile?.acesso_total === true
 
+  const dashboardItems = [
+    { path: '/dashboard',        icon: Warehouse, label: 'Armazém' },
+    { path: '/dashboard-puxada', icon: Truck,     label: 'Puxada'  },
+  ]
+
   const navItems = [
-    { path: '/dashboard',         icon: LayoutDashboard, label: 'Dashboard'  },
-    { path: '/pedidos',           icon: Package,         label: 'Pedidos'    },
-    { path: '/check-recebimento', icon: ClipboardCheck,  label: 'Check'      },
-    { path: '/portaria-admin',    icon: DoorOpen,        label: 'Portaria'   },
-    { path: '/anomalias',         icon: AlertTriangle,   label: 'Anomalias'  },
-    { path: '/historico',         icon: History,         label: 'Histórico'  },
+    { path: '/pedidos',           icon: Package,        label: 'Pedidos'   },
+    { path: '/check-recebimento', icon: ClipboardCheck, label: 'Check'     },
+    { path: '/portaria-admin',    icon: DoorOpen,       label: 'Portaria'  },
+    { path: '/anomalias',         icon: AlertTriangle,  label: 'Anomalias' },
+    { path: '/historico',         icon: History,        label: 'Histórico' },
     ...(!isAdminTotal ? [
       { path: '/painel-realtime', icon: Monitor, label: 'Tempo Real' },
       { path: '/dados',           icon: Table2,  label: 'Dados'      },
     ] : []),
   ]
+
+  const pageTitle = location.pathname === '/dashboard-puxada'
+    ? 'Dashboard Puxada'
+    : 'Dashboard Armazém'
 
   const handleLogout = async () => {
     await signOut()
@@ -54,7 +63,7 @@ export default function DashboardLayout({ children }) {
             <span className="text-white text-xs font-black select-none">CB</span>
           </div>
           <div className="min-w-0">
-            <p className="text-white text-xs sm:text-sm font-semibold leading-tight truncate">Dashboard</p>
+            <p className="text-white text-xs sm:text-sm font-semibold leading-tight truncate">{pageTitle}</p>
             <p className="text-blue-300/60 text-[9px] sm:text-[10px] font-medium tracking-wide uppercase hidden sm:block">
               Ciclo de Carretas
             </p>
@@ -88,6 +97,36 @@ export default function DashboardLayout({ children }) {
 
             {/* Itens de navegação */}
             <nav className="flex-1 py-3 flex flex-col gap-0.5 px-2 overflow-y-auto">
+
+              {/* Grupo Dashboard */}
+              {!collapsed && (
+                <p className="text-[9px] font-bold text-blue-300/30 uppercase tracking-widest px-2 pt-1 pb-0.5">
+                  Dashboard
+                </p>
+              )}
+              {dashboardItems.map(({ path, icon: Icon, label }) => {
+                const active = location.pathname === path
+                return (
+                  <button
+                    key={path}
+                    onClick={() => navigate(path)}
+                    title={label}
+                    className={`w-full flex items-center gap-3 ${!collapsed ? 'pl-4 pr-2' : 'px-2'} py-2.5 rounded-xl transition-colors ${
+                      active
+                        ? 'bg-white/10 text-cobeb-yellow'
+                        : 'text-blue-300/60 hover:text-blue-200 hover:bg-white/10'
+                    }`}
+                  >
+                    <Icon size={20} className="shrink-0" />
+                    {!collapsed && (
+                      <span className="text-xs font-semibold truncate">{label}</span>
+                    )}
+                  </button>
+                )
+              })}
+
+              <div className="border-t border-blue-800/40 my-1 mx-1" />
+
               {navItems.map(({ path, icon: Icon, label }) => {
                 const active =
                   location.pathname === path ||

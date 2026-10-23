@@ -79,6 +79,9 @@ function AppRoutes() {
       <Route path="/dashboard"
         element={<ProtectedRoute allowedRoles={['admin']}><Dashboard /></ProtectedRoute>}
       />
+      <Route path="/dashboard-puxada"
+        element={<ProtectedRoute allowedRoles={['admin']}><Dashboard mode="puxada" /></ProtectedRoute>}
+      />
       <Route path="/pedidos"
         element={<ProtectedRoute allowedRoles={['admin']}><Pedidos /></ProtectedRoute>}
       />
