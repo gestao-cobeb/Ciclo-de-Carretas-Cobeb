@@ -50,7 +50,7 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
       .map(([iso, real]) => {
         const [y, mm, dd] = iso.split('-').map(Number)
         const isDom = new Date(y, mm - 1, dd).getDay() === 0
-        return { day: `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}`, real, planejado: isDom ? null : n }
+        return { day: `${String(dd).padStart(2,'0')}/${String(mm).padStart(2,'0')}`, real, planejado: isDom ? 0 : n }
       })
   }
 
@@ -66,7 +66,7 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim) {
     return LABEL_SEMANA.map((label, i) => ({
       day: label,
       real: occ[i] ? Math.round(totals[i] / occ[i]) : 0,
-      planejado: i === 6 ? null : n,
+      planejado: i === 6 ? 0 : n,
     }))
   }
 
@@ -801,7 +801,6 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
               strokeWidth={2}
               dot={{ r: 4, fill: '#003DA5', strokeWidth: 0 }}
               activeDot={{ r: 6 }}
-              connectNulls
             >
               <LabelList dataKey="planejado" content={renderLineLabelPlan} />
             </Line>
