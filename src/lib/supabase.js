@@ -15,4 +15,11 @@ import { config } from './config'
  */
 const { supabaseUrl, supabaseAnonKey } = config()
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    // Para apps Capacitor: evita que o cliente tente ler tokens da URL (fluxo OAuth web)
+    detectSessionInUrl: false,
+  },
+})

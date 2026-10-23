@@ -10,14 +10,14 @@ export function AuthProvider({ children }) {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [modoVisao, setModoVisaoState] = useState(
-    () => sessionStorage.getItem(MODO_KEY) || null
+    () => localStorage.getItem(MODO_KEY) || null
   )
 
   function setModoVisao(modo) {
     if (modo) {
-      sessionStorage.setItem(MODO_KEY, modo)
+      localStorage.setItem(MODO_KEY, modo)
     } else {
-      sessionStorage.removeItem(MODO_KEY)
+      localStorage.removeItem(MODO_KEY)
     }
     setModoVisaoState(modo)
   }
@@ -60,7 +60,19 @@ export function AuthProvider({ children }) {
       }
     })
 
-    return () => subscription.unsubscribe()
+    // Capacitor: quando o app volta ao foreground (resume), reativa o auto-refresh do token.
+    // Quando vai para background (pause), para os timers — o Android os throttla de qualquer forma.
+    // Sem isso, após longa inatividade o timer de refresh expira e o Supabase desconecta o usuário.
+    const handleResume = () => supabase.auth.startAutoRefresh()
+    const handlePause  = () => supabase.auth.stopAutoRefresh()
+    document.addEventListener('resume', handleResume)
+    document.addEventListener('pause',  handlePause)
+
+    return () => {
+      subscription.unsubscribe()
+      document.removeEventListener('resume', handleResume)
+      document.removeEventListener('pause',  handlePause)
+    }
   }, [])
 
   const signIn = (email, password) =>
