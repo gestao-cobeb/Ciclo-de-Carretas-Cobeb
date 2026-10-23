@@ -616,7 +616,7 @@ function TooltipPlanejadoVsReal({ active, payload, label }) {
   )
 }
 
-const CORES_STATUS = { Ativo: '#10B981', Manutenção: '#F59E0B', Inativo: '#94A3B8' }
+const CORES_STATUS = { Ativo: '#10B981', Manutenção: '#F59E0B', Inativo: '#94A3B8', 'Não vinculado': '#CBD5E1' }
 
 function TooltipCavalosStatus({ active, payload }) {
   if (!active || !payload?.length) return null
@@ -650,15 +650,17 @@ function GraficoCavalosStatus({ todoCavalos, viagens, filtroUnidade, filtroFrota
     return lista
   }, [todoCavalos, viagens, filtroUnidade, filtroFrota, filtroCavalo])
 
-  const ativo      = cavalos.filter(c =>  c.ativo && !c.em_manutencao).length
-  const manutencao = cavalos.filter(c =>  c.em_manutencao).length
-  const inativo    = cavalos.filter(c => !c.ativo && !c.em_manutencao).length
-  const total      = ativo + manutencao + inativo
+  const desligado  = cavalos.filter(c =>  c.desligado).length
+  const ativo      = cavalos.filter(c =>  c.ativo && !c.em_manutencao && !c.desligado).length
+  const manutencao = cavalos.filter(c =>  c.em_manutencao && !c.desligado).length
+  const inativo    = cavalos.filter(c => !c.ativo && !c.em_manutencao && !c.desligado).length
+  const total      = ativo + manutencao + inativo + desligado
 
   const slices = [
-    { name: 'Ativo',      value: ativo,      total },
-    { name: 'Manutenção', value: manutencao, total },
-    { name: 'Inativo',    value: inativo,    total },
+    { name: 'Ativo',          value: ativo,      total },
+    { name: 'Manutenção',     value: manutencao, total },
+    { name: 'Inativo',        value: inativo,    total },
+    { name: 'Não vinculado',  value: desligado,  total },
   ].filter(d => d.value > 0)
 
   return (
@@ -702,9 +704,10 @@ function GraficoCavalosStatus({ todoCavalos, viagens, filtroUnidade, filtroFrota
           {/* Legenda com contagem e % */}
           <div className="flex flex-col gap-3 flex-1 w-full">
             {[
-              { name: 'Ativo',      value: ativo      },
-              { name: 'Manutenção', value: manutencao },
-              { name: 'Inativo',    value: inativo    },
+              { name: 'Ativo',         value: ativo      },
+              { name: 'Manutenção',    value: manutencao },
+              { name: 'Inativo',       value: inativo    },
+              { name: 'Não vinculado', value: desligado  },
             ].map(s => (
               <div key={s.name} className="flex items-center gap-3">
                 <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: CORES_STATUS[s.name] }} />
@@ -1152,7 +1155,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         supabase.from('unidades').select('id, nome, codigo_ambev').eq('tipo', 'fabrica').eq('ativo', true).order('nome'),
         supabase.from('cavalos').select('id, placa, tipo').eq('ativo', true).order('placa'),
         supabase.from('turnos').select('unidade_id, nome, hora_inicio, hora_fim').eq('ativo', true),
-        supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao').order('placa'),
+        supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
       ])
       if (u) setOptUnidades(u)
       if (f) setOptFabricas(f)
