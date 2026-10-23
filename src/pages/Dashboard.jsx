@@ -616,9 +616,9 @@ function TooltipPlanejadoVsReal({ active, payload, label }) {
   )
 }
 
-const CORES_STATUS = { Ativo: '#10B981', Manutenção: '#F59E0B', Inativo: '#94A3B8', 'Não vinculado': '#CBD5E1' }
+const CORES_STATUS = { Ativo: '#10B981', Manutenção: '#F59E0B', Inativo: '#94A3B8' }
 
-function TooltipCavalosStatus({ active, payload }) {
+function TooltipStatus({ active, payload, unit = 'veículo' }) {
   if (!active || !payload?.length) return null
   const { name, value, payload: d } = payload[0]
   const total = d.total
@@ -628,97 +628,136 @@ function TooltipCavalosStatus({ active, payload }) {
       borderRadius: 12, padding: '10px 14px', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,.08)',
     }}>
       <p style={{ fontWeight: 700, color: CORES_STATUS[name] ?? '#1E3A6E', marginBottom: 2 }}>{name}</p>
-      <p style={{ color: '#1E3A6E' }}>{value} cavalo{value !== 1 ? 's' : ''}</p>
+      <p style={{ color: '#1E3A6E' }}>{value} {unit}{value !== 1 ? 's' : ''}</p>
       <p style={{ color: '#94A3B8', marginTop: 2 }}>{total ? Math.round(value / total * 100) : 0}%</p>
     </div>
   )
 }
 
-function GraficoCavalosStatus({ todoCavalos, viagens, filtroUnidade, filtroFrota, filtroCavalo }) {
+function renderPctLabel({ cx, cy, midAngle, outerRadius, percent }) {
+  if (percent < 0.06) return null
+  const RADIAN = Math.PI / 180
+  const r = outerRadius + 13
+  const x = cx + r * Math.cos(-midAngle * RADIAN)
+  const y = cy + r * Math.sin(-midAngle * RADIAN)
+  return (
+    <text x={x} y={y} fill="#64748B" textAnchor="middle" dominantBaseline="central"
+      fontSize={10} fontWeight={600}>
+      {Math.round(percent * 100)}%
+    </text>
+  )
+}
+
+function DonutStatus({ slices, total, label, unit }) {
+  return (
+    <div className="flex flex-col items-center">
+      <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1">{label}</p>
+      {total === 0 ? (
+        <div className="h-36 flex items-center justify-center text-slate-300 text-xs">Sem dados</div>
+      ) : (
+        <div className="relative">
+          <ResponsiveContainer width={150} height={150}>
+            <PieChart margin={{ top: 16, right: 16, bottom: 16, left: 16 }}>
+              <Pie data={slices} cx="50%" cy="50%"
+                innerRadius={38} outerRadius={56}
+                paddingAngle={3} dataKey="value" strokeWidth={0}
+                label={renderPctLabel} labelLine={false}>
+                {slices.map((s, i) => (
+                  <Cell key={i} fill={CORES_STATUS[s.name] ?? '#94A3B8'} />
+                ))}
+              </Pie>
+              <Tooltip content={<TooltipStatus unit={unit} />} />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+            <span className="text-xl font-bold text-cobeb-navy leading-none">{total}</span>
+            <span className="text-[9px] text-slate-400 mt-0.5">{label.toLowerCase()}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function GraficoStatusFrota({ todoCavalos, todaCarretas, viagens, filtroUnidade, filtroFrota, filtroCavalo }) {
   const cavalos = useMemo(() => {
-    let lista = todoCavalos
+    let lista = todoCavalos.filter(c => !c.desligado)
     if (filtroFrota)  lista = lista.filter(c => c.tipo === filtroFrota)
     if (filtroCavalo) lista = lista.filter(c => c.id  === filtroCavalo)
     if (filtroUnidade) {
-      const ids = new Set(
-        viagens
-          .filter(v => v.unidade?.id === filtroUnidade && v.cavalo?.id)
-          .map(v => v.cavalo.id)
-      )
+      const ids = new Set(viagens.filter(v => v.unidade?.id === filtroUnidade && v.cavalo?.id).map(v => v.cavalo.id))
       lista = lista.filter(c => ids.has(c.id))
     }
     return lista
   }, [todoCavalos, viagens, filtroUnidade, filtroFrota, filtroCavalo])
 
-  const ativo      = cavalos.filter(c =>  c.ativo && !c.em_manutencao && !c.desligado).length
-  const manutencao = cavalos.filter(c =>  c.em_manutencao && !c.desligado).length
-  const inativo    = cavalos.filter(c => !c.ativo && !c.em_manutencao && !c.desligado).length
-  const total      = ativo + manutencao + inativo
+  const carretas = useMemo(() => {
+    let lista = todaCarretas.filter(c => !c.desligado)
+    if (filtroFrota)   lista = lista.filter(c => c.tipo === filtroFrota)
+    if (filtroUnidade) {
+      const ids = new Set(viagens.filter(v => v.unidade?.id === filtroUnidade && v.carreta?.id).map(v => v.carreta.id))
+      lista = lista.filter(c => ids.has(c.id))
+    }
+    return lista
+  }, [todaCarretas, viagens, filtroUnidade, filtroFrota])
 
-  const slices = [
-    { name: 'Ativo',      value: ativo,      total },
-    { name: 'Manutenção', value: manutencao, total },
-    { name: 'Inativo',    value: inativo,    total },
+  const cav = {
+    ativo:      cavalos.filter(c =>  c.ativo && !c.em_manutencao).length,
+    manutencao: cavalos.filter(c =>  c.em_manutencao).length,
+    inativo:    cavalos.filter(c => !c.ativo && !c.em_manutencao).length,
+  }
+  const car = {
+    ativo:      carretas.filter(c =>  c.ativo && !c.em_manutencao).length,
+    manutencao: carretas.filter(c =>  c.em_manutencao).length,
+    inativo:    carretas.filter(c => !c.ativo && !c.em_manutencao).length,
+  }
+  const totalCav = cav.ativo + cav.manutencao + cav.inativo
+  const totalCar = car.ativo + car.manutencao + car.inativo
+
+  const mkSlices = (counts, total) => [
+    { name: 'Ativo',      value: counts.ativo,      total },
+    { name: 'Manutenção', value: counts.manutencao, total },
+    { name: 'Inativo',    value: counts.inativo,    total },
   ].filter(d => d.value > 0)
+
+  const ROWS = [
+    { name: 'Ativo',      cav: cav.ativo,      car: car.ativo      },
+    { name: 'Manutenção', cav: cav.manutencao, car: car.manutencao },
+    { name: 'Inativo',    cav: cav.inativo,    car: car.inativo    },
+  ]
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
-      <h2 className="text-cobeb-text font-semibold text-sm mb-4">Status da Frota — Cavalos</h2>
+      <h2 className="text-cobeb-text font-semibold text-sm mb-3">Status da Frota</h2>
 
-      {total === 0 ? (
-        <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
-          Sem cavalos para o filtro aplicado
+      <div className="grid grid-cols-2">
+        <DonutStatus slices={mkSlices(cav, totalCav)} total={totalCav} label="Cavalos" unit="cavalo" />
+        <DonutStatus slices={mkSlices(car, totalCar)} total={totalCar} label="Carretas" unit="carreta" />
+      </div>
+
+      {/* Legenda consolidada */}
+      <div className="mt-3 pt-3 border-t border-cobeb-border space-y-2">
+        <div className="grid grid-cols-[1fr_auto_auto] gap-x-5 text-[10px] text-slate-400 font-semibold uppercase mb-1">
+          <span />
+          <span>Cav.</span>
+          <span>Car.</span>
         </div>
-      ) : (
-        <div className="flex flex-col sm:flex-row items-center gap-6 py-2">
-
-          {/* Donut + total no centro */}
-          <div className="relative shrink-0">
-            <ResponsiveContainer width={180} height={180}>
-              <PieChart>
-                <Pie
-                  data={slices}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={54}
-                  outerRadius={80}
-                  paddingAngle={3}
-                  dataKey="value"
-                  strokeWidth={0}
-                >
-                  {slices.map((s, i) => (
-                    <Cell key={i} fill={CORES_STATUS[s.name] ?? '#94A3B8'} />
-                  ))}
-                </Pie>
-                <Tooltip content={<TooltipCavalosStatus />} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-2xl font-bold text-cobeb-navy leading-none">{total}</span>
-              <span className="text-[10px] text-slate-400 mt-0.5">cavalos</span>
+        {ROWS.map(r => (
+          <div key={r.name} className="grid grid-cols-[1fr_auto_auto] gap-x-5 items-center">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: CORES_STATUS[r.name] }} />
+              <span className="text-xs text-cobeb-text">{r.name}</span>
             </div>
+            <span className="text-xs font-bold text-cobeb-navy text-right">{r.cav}</span>
+            <span className="text-xs font-bold text-cobeb-navy text-right">{r.car}</span>
           </div>
-
-          {/* Legenda com contagem e % */}
-          <div className="flex flex-col gap-3 flex-1 w-full">
-            {[
-              { name: 'Ativo',      value: ativo      },
-              { name: 'Manutenção', value: manutencao },
-              { name: 'Inativo',    value: inativo    },
-            ].map(s => (
-              <div key={s.name} className="flex items-center gap-3">
-                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: CORES_STATUS[s.name] }} />
-                <span className="text-sm text-cobeb-text flex-1">{s.name}</span>
-                <span className="text-sm font-bold text-cobeb-navy">{s.value}</span>
-                <span className="text-xs text-slate-400 w-10 text-right">
-                  {total ? Math.round(s.value / total * 100) : 0}%
-                </span>
-              </div>
-            ))}
-          </div>
-
+        ))}
+        <div className="grid grid-cols-[1fr_auto_auto] gap-x-5 items-center pt-1.5 border-t border-cobeb-border">
+          <span className="text-xs font-semibold text-slate-500">Total</span>
+          <span className="text-xs font-bold text-cobeb-navy text-right">{totalCav}</span>
+          <span className="text-xs font-bold text-cobeb-navy text-right">{totalCar}</span>
         </div>
-      )}
+      </div>
     </div>
   )
 }
@@ -1133,6 +1172,7 @@ export default function Dashboard({ mode = 'armazem' }) {
   const [optCavalos,   setOptCavalos]   = useState([])
   const [turnosMap,    setTurnosMap]    = useState({})
   const [todoCavalos,  setTodoCavalos]  = useState([])
+  const [todaCarretas, setTodaCarretas] = useState([])
 
   // valores dos filtros
   const [dataInicio,       setDataInicio]       = useState(DEFAULT_INICIO)
@@ -1147,17 +1187,19 @@ export default function Dashboard({ mode = 'armazem' }) {
   // opções dos selects — carregadas uma vez
   useEffect(() => {
     async function loadOpts() {
-      const [{ data: u }, { data: f }, { data: c }, { data: turnData }, { data: todoCav }] = await Promise.all([
+      const [{ data: u }, { data: f }, { data: c }, { data: turnData }, { data: todoCav }, { data: todoCar }] = await Promise.all([
         supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
         supabase.from('unidades').select('id, nome, codigo_ambev').eq('tipo', 'fabrica').eq('ativo', true).order('nome'),
         supabase.from('cavalos').select('id, placa, tipo').eq('ativo', true).order('placa'),
         supabase.from('turnos').select('unidade_id, nome, hora_inicio, hora_fim').eq('ativo', true),
         supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
+        supabase.from('carretas').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
       ])
       if (u) setOptUnidades(u)
       if (f) setOptFabricas(f)
       if (c) setOptCavalos(c)
       if (todoCav) setTodoCavalos(todoCav)
+      if (todoCar) setTodaCarretas(todoCar)
       if (turnData) {
         const tMap = {}
         turnData.forEach(t => {
@@ -1636,8 +1678,9 @@ export default function Dashboard({ mode = 'armazem' }) {
                   planejadoMap={planejadoMap}
                   pedPorDia={pedPorDia}
                 />
-                <GraficoCavalosStatus
+                <GraficoStatusFrota
                   todoCavalos={todoCavalos}
+                  todaCarretas={todaCarretas}
                   viagens={viagens}
                   filtroUnidade={filtroUnidade}
                   filtroFrota={filtroFrota}
