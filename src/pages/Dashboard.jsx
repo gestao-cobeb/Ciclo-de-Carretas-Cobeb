@@ -10,14 +10,6 @@ import { supabase } from '../lib/supabase'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function useLocalStorage(key, initial) {
-  const [val, setVal] = useState(() => {
-    try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : initial } catch { return initial }
-  })
-  function save(v) { setVal(v); try { localStorage.setItem(key, JSON.stringify(v)) } catch {} }
-  return [val, save]
-}
-
 function countWeekdayOccurrences(start, end) {
   const counts = Array(7).fill(0)
   if (!start || !end) return counts.fill(1)
@@ -588,8 +580,7 @@ function TooltipPlanejadoVsReal({ active, payload, label }) {
   )
 }
 
-function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros, filtroUnidade, optUnidades }) {
-  const [planejadoMap] = useLocalStorage('cobeb_dashboard_planejado_v2', {})
+function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros, filtroUnidade, optUnidades, planejadoMap }) {
   const [detalhe, setDetalhe] = useState(null)
 
   const totalPlanejado    = optUnidades.reduce((s, u) => s + (planejadoMap[u.id] || 0), 0)
@@ -873,6 +864,7 @@ export default function Dashboard({ mode = 'armazem' }) {
   const [loading,             setLoading]             = useState(true)
   const [mktpViagens,         setMktpViagens]         = useState([])
   const [filtroEntradaManual, setFiltroEntradaManual] = useState(false)
+  const [planejadoMap,        setPlanejadoMap]        = useState({})
 
   // opções dos filtros
   const [optUnidades, setOptUnidades] = useState([])
@@ -941,6 +933,16 @@ export default function Dashboard({ mode = 'armazem' }) {
       setDataFim(lastSunday.toISOString().slice(0, 10))
     }
   }, [filtroAgrupamento])
+
+  // metas do dashboard — carregadas uma vez do Supabase
+  useEffect(() => {
+    supabase
+      .from('dashboard_configs')
+      .select('valor')
+      .eq('chave', 'planejado_viagens')
+      .maybeSingle()
+      .then(({ data }) => { if (data?.valor) setPlanejadoMap(data.valor) })
+  }, [])
 
   // dados — recarregam quando o período muda
   useEffect(() => { carregar() }, [dataInicio, dataFim])
@@ -1349,6 +1351,7 @@ export default function Dashboard({ mode = 'armazem' }) {
                   filtros={descFiltros}
                   filtroUnidade={filtroUnidade}
                   optUnidades={optUnidades}
+                  planejadoMap={planejadoMap}
                 />
               </>
             )}

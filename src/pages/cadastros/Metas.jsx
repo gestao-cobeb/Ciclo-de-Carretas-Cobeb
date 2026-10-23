@@ -2,48 +2,51 @@ import { useState, useEffect } from 'react'
 import { Target } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
-const PLANEJADO_KEY = 'cobeb_dashboard_planejado_v2'
-
-function useLocalStorage(key, initial) {
-  const [val, setVal] = useState(() => {
-    try { const s = localStorage.getItem(key); return s !== null ? JSON.parse(s) : initial } catch { return initial }
-  })
-  function save(v) { setVal(v); try { localStorage.setItem(key, JSON.stringify(v)) } catch {} }
-  return [val, save]
-}
+const CHAVE_VIAGENS = 'planejado_viagens'
 
 function MetaViagens() {
   const [unidades, setUnidades] = useState([])
-  const [loading, setLoading] = useState(true)
-  const [planejadoMap, setPlanejadoMap] = useLocalStorage(PLANEJADO_KEY, {})
-  const [draft, setDraft] = useState({})
-  const [salvo, setSalvo] = useState(false)
+  const [loading,  setLoading]  = useState(true)
+  const [draft,    setDraft]    = useState({})
+  const [salvando, setSalvando] = useState(false)
+  const [salvo,    setSalvo]    = useState(false)
+  const [erro,     setErro]     = useState('')
 
   useEffect(() => {
     async function load() {
-      const { data } = await supabase
-        .from('unidades')
-        .select('id, nome')
-        .eq('tipo', 'revenda')
-        .eq('ativo', true)
-        .order('nome')
-      if (data) setUnidades(data)
+      const [{ data: uData }, { data: cData }] = await Promise.all([
+        supabase
+          .from('unidades')
+          .select('id, nome')
+          .eq('tipo', 'revenda')
+          .eq('ativo', true)
+          .order('nome'),
+        supabase
+          .from('dashboard_configs')
+          .select('valor')
+          .eq('chave', CHAVE_VIAGENS)
+          .maybeSingle(),
+      ])
+      const metaAtual = cData?.valor ?? {}
+      const d = {}
+      ;(uData ?? []).forEach(u => { d[u.id] = metaAtual[u.id] ?? '' })
+      setUnidades(uData ?? [])
+      setDraft(d)
       setLoading(false)
     }
     load()
   }, [])
 
-  useEffect(() => {
-    if (!unidades.length) return
-    const d = {}
-    unidades.forEach(u => { d[u.id] = planejadoMap[u.id] ?? '' })
-    setDraft(d)
-  }, [unidades])
-
-  function salvar() {
+  async function salvar() {
+    setSalvando(true)
+    setErro('')
     const clean = {}
     unidades.forEach(u => { clean[u.id] = Math.max(0, parseInt(draft[u.id], 10) || 0) })
-    setPlanejadoMap(clean)
+    const { error } = await supabase
+      .from('dashboard_configs')
+      .upsert({ chave: CHAVE_VIAGENS, valor: clean, atualizado_em: new Date().toISOString() })
+    setSalvando(false)
+    if (error) { setErro(error.message); return }
     setSalvo(true)
     setTimeout(() => setSalvo(false), 2000)
   }
@@ -86,6 +89,10 @@ function MetaViagens() {
             ))}
           </div>
 
+          {erro && (
+            <p className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm mb-3">{erro}</p>
+          )}
+
           <div className="flex items-center justify-between pt-3 border-t border-cobeb-border">
             <div className="flex items-baseline gap-2">
               <span className="text-sm font-semibold text-cobeb-text">Total</span>
@@ -93,13 +100,14 @@ function MetaViagens() {
             </div>
             <button
               onClick={salvar}
-              className={`px-5 py-2 rounded-xl text-sm font-semibold transition-colors ${
+              disabled={salvando}
+              className={`px-5 py-2 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60 ${
                 salvo
                   ? 'bg-green-500 text-white'
                   : 'bg-cobeb-navy hover:bg-cobeb-blue text-white'
               }`}
             >
-              {salvo ? 'Salvo ✓' : 'Salvar'}
+              {salvando ? 'Salvando...' : salvo ? 'Salvo ✓' : 'Salvar'}
             </button>
           </div>
         </>
