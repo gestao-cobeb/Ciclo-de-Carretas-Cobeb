@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Pencil, Power, Truck, Trash2, Wrench, Clock, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, Search, Pencil, Power, Truck, Trash2, Wrench, Clock, CheckCircle2, ChevronDown, ChevronUp, LogOut, RotateCcw } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import Modal from '../../components/Modal'
@@ -150,6 +150,16 @@ export default function Carretas() {
     setLista(prev => prev.map(r => r.id === c.id ? { ...r, ativo: novoAtivo } : r))
   }
 
+  const desligar = async (c) => {
+    await supabase.from('carretas').update({ desligado: true, ativo: false }).eq('id', c.id)
+    setLista(prev => prev.map(r => r.id === c.id ? { ...r, desligado: true, ativo: false } : r))
+  }
+
+  const reativar = async (c) => {
+    await supabase.from('carretas').update({ desligado: false }).eq('id', c.id)
+    setLista(prev => prev.map(r => r.id === c.id ? { ...r, desligado: false } : r))
+  }
+
   const excluir = async (item) => {
     setExcluindo(true)
     setErroExcluir('')
@@ -238,8 +248,10 @@ export default function Carretas() {
     if (filtroTipo && c.tipo !== filtroTipo) return false
     if (filtroMan === 'sim' && !c.em_manutencao) return false
     if (filtroMan === 'nao' &&  c.em_manutencao) return false
-    if (filtroAtivo === 'ativo'   && !c.ativo) return false
-    if (filtroAtivo === 'inativo' &&  c.ativo) return false
+    if (filtroAtivo === 'ativo'      && (!c.ativo || c.desligado)) return false
+    if (filtroAtivo === 'inativo'    && ( c.ativo || c.desligado)) return false
+    if (filtroAtivo === 'desligado'  && !c.desligado) return false
+    if (filtroAtivo === ''           &&  c.desligado) return false
     return true
   })
 
@@ -261,9 +273,12 @@ export default function Carretas() {
             {lista.length} carreta{lista.length !== 1 ? 's' : ''}
           </p>
           <p className="text-slate-500 text-xs">
-            {lista.filter(c => c.ativo && !c.em_manutencao).length} ativa{lista.filter(c => c.ativo && !c.em_manutencao).length !== 1 ? 's' : ''}
+            {lista.filter(c => c.ativo && !c.em_manutencao && !c.desligado).length} ativa{lista.filter(c => c.ativo && !c.em_manutencao && !c.desligado).length !== 1 ? 's' : ''}
             {emManutencaoCount > 0 && (
               <span className="text-amber-500 ml-1.5">· {emManutencaoCount} em manutenção</span>
+            )}
+            {lista.filter(c => c.desligado).length > 0 && (
+              <span className="text-slate-400 ml-1.5">· {lista.filter(c => c.desligado).length} não vinculada{lista.filter(c => c.desligado).length !== 1 ? 's' : ''}</span>
             )}
           </p>
         </div>
@@ -291,9 +306,10 @@ export default function Carretas() {
         <button onClick={() => setFiltroMan('sim')}     className={chipCls(filtroMan === 'sim')}>Em Manutenção</button>
         <button onClick={() => setFiltroMan('nao')}     className={chipCls(filtroMan === 'nao')}>Disponíveis</button>
         <span className="text-cobeb-border">|</span>
-        <button onClick={() => setFiltroAtivo('')}       className={chipCls(filtroAtivo === '')}>Todos</button>
-        <button onClick={() => setFiltroAtivo('ativo')}  className={chipCls(filtroAtivo === 'ativo')}>Ativo</button>
-        <button onClick={() => setFiltroAtivo('inativo')} className={chipCls(filtroAtivo === 'inativo')}>Inativo</button>
+        <button onClick={() => setFiltroAtivo('')}           className={chipCls(filtroAtivo === '')}>Em frota</button>
+        <button onClick={() => setFiltroAtivo('ativo')}      className={chipCls(filtroAtivo === 'ativo')}>Ativo</button>
+        <button onClick={() => setFiltroAtivo('inativo')}    className={chipCls(filtroAtivo === 'inativo')}>Inativo</button>
+        <button onClick={() => setFiltroAtivo('desligado')}  className={chipCls(filtroAtivo === 'desligado')}>Não vinculado</button>
       </div>
 
       {/* Lista */}
@@ -309,25 +325,34 @@ export default function Carretas() {
             const man = manutencoesAtivas.find(m => m.carreta_id === c.id)
             return (
               <div key={c.id} className={`rounded-xl p-4 border transition-colors ${
-                c.em_manutencao
-                  ? 'bg-amber-50/60 border-amber-300'
-                  : 'bg-gray-50 border-cobeb-border'
+                c.desligado
+                  ? 'bg-slate-50 border-slate-200 opacity-75'
+                  : c.em_manutencao
+                    ? 'bg-amber-50/60 border-amber-300'
+                    : 'bg-gray-50 border-cobeb-border'
               }`}>
                 {/* Linha principal */}
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-3">
                     <div className={`w-9 h-9 rounded-lg border flex items-center justify-center shrink-0 ${
+                      c.desligado ? 'bg-slate-100 border-slate-200' :
                       c.em_manutencao ? 'bg-amber-100 border-amber-200' : 'bg-white border-gray-200'
                     }`}>
-                      {c.em_manutencao
-                        ? <Wrench size={16} className="text-amber-500" />
-                        : <Truck size={16} className="text-slate-500" />}
+                      {c.desligado
+                        ? <Truck size={16} className="text-slate-300" />
+                        : c.em_manutencao
+                          ? <Wrench size={16} className="text-amber-500" />
+                          : <Truck size={16} className="text-slate-500" />}
                     </div>
                     <div>
                       <p className="text-cobeb-text font-bold text-base tracking-wider font-mono">{c.placa}</p>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <span className="text-[11px] bg-white border border-gray-200 text-slate-500 px-2 py-0.5 rounded-full font-medium">{c.tipo}</span>
-                        {c.em_manutencao ? (
+                        {c.desligado ? (
+                          <span className="text-[11px] px-2 py-0.5 rounded-full font-medium border bg-slate-100 text-slate-400 border-slate-300">
+                            Não vinculada
+                          </span>
+                        ) : c.em_manutencao ? (
                           <span className="text-[11px] px-2 py-0.5 rounded-full font-medium border bg-amber-500/10 text-amber-600 border-amber-400/30">
                             Em Manutenção
                           </span>
@@ -344,7 +369,22 @@ export default function Carretas() {
 
                   {/* Ações */}
                   <div className="flex gap-1.5 shrink-0">
-                    {c.em_manutencao ? (
+                    {c.desligado ? (
+                      <>
+                        {isAdminTotal && (
+                          <button onClick={() => reativar(c)} title="Reativar na frota"
+                            className="flex items-center gap-1 text-xs font-semibold px-3 py-1.5 rounded-lg bg-[#EBF5FF] border border-cobeb-border text-cobeb-navy hover:bg-cobeb-navy hover:text-white transition-colors">
+                            <RotateCcw size={13} /> Reativar
+                          </button>
+                        )}
+                        {podeExcluir && (
+                          <ActionBtn onClick={() => setConfirmar({ ...c, nome: c.placa })}
+                            className="hover:text-red-400 hover:border-red-500/40">
+                            <Trash2 size={14} />
+                          </ActionBtn>
+                        )}
+                      </>
+                    ) : c.em_manutencao ? (
                       /* Carreta bloqueada: só dar baixa */
                       isAdminTotal && (
                         <button onClick={() => setConfirmarBaixa(man)}
@@ -366,6 +406,12 @@ export default function Carretas() {
                           className={c.ativo ? 'hover:text-red-400 hover:border-red-500/40' : 'hover:text-green-400 hover:border-green-500/40'}>
                           <Power size={14} />
                         </ActionBtn>
+                        {isAdminTotal && (
+                          <ActionBtn onClick={() => desligar(c)} title="Não vinculada — saiu da frota"
+                            className="hover:text-slate-500 hover:border-slate-400/40">
+                            <LogOut size={14} />
+                          </ActionBtn>
+                        )}
                         {podeExcluir && (
                           <ActionBtn onClick={() => setConfirmar({ ...c, nome: c.placa })}
                             className="hover:text-red-400 hover:border-red-500/40">
