@@ -634,44 +634,43 @@ function TooltipStatus({ active, payload, unit = 'veículo' }) {
   )
 }
 
-function renderPctLabel({ cx, cy, midAngle, outerRadius, percent }) {
-  if (percent < 0.06) return null
-  const RADIAN = Math.PI / 180
-  const r = outerRadius + 13
-  const x = cx + r * Math.cos(-midAngle * RADIAN)
-  const y = cy + r * Math.sin(-midAngle * RADIAN)
+function CardStatusFrota({ title, slices, total, rows, unit, emptyMsg }) {
   return (
-    <text x={x} y={y} fill="#64748B" textAnchor="middle" dominantBaseline="central"
-      fontSize={10} fontWeight={600}>
-      {Math.round(percent * 100)}%
-    </text>
-  )
-}
-
-function DonutStatus({ slices, total, label, unit }) {
-  return (
-    <div className="flex flex-col items-center">
-      <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1">{label}</p>
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+      <h2 className="text-cobeb-text font-semibold text-sm mb-4">{title}</h2>
       {total === 0 ? (
-        <div className="h-36 flex items-center justify-center text-slate-300 text-xs">Sem dados</div>
+        <div className="flex items-center justify-center h-52 text-slate-400 text-sm">{emptyMsg}</div>
       ) : (
-        <div className="relative">
-          <ResponsiveContainer width={150} height={150}>
-            <PieChart margin={{ top: 16, right: 16, bottom: 16, left: 16 }}>
-              <Pie data={slices} cx="50%" cy="50%"
-                innerRadius={38} outerRadius={56}
-                paddingAngle={3} dataKey="value" strokeWidth={0}
-                label={renderPctLabel} labelLine={false}>
-                {slices.map((s, i) => (
-                  <Cell key={i} fill={CORES_STATUS[s.name] ?? '#94A3B8'} />
-                ))}
-              </Pie>
-              <Tooltip content={<TooltipStatus unit={unit} />} />
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <span className="text-xl font-bold text-cobeb-navy leading-none">{total}</span>
-            <span className="text-[9px] text-slate-400 mt-0.5">{label.toLowerCase()}</span>
+        <div className="flex flex-col sm:flex-row items-center gap-5 py-2">
+          <div className="relative shrink-0">
+            <ResponsiveContainer width={170} height={170}>
+              <PieChart>
+                <Pie data={slices} cx="50%" cy="50%"
+                  innerRadius={50} outerRadius={74}
+                  paddingAngle={3} dataKey="value" strokeWidth={0}>
+                  {slices.map((s, i) => (
+                    <Cell key={i} fill={CORES_STATUS[s.name] ?? '#94A3B8'} />
+                  ))}
+                </Pie>
+                <Tooltip content={<TooltipStatus unit={unit} />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-2xl font-bold text-cobeb-navy leading-none">{total}</span>
+              <span className="text-[10px] text-slate-400 mt-0.5">{unit}{total !== 1 ? 's' : ''}</span>
+            </div>
+          </div>
+          <div className="flex flex-col gap-3 flex-1 w-full">
+            {rows.map(s => (
+              <div key={s.name} className="flex items-center gap-3">
+                <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: CORES_STATUS[s.name] }} />
+                <span className="text-sm text-cobeb-text flex-1">{s.name}</span>
+                <span className="text-sm font-bold text-cobeb-navy">{s.value}</span>
+                <span className="text-xs text-slate-400 w-10 text-right">
+                  {total ? Math.round(s.value / total * 100) : 0}%
+                </span>
+              </div>
+            ))}
           </div>
         </div>
       )}
@@ -701,16 +700,14 @@ function GraficoStatusFrota({ todoCavalos, todaCarretas, viagens, filtroUnidade,
     return lista
   }, [todaCarretas, viagens, filtroUnidade, filtroFrota])
 
-  const cav = {
-    ativo:      cavalos.filter(c =>  c.ativo && !c.em_manutencao).length,
-    manutencao: cavalos.filter(c =>  c.em_manutencao).length,
-    inativo:    cavalos.filter(c => !c.ativo && !c.em_manutencao).length,
-  }
-  const car = {
-    ativo:      carretas.filter(c =>  c.ativo && !c.em_manutencao).length,
-    manutencao: carretas.filter(c =>  c.em_manutencao).length,
-    inativo:    carretas.filter(c => !c.ativo && !c.em_manutencao).length,
-  }
+  const mkCounts = list => ({
+    ativo:      list.filter(c =>  c.ativo && !c.em_manutencao).length,
+    manutencao: list.filter(c =>  c.em_manutencao).length,
+    inativo:    list.filter(c => !c.ativo && !c.em_manutencao).length,
+  })
+
+  const cav = mkCounts(cavalos)
+  const car = mkCounts(carretas)
   const totalCav = cav.ativo + cav.manutencao + cav.inativo
   const totalCar = car.ativo + car.manutencao + car.inativo
 
@@ -720,44 +717,30 @@ function GraficoStatusFrota({ todoCavalos, todaCarretas, viagens, filtroUnidade,
     { name: 'Inativo',    value: counts.inativo,    total },
   ].filter(d => d.value > 0)
 
-  const ROWS = [
-    { name: 'Ativo',      cav: cav.ativo,      car: car.ativo      },
-    { name: 'Manutenção', cav: cav.manutencao, car: car.manutencao },
-    { name: 'Inativo',    cav: cav.inativo,    car: car.inativo    },
+  const mkRows = counts => [
+    { name: 'Ativo',      value: counts.ativo      },
+    { name: 'Manutenção', value: counts.manutencao },
+    { name: 'Inativo',    value: counts.inativo    },
   ]
 
   return (
-    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
-      <h2 className="text-cobeb-text font-semibold text-sm mb-3">Status da Frota</h2>
-
-      <div className="grid grid-cols-2">
-        <DonutStatus slices={mkSlices(cav, totalCav)} total={totalCav} label="Cavalos" unit="cavalo" />
-        <DonutStatus slices={mkSlices(car, totalCar)} total={totalCar} label="Carretas" unit="carreta" />
-      </div>
-
-      {/* Legenda consolidada */}
-      <div className="mt-3 pt-3 border-t border-cobeb-border space-y-2">
-        <div className="grid grid-cols-[1fr_auto_auto] gap-x-5 text-[10px] text-slate-400 font-semibold uppercase mb-1">
-          <span />
-          <span>Cav.</span>
-          <span>Car.</span>
-        </div>
-        {ROWS.map(r => (
-          <div key={r.name} className="grid grid-cols-[1fr_auto_auto] gap-x-5 items-center">
-            <div className="flex items-center gap-1.5">
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: CORES_STATUS[r.name] }} />
-              <span className="text-xs text-cobeb-text">{r.name}</span>
-            </div>
-            <span className="text-xs font-bold text-cobeb-navy text-right">{r.cav}</span>
-            <span className="text-xs font-bold text-cobeb-navy text-right">{r.car}</span>
-          </div>
-        ))}
-        <div className="grid grid-cols-[1fr_auto_auto] gap-x-5 items-center pt-1.5 border-t border-cobeb-border">
-          <span className="text-xs font-semibold text-slate-500">Total</span>
-          <span className="text-xs font-bold text-cobeb-navy text-right">{totalCav}</span>
-          <span className="text-xs font-bold text-cobeb-navy text-right">{totalCar}</span>
-        </div>
-      </div>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <CardStatusFrota
+        title="Status da Frota — Cavalos"
+        slices={mkSlices(cav, totalCav)}
+        total={totalCav}
+        rows={mkRows(cav)}
+        unit="cavalo"
+        emptyMsg="Sem cavalos para o filtro aplicado"
+      />
+      <CardStatusFrota
+        title="Status da Frota — Carretas"
+        slices={mkSlices(car, totalCar)}
+        total={totalCar}
+        rows={mkRows(car)}
+        unit="carreta"
+        emptyMsg="Sem carretas para o filtro aplicado"
+      />
     </div>
   )
 }
