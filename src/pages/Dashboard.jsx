@@ -810,6 +810,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
       .eq('status', 'realizado')
       .is('viagem_id', null)
       .not('cod_produto', 'is', null)
+      .not('codigo_fabrica', 'is', null)
       .gt('qtde_pallets', 0)
       .gte('data_puxada', dataInicio)
       .lte('data_puxada', dataFim)
@@ -1394,6 +1395,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         .eq('status', 'realizado')
         .is('viagem_id', null)
         .not('data_puxada', 'is', null)
+        .not('codigo_fabrica', 'is', null)
         .gte('data_puxada', dataInicio)
         .lte('data_puxada', dataFim),
     ])
@@ -1489,6 +1491,13 @@ export default function Dashboard({ mode = 'armazem' }) {
         return true
       })
   }, [viagens, mktpViagens, filtroEntradaManual, portariaMap, fabricaViagemMap, dispersaoMap, turnosMap, filtroUnidade, filtroFrota, filtroCavalo, filtroFabrica, filtroTurno, optFabricas])
+
+  // Somente viagens fábrica (com pedido Ambev vinculado) para o gráfico Planejado vs Real.
+  // Viagens de transferência (COBEB→COBEB, sem codigo_fabrica) ficam de fora.
+  const rowsPVR = useMemo(() => {
+    if (filtroEntradaManual) return rows
+    return rows.filter(v => fabricaViagemMap[v.id] != null)
+  }, [rows, fabricaViagemMap, filtroEntradaManual])
 
   const dadosTMV        = useMemo(() => groupRows(rows, r => r._tmv,     filtroAgrupamento), [rows, filtroAgrupamento])
   const dadosTMARev     = useMemo(() => groupRows(rows, r => r._tmaRev,  filtroAgrupamento), [rows, filtroAgrupamento])
@@ -1762,7 +1771,7 @@ export default function Dashboard({ mode = 'armazem' }) {
               <>
                 <GraficoOciosidade data={dadosOciosidade} filtros={descFiltros} />
                 <GraficoPlanejaVsReal
-                  rows={rows}
+                  rows={rowsPVR}
                   agrupamento={filtroAgrupamento}
                   dataInicio={dataInicio}
                   dataFim={dataFim}
