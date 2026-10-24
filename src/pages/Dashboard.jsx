@@ -38,13 +38,16 @@ function diasSemDomingoNoAno(year) {
   return count
 }
 
-function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim, pedPorDia = {}) {
+function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim, pedPorDia = {}, realizadoViagensPorDia = {}) {
   if (agrupamento === 'dia') {
     const map = {}
     rows.forEach(v => {
       const iso = v.dt_saida_revenda?.slice(0, 10)
       if (!iso) return
       map[iso] = (map[iso] || 0) + 1
+    })
+    Object.entries(realizadoViagensPorDia).forEach(([iso, count]) => {
+      map[iso] = (map[iso] || 0) + count
     })
     return Object.entries(map)
       .sort(([a], [b]) => a.localeCompare(b))
@@ -67,6 +70,9 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim, pedPorDia 
       const date = v.dt_saida_revenda
       if (!date) return
       totals[(new Date(date).getDay() + 6) % 7]++
+    })
+    Object.entries(realizadoViagensPorDia).forEach(([iso, count]) => {
+      totals[(new Date(iso).getDay() + 6) % 7] += count
     })
     const occ = countWeekdayOccurrences(dataInicio, dataFim)
     const pedByDow = Array(7).fill(0)
@@ -91,6 +97,10 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim, pedPorDia 
       const d = new Date(date)
       if (d.getFullYear() === year) map[d.getMonth()] = (map[d.getMonth()] || 0) + 1
     })
+    Object.entries(realizadoViagensPorDia).forEach(([iso, count]) => {
+      const d = new Date(iso)
+      if (d.getFullYear() === year) map[d.getMonth()] = (map[d.getMonth()] || 0) + count
+    })
     const pedByMonth = {}
     Object.entries(pedPorDia).forEach(([iso, pallets]) => {
       const d = new Date(iso)
@@ -111,6 +121,10 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim, pedPorDia 
       if (!date) return
       const y = String(new Date(date).getFullYear())
       map[y] = (map[y] || 0) + 1
+    })
+    Object.entries(realizadoViagensPorDia).forEach(([iso, count]) => {
+      const y = iso.slice(0, 4)
+      map[y] = (map[y] || 0) + count
     })
     const pedByYear = {}
     Object.entries(pedPorDia).forEach(([iso, pallets]) => {
@@ -766,7 +780,7 @@ function isoPeriodMatch(isoDate, agrupamento, day) {
   return false
 }
 
-function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros, filtroUnidade, optUnidades, planejadoMap, pedPorDia = {} }) {
+function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros, filtroUnidade, optUnidades, planejadoMap, pedPorDia = {}, realizadoViagens = [] }) {
   const [detalhe,      setDetalhe]      = useState(null)
   const [drillTipo,    setDrillTipo]    = useState(null)
   const [drillUnidade, setDrillUnidade] = useState(null)
@@ -888,9 +902,25 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
     if (drillUnidade) setDrillUnidade(null); else setDrillTipo(null)
   }
 
+  const realizadoViagensPorDia = useMemo(() => {
+    const dayMap = {}
+    const filtered = filtroUnidade
+      ? realizadoViagens.filter(p => p.unidade_id === filtroUnidade)
+      : realizadoViagens
+    filtered.forEach(p => {
+      if (!p.data_puxada) return
+      const iso = p.data_puxada.slice(0, 10)
+      if (!dayMap[iso]) dayMap[iso] = new Set()
+      dayMap[iso].add(p.numero_pedido)
+    })
+    const result = {}
+    Object.entries(dayMap).forEach(([iso, set]) => { result[iso] = set.size })
+    return result
+  }, [realizadoViagens, filtroUnidade])
+
   const data = useMemo(
-    () => calcPlanejaVsReal(rows, planejadoEfetivo, agrupamento, dataInicio, dataFim, pedPorDia),
-    [rows, planejadoEfetivo, agrupamento, dataInicio, dataFim, pedPorDia]
+    () => calcPlanejaVsReal(rows, planejadoEfetivo, agrupamento, dataInicio, dataFim, pedPorDia, realizadoViagensPorDia),
+    [rows, planejadoEfetivo, agrupamento, dataInicio, dataFim, pedPorDia, realizadoViagensPorDia]
   )
 
   const semDados         = !data?.length
@@ -1219,6 +1249,7 @@ export default function Dashboard({ mode = 'armazem' }) {
   const [filtroEntradaManual, setFiltroEntradaManual] = useState(false)
   const [planejadoMap,        setPlanejadoMap]        = useState({})
   const [pedPorDia,           setPedPorDia]           = useState({})
+  const [realizadoViagens,    setRealizadoViagens]    = useState([])
 
   // opções dos filtros
   const [optUnidades,  setOptUnidades]  = useState([])
@@ -1335,7 +1366,7 @@ export default function Dashboard({ mode = 'armazem' }) {
   async function carregar() {
     setLoading(true)
 
-    const [{ data: vData }, { data: rawPedsData }] = await Promise.all([
+    const [{ data: vData }, { data: rawPedsData }, { data: realizadoRaw }] = await Promise.all([
       supabase
         .from('viagens')
         .select(`
@@ -1357,6 +1388,14 @@ export default function Dashboard({ mode = 'armazem' }) {
         .not('qtde_pallets', 'is', null)
         .gt('qtde_pallets', 0)
         .neq('status', 'cancelado'),
+      supabase
+        .from('pedidos')
+        .select('data_puxada, numero_pedido, unidade_id')
+        .eq('status', 'realizado')
+        .is('viagem_id', null)
+        .not('data_puxada', 'is', null)
+        .gte('data_puxada', dataInicio)
+        .lte('data_puxada', dataFim),
     ])
 
     const ppdMap = {}
@@ -1366,6 +1405,7 @@ export default function Dashboard({ mode = 'armazem' }) {
       ppdMap[iso] = (ppdMap[iso] || 0) + (p.qtde_pallets || 0)
     })
     setPedPorDia(ppdMap)
+    setRealizadoViagens(realizadoRaw ?? [])
 
     const vids = (vData ?? []).map(v => v.id)
 
@@ -1731,6 +1771,7 @@ export default function Dashboard({ mode = 'armazem' }) {
                   optUnidades={optUnidades}
                   planejadoMap={planejadoMap}
                   pedPorDia={pedPorDia}
+                  realizadoViagens={realizadoViagens}
                 />
                 <GraficoStatusFrota
                   todoCavalos={todoCavalos}
