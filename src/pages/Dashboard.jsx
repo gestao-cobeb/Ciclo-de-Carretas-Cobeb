@@ -745,6 +745,27 @@ function GraficoStatusFrota({ todoCavalos, todaCarretas, viagens, filtroUnidade,
   )
 }
 
+function isoPeriodMatch(isoDate, agrupamento, day) {
+  if (!isoDate) return false
+  if (agrupamento === 'dia') {
+    const [dd, mm] = day.split('/')
+    const [, m, d] = isoDate.slice(0, 10).split('-')
+    return d === dd && m === mm
+  }
+  if (agrupamento === 'semana') {
+    const idx = LABEL_SEMANA.indexOf(day)
+    return (new Date(isoDate).getDay() + 6) % 7 === idx
+  }
+  if (agrupamento === 'mes') {
+    const idx = LABEL_MES.indexOf(day)
+    return new Date(isoDate).getMonth() === idx
+  }
+  if (agrupamento === 'ano') {
+    return String(new Date(isoDate).getFullYear()) === day
+  }
+  return false
+}
+
 function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros, filtroUnidade, optUnidades, planejadoMap, pedPorDia = {} }) {
   const [detalhe,      setDetalhe]      = useState(null)
   const [drillTipo,    setDrillTipo]    = useState(null)
@@ -762,24 +783,48 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
     setDrillUnidade(null)
     setDetalhe({ label: payload.day, carregando: true, porTipo: [], totalHL: 0, items: [] })
 
-    if (!vids.length) {
-      setDetalhe({ label: payload.day, carregando: false, porTipo: [], totalHL: 0, items: [] })
-      return
-    }
-
     const vidToUnidade = {}
     periodoRows.forEach(v => {
       if (v.unidade) vidToUnidade[v.id] = { id: v.unidade.id, nome: v.unidade.nome }
     })
 
-    const { data: pedData } = await supabase
+    // Pedidos vinculados por motorista (via viagem_id) e pedidos vinculados
+    // manualmente pelo admin como "realizado" (viagem_id IS NULL, status = 'realizado')
+    let realizadoQ = supabase
       .from('pedidos')
-      .select('viagem_id, cod_produto, qtde_pallets')
-      .in('viagem_id', vids)
+      .select('unidade_id, unidade:unidades(id, nome), cod_produto, qtde_pallets, data_puxada')
+      .eq('status', 'realizado')
+      .is('viagem_id', null)
       .not('cod_produto', 'is', null)
       .gt('qtde_pallets', 0)
+      .gte('data_puxada', dataInicio)
+      .lte('data_puxada', dataFim)
+    if (filtroUnidade) realizadoQ = realizadoQ.eq('unidade_id', filtroUnidade)
 
-    const skus = [...new Set((pedData ?? []).map(p => p.cod_produto))]
+    const [pedResult, realizadoResult] = await Promise.all([
+      vids.length
+        ? supabase
+            .from('pedidos')
+            .select('viagem_id, cod_produto, qtde_pallets')
+            .in('viagem_id', vids)
+            .not('cod_produto', 'is', null)
+            .gt('qtde_pallets', 0)
+        : Promise.resolve({ data: [] }),
+      realizadoQ,
+    ])
+
+    const pedData      = pedResult.data ?? []
+    const realizadoAll = realizadoResult.data ?? []
+
+    // Filtra os pedidos "realizado" para o período específico da barra clicada
+    const realizadoData = realizadoAll.filter(p =>
+      isoPeriodMatch(p.data_puxada, agrupamento, payload.day)
+    )
+
+    const skus = [...new Set([
+      ...pedData.map(p => p.cod_produto),
+      ...realizadoData.map(p => p.cod_produto),
+    ])]
 
     if (!skus.length) {
       setDetalhe({ label: payload.day, carregando: false, porTipo: [], totalHL: 0, items: [] })
@@ -798,17 +843,16 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
     let totalHL = 0
     const items = []
 
-    ;(pedData ?? []).forEach(p => {
+    function processarPedido(p, unidade) {
       const cat = catMap[p.cod_produto]
       if (!cat) return
       const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
       if (hl <= 0) return
-      const tipo     = cat.tipo_marca || 'Sem classificação'
-      const unidade  = vidToUnidade[p.viagem_id] ?? { id: null, nome: '—' }
+      const tipo = cat.tipo_marca || 'Sem classificação'
       porTipoMap[tipo] = (porTipoMap[tipo] || 0) + hl
       totalHL += hl
       items.push({
-        viagem_id:    p.viagem_id,
+        viagem_id:    p.viagem_id ?? null,
         unidade_id:   unidade.id,
         unidade_nome: unidade.nome,
         tipo_marca:   tipo,
@@ -817,6 +861,16 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
         hl,
         pallets:      p.qtde_pallets || 0,
       })
+    }
+
+    pedData.forEach(p => {
+      const unidade = vidToUnidade[p.viagem_id] ?? { id: null, nome: '—' }
+      processarPedido(p, unidade)
+    })
+
+    realizadoData.forEach(p => {
+      const unidade = p.unidade ? { id: p.unidade.id, nome: p.unidade.nome } : { id: p.unidade_id, nome: '—' }
+      processarPedido(p, unidade)
     })
 
     const porTipo = Object.entries(porTipoMap)
