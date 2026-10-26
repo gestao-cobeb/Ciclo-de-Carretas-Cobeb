@@ -895,11 +895,11 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
     setDetalhe({ label: payload.day, drillMode: 'real', carregando: false, porTipo, totalHL, items })
   }
 
-  async function handlePlanejadoClick(payload) {
+  async function handleProgramadoClick(payload) {
     if (!payload?.day) return
     setDrillTipo(null)
     setDrillUnidade(null)
-    setDetalhe({ label: payload.day, drillMode: 'planejado', carregando: true, porTipo: [], totalHL: 0, items: [] })
+    setDetalhe({ label: payload.day, drillMode: 'programado', carregando: true, porTipo: [], totalHL: 0, items: [] })
 
     let q = supabase
       .from('pedidos')
@@ -921,7 +921,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
     const skus = [...new Set(pedData.map(p => p.cod_produto))]
 
     if (!skus.length) {
-      setDetalhe({ label: payload.day, drillMode: 'planejado', carregando: false, porTipo: [], totalHL: 0, items: [] })
+      setDetalhe({ label: payload.day, drillMode: 'programado', carregando: false, porTipo: [], totalHL: 0, items: [] })
       return
     }
 
@@ -962,7 +962,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
       .sort(([, a], [, b]) => b - a)
       .map(([tipo, hl]) => ({ tipo, hl }))
 
-    setDetalhe({ label: payload.day, drillMode: 'planejado', carregando: false, porTipo, totalHL, items })
+    setDetalhe({ label: payload.day, drillMode: 'programado', carregando: false, porTipo, totalHL, items })
   }
 
   function fecharDetalhe() {
@@ -1040,7 +1040,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
   const totalPallets   = nivelAtual === 3 ? listaSheet.reduce((s, i) => s + (i.pallets ?? 0), 0) : null
   const tituloSheet    = drillUnidade
     ? (porUnidade.find(u => u.id === drillUnidade)?.nome ?? 'Unidade')
-    : (drillTipo ?? (detalhe?.drillMode === 'planejado' ? 'Volume Planejado' : 'Volume Puxado'))
+    : (drillTipo ?? (detalhe?.drillMode === 'programado' ? 'Volume Programado' : 'Volume Puxado'))
   const subtituloSheet = drillUnidade ? drillTipo : (detalhe?.label ?? '')
 
   return (
@@ -1087,7 +1087,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
         </span>
       </div>
       <p className="text-[10px] text-slate-400 mb-1">
-        Toque nas barras (Real) ou nos pontos da linha azul (Planejado) para ver o volume por tipo de marca</p>
+        Toque nas barras (Real ou Programado) para ver o volume por tipo de marca</p>
 
       {semDados ? (
         <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
@@ -1117,7 +1117,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
               width={32}
             />
             <Tooltip content={<TooltipPlanejadoVsReal />} cursor={{ fill: '#EBF5FF' }} />
-            <Bar dataKey="programado" name="Programado" fill="#F59E0B" radius={[4, 4, 0, 0]} maxBarSize={28} />
+            <Bar dataKey="programado" name="Programado" fill="#F59E0B" radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={payload => handleProgramadoClick(payload)} />
             <Bar dataKey="real" name="Real" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={payload => handleBarClick(payload)}>
               <LabelList dataKey="real" content={renderCountLabel} />
             </Bar>
@@ -1127,20 +1127,8 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
               name="Planejado"
               stroke="#003DA5"
               strokeWidth={2}
-              dot={{ r: 4, fill: '#003DA5', strokeWidth: 0, cursor: 'pointer' }}
-              activeDot={(props) => {
-                const { cx, cy, payload } = props
-                return (
-                  <g key={`adot-${payload.day}`}>
-                    <circle cx={cx} cy={cy} r={16} fill="transparent"
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => handlePlanejadoClick(payload)} />
-                    <circle cx={cx} cy={cy} r={6} fill="#003DA5" stroke="white" strokeWidth={2}
-                      style={{ cursor: 'pointer' }}
-                      onClick={() => handlePlanejadoClick(payload)} />
-                  </g>
-                )
-              }}
+              dot={{ r: 4, fill: '#003DA5', strokeWidth: 0 }}
+              activeDot={{ r: 6 }}
             >
               <LabelList dataKey="planejado" content={renderLineLabelPlan} />
             </Line>
@@ -1169,11 +1157,11 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
                   <div className="flex items-center gap-1.5">
                     <p className="text-cobeb-text font-bold text-base truncate">{tituloSheet}</p>
                     <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      detalhe.drillMode === 'planejado'
-                        ? 'bg-blue-100 text-cobeb-navy border border-blue-200'
+                      detalhe.drillMode === 'programado'
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
                         : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                     }`}>
-                      {detalhe.drillMode === 'planejado' ? 'Planejado' : 'Real'}
+                      {detalhe.drillMode === 'programado' ? 'Programado' : 'Real'}
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 truncate">{subtituloSheet}</p>
@@ -1188,7 +1176,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
               <div className="flex items-center justify-center py-8 text-slate-400 text-sm">Carregando...</div>
             ) : nivelAtual === 1 && detalhe.porTipo.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-slate-400 text-sm">
-                {detalhe.drillMode === 'planejado' ? 'Sem pedidos planejados neste período' : 'Sem pedidos vinculados neste período'}
+                {detalhe.drillMode === 'programado' ? 'Sem pedidos programados neste período' : 'Sem pedidos vinculados neste período'}
               </div>
             ) : (
               <>
