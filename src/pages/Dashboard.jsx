@@ -1350,10 +1350,13 @@ function findPreco(precosMap, tabela, codigo, date) {
   const rows = precosMap[tabela]?.[codigo] ?? []
   if (!date) return null
   const d = date.slice(0, 10)
-  // retorna preco_total da vigência ativa: inicio <= d e (fim > d ou fim em aberto)
-  return rows.find(r =>
-    r.data_vigencia <= d && (r.data_fim_vigencia == null || r.data_fim_vigencia > d)
-  )?.preco_total ?? null
+  // vigência ativa: inicio <= d e (fim >= d — inclusivo — ou fim em aberto)
+  const active = rows.find(r =>
+    r.data_vigencia <= d && (r.data_fim_vigencia == null || r.data_fim_vigencia >= d)
+  )
+  if (active) return active.preco_total
+  // fallback: sem próxima vigência ainda — usa a mais recente com inicio <= d
+  return rows.find(r => r.data_vigencia <= d)?.preco_total ?? null
 }
 
 function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, filtroFabricaCodAmb, catMap, precosMap, optUnidades }) {
