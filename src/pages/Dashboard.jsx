@@ -1730,7 +1730,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         supabase.from('turnos').select('unidade_id, nome, hora_inicio, hora_fim').eq('ativo', true),
         supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('carretas').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
-        supabase.from('precos_fabrica').select('codigo, tabela, preco_total, data_vigencia, data_fim_vigencia').not('data_vigencia', 'is', null).order('data_vigencia', { ascending: false }).limit(50000),
+        supabase.from('precos_fabrica').select('codigo, tabela, preco_total, data_vigencia, data_fim_vigencia').not('data_vigencia', 'is', null).order('data_vigencia', { ascending: false }).limit(100000),
       ])
       if (u) setOptUnidades(u)
       if (f) setOptFabricas(f)
