@@ -447,18 +447,9 @@ export default function Importacao() {
         // primeiras 2 linhas são cabeçalho duplo; mantém Pratic e Cheia
         const dataRows = rows.slice(2).filter(r => r[0] && normTabela(r[2]) !== null)
         if (!dataRows.length) { setFileErrorPreco('Nenhuma linha Pratic ou Cheia encontrada.'); return }
-        // para cada (código, tabela), manter a linha com maior data_inicio (col 4)
-        const byCodeTabela = {}
-        dataRows.forEach(r => {
-          const cod    = String(r[0]).trim()
-          const tabela = normTabela(r[2])
-          const ini    = Number(r[4]) || 0
-          const key    = `${cod}|${tabela}`
-          if (!byCodeTabela[key] || ini > byCodeTabela[key].ini) byCodeTabela[key] = { row: r, ini, tabela }
-        })
-        const filtered    = Object.values(byCodeTabela)
-        const uniqueProds = new Set(filtered.map(({ row }) => String(row[0]).trim())).size
-        setPendingFilePreco({ name: file.name, data: filtered, count: uniqueProds, rowCount: filtered.length })
+        const mapped      = dataRows.map(r => ({ row: r, tabela: normTabela(r[2]) }))
+        const uniqueProds = new Set(mapped.map(({ row }) => String(row[0]).trim())).size
+        setPendingFilePreco({ name: file.name, data: mapped, count: uniqueProds, rowCount: mapped.length })
       } catch {
         setFileErrorPreco('Erro ao ler o arquivo.')
       }

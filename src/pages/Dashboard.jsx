@@ -1681,7 +1681,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         supabase.from('turnos').select('unidade_id, nome, hora_inicio, hora_fim').eq('ativo', true),
         supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('carretas').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
-        supabase.from('precos_fabrica').select('codigo, tabela, preco, ipi, icms_revenda, base_calc'),
+        supabase.from('precos_fabrica').select('codigo, tabela, preco, ipi, icms_revenda, base_calc').order('data_vigencia', { ascending: false }),
         supabase.from('produtos_catalogo').select('codigo, descricao, tipo_marca, caixas_pallet'),
       ])
       if (u) setOptUnidades(u)
@@ -1701,7 +1701,10 @@ export default function Dashboard({ mode = 'armazem' }) {
         const pMap = { Pratic: {}, Cheia: {} }
         precosData.forEach(p => {
           if (!pMap[p.tabela]) pMap[p.tabela] = {}
-          pMap[p.tabela][p.codigo] = { preco: p.preco, ipi: p.ipi, icms_revenda: p.icms_revenda, base_calc: p.base_calc }
+          // ordem DESC por data_vigencia: primeiro registro = mais recente; não sobrescreve
+          if (!pMap[p.tabela][p.codigo]) {
+            pMap[p.tabela][p.codigo] = { preco: p.preco, ipi: p.ipi, icms_revenda: p.icms_revenda, base_calc: p.base_calc }
+          }
         })
         setPrecosMap(pMap)
       }
