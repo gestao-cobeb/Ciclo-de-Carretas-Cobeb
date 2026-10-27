@@ -1555,16 +1555,16 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
         <>
           <p className="text-[10px] text-slate-400 mb-1">Toque nas barras para ver o valor por tipo de marca</p>
           <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={data} margin={{ top: 28, right: 12, left: 4, bottom: 32 }}>
+            <ComposedChart data={data} margin={{ top: 60, right: 12, left: 4, bottom: 32 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
               <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={{ stroke: '#BFDBFE' }} angle={-35} textAnchor="end" interval={0} />
               <YAxis tickFormatter={v => fmtR$(v, true)} tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={false} width={62} />
               <Tooltip content={<TooltipValorFabrica />} cursor={{ fill: '#EBF5FF' }} />
               <Bar dataKey="programado" name="Programado" fill={tabelaPreco === 'Diferença' ? '#8B5CF6' : '#F59E0B'} radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={p => handleBarClick(p, 'programado')}>
-                <LabelList dataKey="programado" position="top" formatter={v => v ? fmtR$(v, true) : ''} style={{ fontSize: 9, fill: tabelaPreco === 'Diferença' ? '#5B21B6' : '#92400E', fontWeight: 600 }} />
+                <LabelList dataKey="programado" position="top" angle={-90} offset={4} formatter={v => v ? fmtR$(v, true) : ''} style={{ fontSize: 9, fill: tabelaPreco === 'Diferença' ? '#5B21B6' : '#92400E', fontWeight: 600, textAnchor: 'start' }} />
               </Bar>
               <Bar dataKey="real" name="Real" fill={tabelaPreco === 'Diferença' ? '#7C3AED' : '#10B981'} radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={p => handleBarClick(p, 'real')}>
-                <LabelList dataKey="real" position="top" formatter={v => v ? fmtR$(v, true) : ''} style={{ fontSize: 9, fill: tabelaPreco === 'Diferença' ? '#4C1D95' : '#065F46', fontWeight: 600 }} />
+                <LabelList dataKey="real" position="top" angle={-90} offset={4} formatter={v => v ? fmtR$(v, true) : ''} style={{ fontSize: 9, fill: tabelaPreco === 'Diferença' ? '#4C1D95' : '#065F46', fontWeight: 600, textAnchor: 'start' }} />
               </Bar>
             </ComposedChart>
           </ResponsiveContainer>
