@@ -1422,7 +1422,7 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
       const tipo = cat?.tipo_marca || 'Sem classificação'
       porTipoMap[tipo] = (porTipoMap[tipo] ?? 0) + valor
       totalValor += valor
-      items.push({ unidade_id: p.unidade_id, tipo_marca: tipo, cod_produto: p.cod_produto, descricao: cat?.descricao || p.cod_produto, valor, caixas })
+      items.push({ unidade_id: p.unidade_id, tipo_marca: tipo, cod_produto: p.cod_produto, descricao: cat?.descricao || p.cod_produto, valor, pallets: p.qtde_pallets || 0 })
     })
 
     const porTipo = Object.entries(porTipoMap).sort(([, a], [, b]) => b - a).map(([tipo, valor]) => ({ tipo, valor }))
@@ -1447,21 +1447,21 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
     if (!detalhe?.items?.length || !drillTipo || !drillUnidade) return []
     const map = {}
     detalhe.items.filter(i => i.tipo_marca === drillTipo && i.unidade_id === drillUnidade).forEach(i => {
-      if (!map[i.cod_produto]) map[i.cod_produto] = { descricao: i.descricao, valor: 0, caixas: 0 }
-      map[i.cod_produto].valor  += i.valor
-      map[i.cod_produto].caixas += i.caixas
+      if (!map[i.cod_produto]) map[i.cod_produto] = { descricao: i.descricao, valor: 0, pallets: 0 }
+      map[i.cod_produto].valor   += i.valor
+      map[i.cod_produto].pallets += i.pallets
     })
-    return Object.entries(map).sort(([, a], [, b]) => b.valor - a.valor).map(([cod, v]) => ({ cod, descricao: v.descricao, valor: v.valor, caixas: v.caixas }))
+    return Object.entries(map).sort(([, a], [, b]) => b.valor - a.valor).map(([cod, v]) => ({ cod, descricao: v.descricao, valor: v.valor, pallets: v.pallets }))
   })()
 
   const nivelAtual     = drillUnidade ? 3 : drillTipo ? 2 : 1
   const listaSheet     = nivelAtual === 3
-    ? porProduto.map(p  => ({ label: p.descricao, sub: p.cod,  valor: p.valor, caixas: p.caixas, onClick: null }))
+    ? porProduto.map(p  => ({ label: p.descricao, sub: p.cod,  valor: p.valor, pallets: p.pallets, onClick: null }))
     : nivelAtual === 2
       ? porUnidade.map(u => ({ label: u.nome,      sub: null,  valor: u.valor, onClick: () => setDrillUnidade(u.id) }))
       : (detalhe?.porTipo ?? []).map(t => ({ label: t.tipo,   sub: null, valor: t.valor, onClick: () => setDrillTipo(t.tipo) }))
   const totalSheet     = listaSheet.reduce((s, i) => s + i.valor, 0)
-  const totalCaixas    = nivelAtual === 3 ? listaSheet.reduce((s, i) => s + (i.caixas ?? 0), 0) : null
+  const totalCaixas    = nivelAtual === 3 ? listaSheet.reduce((s, i) => s + (i.pallets ?? 0), 0) : null
   const tituloSheet    = drillUnidade
     ? (porUnidade.find(u => u.id === drillUnidade)?.nome ?? 'Unidade')
     : (drillTipo ?? (detalhe?.drillMode === 'programado' ? 'Valor Programado' : 'Valor Puxado'))
@@ -1589,9 +1589,9 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
                       <div className="flex items-center gap-1 shrink-0">
                         <div className="text-right">
                           <span className="text-sm font-semibold text-cobeb-navy block">{fmtR$(item.valor)}</span>
-                          {item.caixas != null && (
+                          {item.pallets != null && (
                             <span className="text-[10px] text-slate-400">
-                              {item.caixas.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} cx
+                              {item.pallets.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} plt
                             </span>
                           )}
                         </div>
@@ -1606,7 +1606,7 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
                     <span className="text-sm font-bold text-cobeb-navy block">{fmtR$(totalSheet)}</span>
                     {totalCaixas != null && (
                       <span className="text-[10px] text-slate-400">
-                        {totalCaixas.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} cx
+                        {totalCaixas.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} plt
                       </span>
                     )}
                   </div>
