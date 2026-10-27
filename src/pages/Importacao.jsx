@@ -462,7 +462,7 @@ export default function Importacao() {
     setImportingPreco(true); setImportResultPreco(null)
     try {
       const now = new Date().toISOString()
-      const records = pendingFilePreco.data.map(({ row: r, tabela }) => ({
+      const rawRecords = pendingFilePreco.data.map(({ row: r, tabela }) => ({
         codigo:        String(r[0]).trim(),
         nome:          String(r[1] ?? '').trim(),
         tabela,
@@ -474,6 +474,11 @@ export default function Importacao() {
         importado_em:  now,
         importado_por: profile?.id,
       }))
+
+      // remove duplicatas internas por (codigo, tabela, data_vigencia)
+      const byKey = {}
+      rawRecords.forEach(r => { byKey[`${r.codigo}|${r.tabela}|${r.data_vigencia ?? ''}`] = r })
+      const records = Object.values(byKey)
 
       // substitui tudo: apaga e reinsere
       const { error: delErr } = await supabase.from('precos_fabrica').delete().neq('codigo', '')
