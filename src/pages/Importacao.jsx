@@ -434,18 +434,24 @@ export default function Importacao() {
         const wb = XLSX.read(ev.target.result, { type: 'array', cellDates: false })
         const ws = wb.Sheets[wb.SheetNames[0]]
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true })
-        // primeiras 2 linhas são cabeçalho duplo
-        const dataRows = rows.slice(2).filter(r => r[0] && String(r[2]).trim() === 'Pratic')
-        if (!dataRows.length) { setFileErrorPreco('Nenhuma linha da tabela Pratic encontrada.'); return }
-        // para cada código, manter apenas a linha com maior data_inicio (col 4)
-        const byCode = {}
-        dataRows.forEach(r => {
-          const cod  = String(r[0]).trim()
-          const ini  = Number(r[4]) || 0
-          if (!byCode[cod] || ini > byCode[cod].ini) byCode[cod] = { row: r, ini }
+        // primeiras 2 linhas são cabeçalho duplo; mantém Pratic e Cheia
+        const dataRows = rows.slice(2).filter(r => {
+          const tabela = String(r[2]).trim()
+          return r[0] && (tabela === 'Pratic' || tabela === 'Cheia')
         })
-        const filtered = Object.values(byCode).map(({ row }) => row)
-        setPendingFilePreco({ name: file.name, data: filtered, count: filtered.length })
+        if (!dataRows.length) { setFileErrorPreco('Nenhuma linha Pratic ou Cheia encontrada.'); return }
+        // para cada (código, tabela), manter a linha com maior data_inicio (col 4)
+        const byCodeTabela = {}
+        dataRows.forEach(r => {
+          const cod    = String(r[0]).trim()
+          const tabela = String(r[2]).trim()
+          const ini    = Number(r[4]) || 0
+          const key    = `${cod}|${tabela}`
+          if (!byCodeTabela[key] || ini > byCodeTabela[key].ini) byCodeTabela[key] = { row: r, ini }
+        })
+        const filtered   = Object.values(byCodeTabela).map(({ row }) => row)
+        const uniqueProds = new Set(filtered.map(r => String(r[0]).trim())).size
+        setPendingFilePreco({ name: file.name, data: filtered, count: uniqueProds, rowCount: filtered.length })
       } catch {
         setFileErrorPreco('Erro ao ler o arquivo.')
       }
@@ -461,6 +467,7 @@ export default function Importacao() {
       const records = pendingFilePreco.data.map(r => ({
         codigo:        String(r[0]).trim(),
         nome:          String(r[1] ?? '').trim(),
+        tabela:        String(r[2]).trim(),
         preco:         parseFloat(r[6]) || null,
         data_vigencia: excelSerial(r[4]),
         importado_em:  now,
@@ -884,7 +891,7 @@ export default function Importacao() {
                   <Tag size={16} className="text-cobeb-yellow shrink-0" />
                   <div>
                     <p className="text-cobeb-text text-sm font-medium">{pendingFilePreco.name}</p>
-                    <p className="text-slate-500 text-xs">{pendingFilePreco.count.toLocaleString('pt-BR')} produtos (Pratic)</p>
+                    <p className="text-slate-500 text-xs">{pendingFilePreco.count.toLocaleString('pt-BR')} produtos · {pendingFilePreco.rowCount.toLocaleString('pt-BR')} preços (Pratic + Cheia)</p>
                   </div>
                 </div>
                 <button onClick={() => { setPendingFilePreco(null); setImportResultPreco(null) }} className="text-slate-500 hover:text-slate-400">
@@ -922,7 +929,7 @@ export default function Importacao() {
               >
                 {importingPreco
                   ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Importando {pendingFilePreco.count.toLocaleString('pt-BR')} preços...</>
-                  : <><Upload size={15} />Importar {pendingFilePreco.count.toLocaleString('pt-BR')} preços</>}
+                  : <><Upload size={15} />Importar {pendingFilePreco.rowCount.toLocaleString('pt-BR')} preços ({pendingFilePreco.count.toLocaleString('pt-BR')} produtos)</>}
               </button>
             )}
           </div>

@@ -1308,6 +1308,321 @@ function GraficoMetrica({ title, data, color, filtros }) {
   )
 }
 
+function fmtR$(v, compact = false) {
+  if (v == null || isNaN(v)) return ''
+  if (compact) {
+    if (v >= 1_000_000) return `R$${(v / 1_000_000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}M`
+    if (v >= 1_000)     return `R$${(v / 1_000).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 })}K`
+    return `R$${v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  }
+  return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+}
+
+function TooltipValorFabrica({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  const prog = payload.find(p => p.dataKey === 'programado')?.value
+  const real = payload.find(p => p.dataKey === 'real')?.value
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid #BFDBFE',
+      borderRadius: 12, padding: '10px 14px', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,.08)',
+    }}>
+      <p style={{ fontWeight: 600, color: '#1E3A6E', marginBottom: 4 }}>{label}</p>
+      {prog != null && <p style={{ color: '#D97706' }}>Programado: <strong>{fmtR$(prog)}</strong></p>}
+      {real != null && <p style={{ color: '#10B981' }}>Real: <strong>{fmtR$(real)}</strong></p>}
+    </div>
+  )
+}
+
+function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, filtroFabricaCodAmb, catMap, precosMap, optUnidades }) {
+  const [tabelaPreco, setTabelaPreco] = useState('Pratic')
+  const [detalhe,      setDetalhe]      = useState(null)
+  const [drillTipo,    setDrillTipo]    = useState(null)
+  const [drillUnidade, setDrillUnidade] = useState(null)
+
+  const precoAtual = precosMap[tabelaPreco] ?? {}
+  const temTabela  = Object.keys(precoAtual).length > 0
+
+  const unidNomeMap = useMemo(() => {
+    const m = {}
+    optUnidades.forEach(u => { m[u.id] = u.nome })
+    return m
+  }, [optUnidades])
+
+  const pedsFiltrados = useMemo(() => rawPeds.filter(p => {
+    if (!p.cod_produto || !p.codigo_fabrica) return false
+    if (filtroUnidade      && p.unidade_id    !== filtroUnidade)      return false
+    if (filtroFabricaCodAmb && p.codigo_fabrica !== filtroFabricaCodAmb) return false
+    return true
+  }), [rawPeds, filtroUnidade, filtroFabricaCodAmb])
+
+  const data = useMemo(() => {
+    const calcValor = p => {
+      const cat   = catMap[p.cod_produto]
+      const preco = precoAtual[p.cod_produto]
+      if (!cat?.caixas_pallet || !preco) return 0
+      return (p.qtde_pallets || 0) * cat.caixas_pallet * preco
+    }
+
+    const getKey = iso => {
+      if (agrupamento === 'dia')    { const [, mm, dd] = iso.split('-'); return `${dd}/${mm}` }
+      if (agrupamento === 'semana') return LABEL_SEMANA[(new Date(iso).getDay() + 6) % 7]
+      if (agrupamento === 'mes')    return LABEL_MES[new Date(iso).getMonth()]
+      if (agrupamento === 'ano')    return iso.slice(0, 4)
+      return null
+    }
+
+    const progMap = {}, realMap = {}
+    pedsFiltrados.forEach(p => {
+      const iso = p.data_puxada?.slice(0, 10)
+      if (!iso) return
+      const key = getKey(iso)
+      if (!key) return
+      const v = calcValor(p)
+      progMap[key] = (progMap[key] ?? 0) + v
+      if (p.viagem_id || p.status === 'realizado') realMap[key] = (realMap[key] ?? 0) + v
+    })
+
+    if (agrupamento === 'semana') return LABEL_SEMANA.map(label => ({ day: label, programado: progMap[label] || null, real: realMap[label] || null }))
+    if (agrupamento === 'mes')    return LABEL_MES.map(label    => ({ day: label, programado: progMap[label] || null, real: realMap[label] || null }))
+
+    const allKeys = [...new Set([...Object.keys(progMap), ...Object.keys(realMap)])]
+    const sorted  = agrupamento === 'dia'
+      ? allKeys.sort((a, b) => { const [da, ma] = a.split('/'); const [db, mb] = b.split('/'); return ma !== mb ? ma.localeCompare(mb) : da.localeCompare(db) })
+      : allKeys.sort()
+    return sorted.map(key => ({ day: key, programado: progMap[key] || null, real: realMap[key] || null }))
+  }, [pedsFiltrados, agrupamento, precoAtual, catMap])
+
+  const semDados   = !data?.length || data.every(d => !d.programado && !d.real)
+  const totalProg  = data.reduce((s, d) => s + (d.programado ?? 0), 0)
+  const totalReal  = data.reduce((s, d) => s + (d.real       ?? 0), 0)
+
+  function handleBarClick(payload, mode) {
+    if (!payload?.day) return
+    const day = payload.day
+    setDrillTipo(null); setDrillUnidade(null)
+
+    const pedsPeriodo = pedsFiltrados.filter(p => {
+      const iso = p.data_puxada?.slice(0, 10)
+      return iso && isoPeriodMatch(iso, agrupamento, day)
+    }).filter(p => mode === 'real' ? (p.viagem_id || p.status === 'realizado') : true)
+
+    const porTipoMap = {}
+    let totalValor   = 0
+    const items      = []
+
+    pedsPeriodo.forEach(p => {
+      const cat   = catMap[p.cod_produto]
+      const preco = precoAtual[p.cod_produto]
+      if (!cat?.caixas_pallet || !preco) return
+      const valor = (p.qtde_pallets || 0) * cat.caixas_pallet * preco
+      if (valor <= 0) return
+      const tipo = cat.tipo_marca || 'Sem classificação'
+      porTipoMap[tipo] = (porTipoMap[tipo] ?? 0) + valor
+      totalValor += valor
+      items.push({ unidade_id: p.unidade_id, tipo_marca: tipo, cod_produto: p.cod_produto, descricao: cat.descricao || p.cod_produto, valor, pallets: p.qtde_pallets || 0 })
+    })
+
+    const porTipo = Object.entries(porTipoMap).sort(([, a], [, b]) => b - a).map(([tipo, valor]) => ({ tipo, valor }))
+    setDetalhe({ label: day, drillMode: mode, porTipo, totalValor, items })
+  }
+
+  function fecharDetalhe() { setDetalhe(null); setDrillTipo(null); setDrillUnidade(null) }
+  function goBack()        { if (drillUnidade) setDrillUnidade(null); else setDrillTipo(null) }
+
+  const porUnidade = (() => {
+    if (!detalhe?.items?.length || !drillTipo) return []
+    const map = {}
+    detalhe.items.filter(i => i.tipo_marca === drillTipo).forEach(i => {
+      if (!i.unidade_id) return
+      if (!map[i.unidade_id]) map[i.unidade_id] = { nome: unidNomeMap[i.unidade_id] ?? '—', valor: 0 }
+      map[i.unidade_id].valor += i.valor
+    })
+    return Object.entries(map).sort(([, a], [, b]) => b.valor - a.valor).map(([id, v]) => ({ id, nome: v.nome, valor: v.valor }))
+  })()
+
+  const porProduto = (() => {
+    if (!detalhe?.items?.length || !drillTipo || !drillUnidade) return []
+    const map = {}
+    detalhe.items.filter(i => i.tipo_marca === drillTipo && i.unidade_id === drillUnidade).forEach(i => {
+      if (!map[i.cod_produto]) map[i.cod_produto] = { descricao: i.descricao, valor: 0, pallets: 0 }
+      map[i.cod_produto].valor   += i.valor
+      map[i.cod_produto].pallets += i.pallets
+    })
+    return Object.entries(map).sort(([, a], [, b]) => b.valor - a.valor).map(([cod, v]) => ({ cod, descricao: v.descricao, valor: v.valor, pallets: v.pallets }))
+  })()
+
+  const nivelAtual     = drillUnidade ? 3 : drillTipo ? 2 : 1
+  const listaSheet     = nivelAtual === 3
+    ? porProduto.map(p  => ({ label: p.descricao, sub: p.cod,  valor: p.valor, pallets: p.pallets, onClick: null }))
+    : nivelAtual === 2
+      ? porUnidade.map(u => ({ label: u.nome,      sub: null,  valor: u.valor, onClick: () => setDrillUnidade(u.id) }))
+      : (detalhe?.porTipo ?? []).map(t => ({ label: t.tipo,   sub: null, valor: t.valor, onClick: () => setDrillTipo(t.tipo) }))
+  const totalSheet     = listaSheet.reduce((s, i) => s + i.valor, 0)
+  const totalPallets   = nivelAtual === 3 ? listaSheet.reduce((s, i) => s + (i.pallets ?? 0), 0) : null
+  const tituloSheet    = drillUnidade
+    ? (porUnidade.find(u => u.id === drillUnidade)?.nome ?? 'Unidade')
+    : (drillTipo ?? (detalhe?.drillMode === 'programado' ? 'Valor Programado' : 'Valor Puxado'))
+  const subtituloSheet = drillUnidade ? drillTipo : (detalhe?.label ?? '')
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div>
+          <h2 className="text-cobeb-text font-semibold text-sm mb-1.5">
+            Valor Fábrica — Programado vs Real
+          </h2>
+          {!semDados && temTabela && (
+            <div className="flex flex-wrap gap-1.5">
+              {totalProg > 0 && (
+                <span className="text-[11px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-0.5">
+                  Programado: {fmtR$(totalProg)}
+                </span>
+              )}
+              {totalReal > 0 && (
+                <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-0.5">
+                  Real: {fmtR$(totalReal)}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 rounded-xl border border-cobeb-border overflow-hidden">
+          {['Pratic', 'Cheia'].map(t => (
+            <button key={t} onClick={() => setTabelaPreco(t)}
+              className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
+                tabelaPreco === t ? 'bg-cobeb-navy text-white' : 'bg-white text-slate-500 hover:bg-cobeb-sky'
+              }`}>
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+      <FiltrosTags filtros={filtros} />
+
+      <div className="flex flex-wrap gap-4 mb-3">
+        <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+          <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" />
+          Programado
+        </span>
+        <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+          <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
+          Real
+        </span>
+      </div>
+
+      {!temTabela ? (
+        <div className="flex items-center justify-center h-52 text-slate-400 text-sm text-center px-8">
+          Tabela {tabelaPreco} não importada. Acesse Importação de Bases para importar.
+        </div>
+      ) : semDados ? (
+        <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
+          Sem dados para o período
+        </div>
+      ) : (
+        <>
+          <p className="text-[10px] text-slate-400 mb-1">Toque nas barras para ver o valor por tipo de marca</p>
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={data} margin={{ top: 20, right: 12, left: 4, bottom: 32 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
+              <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={{ stroke: '#BFDBFE' }} angle={-35} textAnchor="end" interval={0} />
+              <YAxis tickFormatter={v => fmtR$(v, true)} tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={false} width={62} />
+              <Tooltip content={<TooltipValorFabrica />} cursor={{ fill: '#EBF5FF' }} />
+              <Bar dataKey="programado" name="Programado" fill="#F59E0B" radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={p => handleBarClick(p, 'programado')} />
+              <Bar dataKey="real"       name="Real"       fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={p => handleBarClick(p, 'real')} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </>
+      )}
+
+      {detalhe && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-end" onClick={fecharDetalhe}>
+          <div className="w-full max-w-lg mx-auto bg-white rounded-t-2xl p-5 space-y-4" onClick={e => e.stopPropagation()}>
+            <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto" />
+
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {(drillTipo || drillUnidade) && (
+                  <button onClick={goBack}
+                    className="shrink-0 w-7 h-7 rounded-lg bg-cobeb-sky border border-cobeb-border flex items-center justify-center text-cobeb-navy hover:bg-cobeb-border transition-colors">
+                    <ChevronLeft size={14} />
+                  </button>
+                )}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-cobeb-text font-bold text-base truncate">{tituloSheet}</p>
+                    <span className={`shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      detalhe.drillMode === 'programado'
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    }`}>
+                      {detalhe.drillMode === 'programado' ? 'Programado' : 'Real'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 truncate">{subtituloSheet}</p>
+                </div>
+              </div>
+              <button onClick={fecharDetalhe} className="shrink-0 text-slate-400 hover:text-slate-600">
+                <X size={18} />
+              </button>
+            </div>
+
+            {nivelAtual === 1 && detalhe.porTipo.length === 0 ? (
+              <div className="flex items-center justify-center py-8 text-slate-400 text-sm">
+                Sem pedidos com preço cadastrado neste período
+              </div>
+            ) : (
+              <>
+                {nivelAtual < 3 && <p className="text-[10px] text-slate-400 -mt-2">Toque em uma linha para detalhar</p>}
+                <div className="space-y-0.5 max-h-64 overflow-y-auto">
+                  {listaSheet.map((item, i) => (
+                    <div key={i} onClick={item.onClick ?? undefined}
+                      className={`flex items-center justify-between py-2 border-b border-cobeb-border gap-2 ${
+                        item.onClick ? 'cursor-pointer -mx-1 px-1 rounded-lg hover:bg-cobeb-sky/60 transition-colors' : ''
+                      }`}>
+                      <div className="min-w-0">
+                        <p className="text-sm text-cobeb-text truncate">{item.label}</p>
+                        {item.sub && <p className="text-[10px] text-slate-400">{item.sub}</p>}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <div className="text-right">
+                          <span className="text-sm font-semibold text-cobeb-navy block">{fmtR$(item.valor)}</span>
+                          {item.pallets != null && (
+                            <span className="text-[10px] text-slate-400">
+                              {item.pallets.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} plt
+                            </span>
+                          )}
+                        </div>
+                        {item.onClick && <ChevronRight size={14} className="text-slate-400" />}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t-2 border-cobeb-navy/20">
+                  <span className="text-sm font-bold text-cobeb-text">Total</span>
+                  <div className="text-right">
+                    <span className="text-sm font-bold text-cobeb-navy block">{fmtR$(totalSheet)}</span>
+                    {totalPallets != null && (
+                      <span className="text-[10px] text-slate-400">
+                        {totalPallets.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} plt
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+
+            <button onClick={fecharDetalhe}
+              className="w-full bg-[#EBF5FF] border border-cobeb-border text-slate-500 font-semibold py-3 rounded-xl text-sm">
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Estilos ───────────────────────────────────────────────────────────────────
 
 const selCls   = 'bg-white border border-cobeb-border rounded-xl px-3 py-2 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue appearance-none cursor-pointer w-full'
@@ -1332,6 +1647,9 @@ export default function Dashboard({ mode = 'armazem' }) {
   const [planejadoMap,        setPlanejadoMap]        = useState({})
   const [pedPorDia,           setPedPorDia]           = useState({})
   const [realizadoViagens,    setRealizadoViagens]    = useState([])
+  const [rawPeds,             setRawPeds]             = useState([])
+  const [precosMap,           setPrecosMap]           = useState({ Pratic: {}, Cheia: {} })
+  const [catMap,              setCatMap]              = useState({})
 
   // opções dos filtros
   const [optUnidades,  setOptUnidades]  = useState([])
@@ -1354,13 +1672,15 @@ export default function Dashboard({ mode = 'armazem' }) {
   // opções dos selects — carregadas uma vez
   useEffect(() => {
     async function loadOpts() {
-      const [{ data: u }, { data: f }, { data: c }, { data: turnData }, { data: todoCav }, { data: todoCar }] = await Promise.all([
+      const [{ data: u }, { data: f }, { data: c }, { data: turnData }, { data: todoCav }, { data: todoCar }, { data: precosData }, { data: catData }] = await Promise.all([
         supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
         supabase.from('unidades').select('id, nome, codigo_ambev').eq('tipo', 'fabrica').eq('ativo', true).order('nome'),
         supabase.from('cavalos').select('id, placa, tipo').eq('ativo', true).order('placa'),
         supabase.from('turnos').select('unidade_id, nome, hora_inicio, hora_fim').eq('ativo', true),
         supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('carretas').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
+        supabase.from('precos_fabrica').select('codigo, tabela, preco'),
+        supabase.from('produtos_catalogo').select('codigo, descricao, tipo_marca, caixas_pallet'),
       ])
       if (u) setOptUnidades(u)
       if (f) setOptFabricas(f)
@@ -1374,6 +1694,19 @@ export default function Dashboard({ mode = 'armazem' }) {
           tMap[t.unidade_id].push(t)
         })
         setTurnosMap(tMap)
+      }
+      if (precosData) {
+        const pMap = { Pratic: {}, Cheia: {} }
+        precosData.forEach(p => {
+          if (!pMap[p.tabela]) pMap[p.tabela] = {}
+          pMap[p.tabela][p.codigo] = p.preco
+        })
+        setPrecosMap(pMap)
+      }
+      if (catData) {
+        const cMap = {}
+        catData.forEach(c => { cMap[c.codigo] = c })
+        setCatMap(cMap)
       }
     }
     loadOpts()
@@ -1464,7 +1797,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         .order('dt_saida_revenda'),
       supabase
         .from('pedidos')
-        .select('data_puxada, qtde_pallets')
+        .select('data_puxada, qtde_pallets, cod_produto, status, viagem_id, codigo_fabrica, unidade_id')
         .gte('data_puxada', dataInicio)
         .lte('data_puxada', dataFim)
         .not('qtde_pallets', 'is', null)
@@ -1488,6 +1821,7 @@ export default function Dashboard({ mode = 'armazem' }) {
       ppdMap[iso] = (ppdMap[iso] || 0) + (p.qtde_pallets || 0)
     })
     setPedPorDia(ppdMap)
+    setRawPeds(rawPedsData ?? [])
     setRealizadoViagens(realizadoRaw ?? [])
 
     const vids = (vData ?? []).map(v => v.id)
@@ -1862,6 +2196,16 @@ export default function Dashboard({ mode = 'armazem' }) {
                   planejadoMap={planejadoMap}
                   pedPorDia={pedPorDia}
                   realizadoViagens={realizadoViagens}
+                />
+                <GraficoValorFabrica
+                  rawPeds={rawPeds}
+                  agrupamento={filtroAgrupamento}
+                  filtros={descFiltros}
+                  filtroUnidade={filtroUnidade}
+                  filtroFabricaCodAmb={filtroFabrica ? (optFabricas.find(f => f.id === filtroFabrica)?.codigo_ambev ?? null) : null}
+                  catMap={catMap}
+                  precosMap={precosMap}
+                  optUnidades={optUnidades}
                 />
                 <GraficoStatusFrota
                   todoCavalos={todoCavalos}
