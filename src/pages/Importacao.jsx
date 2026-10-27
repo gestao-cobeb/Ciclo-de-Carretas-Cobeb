@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Upload, FileSpreadsheet, Trash2, RefreshCw,
-  AlertCircle, CheckCircle2, X, Database, AlertTriangle, Package, Download,
+  AlertCircle, CheckCircle2, X, Database, AlertTriangle, Package, Download, Tag,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import AdminLayout from '../components/AdminLayout'
@@ -75,14 +75,25 @@ export default function Importacao() {
   const [baixandoBase,     setBaixandoBase]     = useState(null)
   const [baixandoCatalogo, setBaixandoCatalogo] = useState(null)
 
+  // Tabela de Preços Fábrica
+  const fileRefPreco = useRef(null)
+  const [infoPreco,        setInfoPreco]        = useState(null) // { total, importado_em }
+  const [pendingFilePreco, setPendingFilePreco] = useState(null)
+  const [fileErrorPreco,   setFileErrorPreco]   = useState('')
+  const [importingPreco,   setImportingPreco]   = useState(false)
+  const [importResultPreco,setImportResultPreco]= useState(null)
+  const [confirmarDelPreco,setConfirmarDelPreco]= useState(false)
+  const [excluindoPreco,   setExcluindoPreco]   = useState(false)
+
   useEffect(() => { carregar() }, [])
 
   async function carregar() {
     setLoading(true)
-    const [{ data: peds }, { data: unis }, { data: prods }] = await Promise.all([
+    const [{ data: peds }, { data: unis }, { data: prods }, { count: precosCount, data: precosData }] = await Promise.all([
       supabase.from('pedidos').select('arquivo_origem, data_puxada, viagem_id, importado_em, status'),
       supabase.from('unidades').select('id, nome, codigo, codigo_ambev, cidade, tipo').order('nome'),
       supabase.from('produtos_catalogo').select('arquivo_origem, importado_em'),
+      supabase.from('precos_fabrica').select('importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
     ])
 
     const map = {}
@@ -127,6 +138,8 @@ export default function Importacao() {
         prodMap[p.arquivo_origem].importado_em = p.importado_em
     })
     setBasesProd(Object.values(prodMap).sort((a, b) => (b.arquivo_origem ?? '').localeCompare(a.arquivo_origem ?? '')))
+
+    setInfoPreco(precosCount ? { total: precosCount, importado_em: precosData?.[0]?.importado_em ?? null } : null)
 
     setLoading(false)
   }
@@ -401,6 +414,83 @@ export default function Importacao() {
     await supabase.from('produtos_catalogo').delete().eq('arquivo_origem', confirmarDelProd.arquivo_origem)
     setConfirmarDelProd(null)
     setExcluindoProd(false)
+    await carregar()
+  }
+
+  // ── tabela de preços fábrica ──────────────────────────────────────────────────
+
+  function handleFileChangePreco(e) {
+    const file = e.target.files?.[0]
+    if (fileRefPreco.current) fileRefPreco.current.value = ''
+    setFileErrorPreco(''); setImportResultPreco(null); setPendingFilePreco(null)
+    if (!file) return
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.XLSX')) {
+      setFileErrorPreco('Selecione um arquivo .xlsx')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = ev => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array', cellDates: false })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true })
+        // primeiras 2 linhas são cabeçalho duplo
+        const dataRows = rows.slice(2).filter(r => r[0] && String(r[2]).trim() === 'Pratic')
+        if (!dataRows.length) { setFileErrorPreco('Nenhuma linha da tabela Pratic encontrada.'); return }
+        // para cada código, manter apenas a linha com maior data_inicio (col 4)
+        const byCode = {}
+        dataRows.forEach(r => {
+          const cod  = String(r[0]).trim()
+          const ini  = Number(r[4]) || 0
+          if (!byCode[cod] || ini > byCode[cod].ini) byCode[cod] = { row: r, ini }
+        })
+        const filtered = Object.values(byCode).map(({ row }) => row)
+        setPendingFilePreco({ name: file.name, data: filtered, count: filtered.length })
+      } catch {
+        setFileErrorPreco('Erro ao ler o arquivo.')
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  async function handleImportPreco() {
+    if (!pendingFilePreco) return
+    setImportingPreco(true); setImportResultPreco(null)
+    try {
+      const now = new Date().toISOString()
+      const records = pendingFilePreco.data.map(r => ({
+        codigo:        String(r[0]).trim(),
+        nome:          String(r[1] ?? '').trim(),
+        preco:         parseFloat(r[6]) || null,
+        data_vigencia: excelSerial(r[4]),
+        importado_em:  now,
+        importado_por: profile?.id,
+      }))
+
+      // substitui tudo: apaga e reinsere
+      const { error: delErr } = await supabase.from('precos_fabrica').delete().neq('codigo', '')
+      if (delErr) throw delErr
+
+      for (const batch of chunk(records, 500)) {
+        const { error } = await supabase.from('precos_fabrica').insert(batch)
+        if (error) throw error
+      }
+
+      setImportResultPreco({ ok: true, total: records.length })
+      setPendingFilePreco(null)
+      await carregar()
+    } catch (err) {
+      setImportResultPreco({ ok: false, msg: err.message || 'Erro ao importar.' })
+    } finally {
+      setImportingPreco(false)
+    }
+  }
+
+  async function excluirTabelaPreco() {
+    setExcluindoPreco(true)
+    await supabase.from('precos_fabrica').delete().neq('codigo', '')
+    setConfirmarDelPreco(false)
+    setExcluindoPreco(false)
     await carregar()
   }
 
@@ -768,6 +858,93 @@ export default function Importacao() {
         )}
       </div>
 
+      {/* ── Seção: Tabela de Preços Fábrica ── */}
+      <div className="max-w-lg mx-auto px-4 pb-8 space-y-5">
+
+        <div className="bg-white rounded-2xl border border-cobeb-border overflow-hidden">
+          <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-cobeb-border">
+            <Tag size={16} className="text-cobeb-yellow" />
+            <span className="text-cobeb-text text-sm font-semibold">Importar Tabela de Preços Fábrica</span>
+          </div>
+          <div className="p-4 space-y-3">
+            <input ref={fileRefPreco} type="file" accept=".xlsx" onChange={handleFileChangePreco} className="hidden" />
+
+            {!pendingFilePreco ? (
+              <button
+                onClick={() => fileRefPreco.current?.click()}
+                className="w-full border-2 border-dashed border-cobeb-border hover:border-orange-500/50 rounded-xl py-6 flex flex-col items-center gap-2 transition-colors group"
+              >
+                <Upload size={18} className="text-slate-500 group-hover:text-cobeb-yellow transition-colors" />
+                <span className="text-slate-500 text-sm">Selecionar tabela de preços...</span>
+                <span className="text-slate-600 text-xs">Tabela Pratic · Substitui a importação anterior</span>
+              </button>
+            ) : (
+              <div className="bg-[#EBF5FF] rounded-xl p-3.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <Tag size={16} className="text-cobeb-yellow shrink-0" />
+                  <div>
+                    <p className="text-cobeb-text text-sm font-medium">{pendingFilePreco.name}</p>
+                    <p className="text-slate-500 text-xs">{pendingFilePreco.count.toLocaleString('pt-BR')} produtos (Pratic)</p>
+                  </div>
+                </div>
+                <button onClick={() => { setPendingFilePreco(null); setImportResultPreco(null) }} className="text-slate-500 hover:text-slate-400">
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+
+            {fileErrorPreco && (
+              <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/10 rounded-xl px-4 py-3">
+                <AlertCircle size={13} className="shrink-0" />{fileErrorPreco}
+              </div>
+            )}
+
+            {importResultPreco && (
+              <div className={`rounded-xl px-4 py-3 text-xs ${importResultPreco.ok ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                {importResultPreco.ok ? (
+                  <div className="flex items-center gap-1.5 text-green-400 font-semibold">
+                    <CheckCircle2 size={13} />
+                    {importResultPreco.total.toLocaleString('pt-BR')} preços importados com sucesso
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-red-400">
+                    <AlertCircle size={13} className="shrink-0" />{importResultPreco.msg}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {pendingFilePreco && (
+              <button
+                onClick={handleImportPreco}
+                disabled={importingPreco}
+                className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white text-sm font-semibold rounded-xl py-3 transition-colors flex items-center justify-center gap-2"
+              >
+                {importingPreco
+                  ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Importando {pendingFilePreco.count.toLocaleString('pt-BR')} preços...</>
+                  : <><Upload size={15} />Importar {pendingFilePreco.count.toLocaleString('pt-BR')} preços</>}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {infoPreco && (
+          <div className="bg-white rounded-2xl border border-cobeb-border px-4 py-3 flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-cobeb-text text-sm font-semibold">Tabela de Preços Fábrica</p>
+              <p className="text-slate-500 text-xs mt-0.5">{infoPreco.total.toLocaleString('pt-BR')} produtos · Importado em: {ptTs(infoPreco.importado_em)}</p>
+            </div>
+            <button
+              onClick={() => setConfirmarDelPreco(true)}
+              title="Excluir tabela de preços"
+              className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors shrink-0"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
+      </div>
+
       {/* Modal confirmar exclusão */}
       {confirmarDel && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
@@ -831,6 +1008,36 @@ export default function Importacao() {
               <button onClick={excluirBaseProd} disabled={excluindoProd}
                 className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-4 rounded-2xl text-sm transition-colors">
                 {excluindoProd ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal confirmar exclusão — tabela de preços fábrica */}
+      {confirmarDelPreco && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
+          <div className="w-full max-w-lg mx-auto bg-white rounded-t-3xl p-6 space-y-5">
+            <div className="w-10 h-1 bg-[#1E3A5F] rounded-full mx-auto" />
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} className="text-red-400" />
+              </div>
+              <div>
+                <p className="text-cobeb-text font-semibold text-base">Excluir tabela de preços</p>
+                <p className="text-slate-500 text-sm mt-2">
+                  Todos os <span className="text-red-400 font-semibold">{infoPreco?.total.toLocaleString('pt-BR')} preços</span> serão excluídos permanentemente.
+                </p>
+                <p className="text-red-400 text-xs mt-2 font-medium">Esta ação não pode ser desfeita.</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmarDelPreco(false)}
+                className="flex-1 bg-[#EBF5FF] border border-cobeb-border text-slate-400 font-semibold py-4 rounded-2xl text-sm">
+                Cancelar
+              </button>
+              <button onClick={excluirTabelaPreco} disabled={excluindoPreco}
+                className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-4 rounded-2xl text-sm transition-colors">
+                {excluindoPreco ? 'Excluindo...' : 'Excluir'}
               </button>
             </div>
           </div>
