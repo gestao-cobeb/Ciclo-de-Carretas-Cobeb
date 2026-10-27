@@ -1361,7 +1361,8 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
       const caixas = p.qtde_skus || 0
       const row    = precoAtual[p.cod_produto]
       if (!row?.preco_total || !caixas) return 0
-      return caixas * row.preco_total
+      const fator = /^01[78]/.test(p.embalagem ?? '') ? 2 : 1
+      return caixas * fator * row.preco_total
     }
 
     const getKey = iso => {
@@ -1417,7 +1418,8 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
       if (!row?.preco_total) return
       const caixas = p.qtde_skus || 0
       if (!caixas) return
-      const valor  = caixas * row.preco_total
+      const fator  = /^01[78]/.test(p.embalagem ?? '') ? 2 : 1
+      const valor  = caixas * fator * row.preco_total
       if (valor <= 0) return
       const tipo = cat?.tipo_marca || 'Sem classificação'
       porTipoMap[tipo] = (porTipoMap[tipo] ?? 0) + valor
@@ -1685,7 +1687,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         supabase.from('turnos').select('unidade_id, nome, hora_inicio, hora_fim').eq('ativo', true),
         supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('carretas').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
-        supabase.from('precos_fabrica').select('codigo, tabela, preco_total').order('data_vigencia', { ascending: false }).limit(10000),
+        supabase.from('precos_fabrica').select('codigo, tabela, preco_total').not('data_vigencia', 'is', null).order('data_vigencia', { ascending: false }).limit(10000),
       ])
       if (u) setOptUnidades(u)
       if (f) setOptFabricas(f)
@@ -1800,7 +1802,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         .order('dt_saida_revenda'),
       supabase
         .from('pedidos')
-        .select('data_puxada, qtde_pallets, qtde_skus, cod_produto, status, viagem_id, codigo_fabrica, unidade_id')
+        .select('data_puxada, qtde_pallets, qtde_skus, embalagem, cod_produto, status, viagem_id, codigo_fabrica, unidade_id')
         .gte('data_puxada', dataInicio)
         .lte('data_puxada', dataFim)
         .not('qtde_pallets', 'is', null)
