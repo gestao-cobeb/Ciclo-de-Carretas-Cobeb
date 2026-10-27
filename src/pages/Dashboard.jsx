@@ -1358,10 +1358,10 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
 
   const data = useMemo(() => {
     const calcValor = p => {
-      const cat   = catMap[p.cod_produto]
-      const preco = precoAtual[p.cod_produto]
-      if (!cat?.caixas_pallet || !preco) return 0
-      return (p.qtde_pallets || 0) * cat.caixas_pallet * preco
+      const caixas = p.qtde_skus || 0
+      const row    = precoAtual[p.cod_produto]
+      if (!row?.preco || !caixas) return 0
+      return caixas * (row.preco + (row.ipi || 0) + (row.icms_revenda || 0) + (row.base_calc || 0) * 0.02)
     }
 
     const getKey = iso => {
@@ -1412,15 +1412,17 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
     const items      = []
 
     pedsPeriodo.forEach(p => {
-      const cat   = catMap[p.cod_produto]
-      const preco = precoAtual[p.cod_produto]
-      if (!cat?.caixas_pallet || !preco) return
-      const valor = (p.qtde_pallets || 0) * cat.caixas_pallet * preco
+      const cat    = catMap[p.cod_produto]
+      const row    = precoAtual[p.cod_produto]
+      if (!row?.preco) return
+      const caixas = p.qtde_skus || 0
+      if (!caixas) return
+      const valor  = caixas * (row.preco + (row.ipi || 0) + (row.icms_revenda || 0) + (row.base_calc || 0) * 0.02)
       if (valor <= 0) return
-      const tipo = cat.tipo_marca || 'Sem classificação'
+      const tipo = cat?.tipo_marca || 'Sem classificação'
       porTipoMap[tipo] = (porTipoMap[tipo] ?? 0) + valor
       totalValor += valor
-      items.push({ unidade_id: p.unidade_id, tipo_marca: tipo, cod_produto: p.cod_produto, descricao: cat.descricao || p.cod_produto, valor, pallets: p.qtde_pallets || 0 })
+      items.push({ unidade_id: p.unidade_id, tipo_marca: tipo, cod_produto: p.cod_produto, descricao: cat?.descricao || p.cod_produto, valor, caixas })
     })
 
     const porTipo = Object.entries(porTipoMap).sort(([, a], [, b]) => b - a).map(([tipo, valor]) => ({ tipo, valor }))
@@ -1445,21 +1447,21 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
     if (!detalhe?.items?.length || !drillTipo || !drillUnidade) return []
     const map = {}
     detalhe.items.filter(i => i.tipo_marca === drillTipo && i.unidade_id === drillUnidade).forEach(i => {
-      if (!map[i.cod_produto]) map[i.cod_produto] = { descricao: i.descricao, valor: 0, pallets: 0 }
-      map[i.cod_produto].valor   += i.valor
-      map[i.cod_produto].pallets += i.pallets
+      if (!map[i.cod_produto]) map[i.cod_produto] = { descricao: i.descricao, valor: 0, caixas: 0 }
+      map[i.cod_produto].valor  += i.valor
+      map[i.cod_produto].caixas += i.caixas
     })
-    return Object.entries(map).sort(([, a], [, b]) => b.valor - a.valor).map(([cod, v]) => ({ cod, descricao: v.descricao, valor: v.valor, pallets: v.pallets }))
+    return Object.entries(map).sort(([, a], [, b]) => b.valor - a.valor).map(([cod, v]) => ({ cod, descricao: v.descricao, valor: v.valor, caixas: v.caixas }))
   })()
 
   const nivelAtual     = drillUnidade ? 3 : drillTipo ? 2 : 1
   const listaSheet     = nivelAtual === 3
-    ? porProduto.map(p  => ({ label: p.descricao, sub: p.cod,  valor: p.valor, pallets: p.pallets, onClick: null }))
+    ? porProduto.map(p  => ({ label: p.descricao, sub: p.cod,  valor: p.valor, caixas: p.caixas, onClick: null }))
     : nivelAtual === 2
       ? porUnidade.map(u => ({ label: u.nome,      sub: null,  valor: u.valor, onClick: () => setDrillUnidade(u.id) }))
       : (detalhe?.porTipo ?? []).map(t => ({ label: t.tipo,   sub: null, valor: t.valor, onClick: () => setDrillTipo(t.tipo) }))
   const totalSheet     = listaSheet.reduce((s, i) => s + i.valor, 0)
-  const totalPallets   = nivelAtual === 3 ? listaSheet.reduce((s, i) => s + (i.pallets ?? 0), 0) : null
+  const totalCaixas    = nivelAtual === 3 ? listaSheet.reduce((s, i) => s + (i.caixas ?? 0), 0) : null
   const tituloSheet    = drillUnidade
     ? (porUnidade.find(u => u.id === drillUnidade)?.nome ?? 'Unidade')
     : (drillTipo ?? (detalhe?.drillMode === 'programado' ? 'Valor Programado' : 'Valor Puxado'))
@@ -1587,9 +1589,9 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
                       <div className="flex items-center gap-1 shrink-0">
                         <div className="text-right">
                           <span className="text-sm font-semibold text-cobeb-navy block">{fmtR$(item.valor)}</span>
-                          {item.pallets != null && (
+                          {item.caixas != null && (
                             <span className="text-[10px] text-slate-400">
-                              {item.pallets.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} plt
+                              {item.caixas.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} cx
                             </span>
                           )}
                         </div>
@@ -1602,9 +1604,9 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
                   <span className="text-sm font-bold text-cobeb-text">Total</span>
                   <div className="text-right">
                     <span className="text-sm font-bold text-cobeb-navy block">{fmtR$(totalSheet)}</span>
-                    {totalPallets != null && (
+                    {totalCaixas != null && (
                       <span className="text-[10px] text-slate-400">
-                        {totalPallets.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} plt
+                        {totalCaixas.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} cx
                       </span>
                     )}
                   </div>
@@ -1679,7 +1681,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         supabase.from('turnos').select('unidade_id, nome, hora_inicio, hora_fim').eq('ativo', true),
         supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('carretas').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
-        supabase.from('precos_fabrica').select('codigo, tabela, preco'),
+        supabase.from('precos_fabrica').select('codigo, tabela, preco, ipi, icms_revenda, base_calc'),
         supabase.from('produtos_catalogo').select('codigo, descricao, tipo_marca, caixas_pallet'),
       ])
       if (u) setOptUnidades(u)
@@ -1699,7 +1701,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         const pMap = { Pratic: {}, Cheia: {} }
         precosData.forEach(p => {
           if (!pMap[p.tabela]) pMap[p.tabela] = {}
-          pMap[p.tabela][p.codigo] = p.preco
+          pMap[p.tabela][p.codigo] = { preco: p.preco, ipi: p.ipi, icms_revenda: p.icms_revenda, base_calc: p.base_calc }
         })
         setPrecosMap(pMap)
       }
@@ -1797,7 +1799,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         .order('dt_saida_revenda'),
       supabase
         .from('pedidos')
-        .select('data_puxada, qtde_pallets, cod_produto, status, viagem_id, codigo_fabrica, unidade_id')
+        .select('data_puxada, qtde_pallets, qtde_skus, cod_produto, status, viagem_id, codigo_fabrica, unidade_id')
         .gte('data_puxada', dataInicio)
         .lte('data_puxada', dataFim)
         .not('qtde_pallets', 'is', null)
