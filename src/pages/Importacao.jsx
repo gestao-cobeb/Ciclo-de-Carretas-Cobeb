@@ -475,10 +475,24 @@ export default function Importacao() {
         importado_por: profile?.id,
       }))
 
-      // remove duplicatas internas por (codigo, tabela, data_vigencia)
-      const byKey = {}
-      rawRecords.forEach(r => { byKey[`${r.codigo}|${r.tabela}|${r.data_vigencia ?? ''}`] = r })
-      const records = Object.values(byKey)
+      // agrupa por (codigo, tabela, data_vigencia) e calcula média dos valores numéricos
+      const grupos = {}
+      rawRecords.forEach(r => {
+        const key = `${r.codigo}|${r.tabela}|${r.data_vigencia ?? ''}`
+        if (!grupos[key]) grupos[key] = { base: r, nums: [] }
+        grupos[key].nums.push({ preco: r.preco, ipi: r.ipi, icms_revenda: r.icms_revenda, base_calc: r.base_calc })
+      })
+      const avg = (arr, field) => {
+        const vals = arr.map(n => n[field]).filter(v => v != null)
+        return vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : null
+      }
+      const records = Object.values(grupos).map(({ base, nums }) => ({
+        ...base,
+        preco:        avg(nums, 'preco'),
+        ipi:          avg(nums, 'ipi'),
+        icms_revenda: avg(nums, 'icms_revenda'),
+        base_calc:    avg(nums, 'base_calc'),
+      }))
 
       // substitui tudo: apaga e reinsere
       const { error: delErr } = await supabase.from('precos_fabrica').delete().neq('codigo', '')
