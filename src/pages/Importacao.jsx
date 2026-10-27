@@ -434,23 +434,30 @@ export default function Importacao() {
         const wb = XLSX.read(ev.target.result, { type: 'array', cellDates: false })
         const ws = wb.Sheets[wb.SheetNames[0]]
         const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true })
+
+        // Normaliza o valor da coluna Tabela para 'Pratic' ou 'Cheia' independente
+        // de espaços, espaços não-quebráveis (U+00A0) ou diferenças de caixa.
+        const normTabela = s => {
+          const t = String(s ?? '').replace(/[\s ]+/g, '')
+          if (/pratic/i.test(t)) return 'Pratic'
+          if (/cheia/i.test(t))  return 'Cheia'
+          return null
+        }
+
         // primeiras 2 linhas são cabeçalho duplo; mantém Pratic e Cheia
-        const dataRows = rows.slice(2).filter(r => {
-          const tabela = String(r[2]).trim()
-          return r[0] && (tabela === 'Pratic' || tabela === 'Cheia')
-        })
+        const dataRows = rows.slice(2).filter(r => r[0] && normTabela(r[2]) !== null)
         if (!dataRows.length) { setFileErrorPreco('Nenhuma linha Pratic ou Cheia encontrada.'); return }
         // para cada (código, tabela), manter a linha com maior data_inicio (col 4)
         const byCodeTabela = {}
         dataRows.forEach(r => {
           const cod    = String(r[0]).trim()
-          const tabela = String(r[2]).trim()
+          const tabela = normTabela(r[2])
           const ini    = Number(r[4]) || 0
           const key    = `${cod}|${tabela}`
-          if (!byCodeTabela[key] || ini > byCodeTabela[key].ini) byCodeTabela[key] = { row: r, ini }
+          if (!byCodeTabela[key] || ini > byCodeTabela[key].ini) byCodeTabela[key] = { row: r, ini, tabela }
         })
-        const filtered   = Object.values(byCodeTabela).map(({ row }) => row)
-        const uniqueProds = new Set(filtered.map(r => String(r[0]).trim())).size
+        const filtered    = Object.values(byCodeTabela)
+        const uniqueProds = new Set(filtered.map(({ row }) => String(row[0]).trim())).size
         setPendingFilePreco({ name: file.name, data: filtered, count: uniqueProds, rowCount: filtered.length })
       } catch {
         setFileErrorPreco('Erro ao ler o arquivo.')
@@ -464,10 +471,10 @@ export default function Importacao() {
     setImportingPreco(true); setImportResultPreco(null)
     try {
       const now = new Date().toISOString()
-      const records = pendingFilePreco.data.map(r => ({
+      const records = pendingFilePreco.data.map(({ row: r, tabela }) => ({
         codigo:        String(r[0]).trim(),
         nome:          String(r[1] ?? '').trim(),
-        tabela:        String(r[2]).trim(),
+        tabela,
         preco:         parseFloat(r[6]) || null,
         data_vigencia: excelSerial(r[4]),
         importado_em:  now,
