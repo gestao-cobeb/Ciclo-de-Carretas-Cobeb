@@ -1674,7 +1674,7 @@ export default function Dashboard({ mode = 'armazem' }) {
   // opções dos selects — carregadas uma vez
   useEffect(() => {
     async function loadOpts() {
-      const [{ data: u }, { data: f }, { data: c }, { data: turnData }, { data: todoCav }, { data: todoCar }, { data: precosData }, { data: catData }] = await Promise.all([
+      const [{ data: u }, { data: f }, { data: c }, { data: turnData }, { data: todoCav }, { data: todoCar }, { data: precosData }] = await Promise.all([
         supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
         supabase.from('unidades').select('id, nome, codigo_ambev').eq('tipo', 'fabrica').eq('ativo', true).order('nome'),
         supabase.from('cavalos').select('id, placa, tipo').eq('ativo', true).order('placa'),
@@ -1682,7 +1682,6 @@ export default function Dashboard({ mode = 'armazem' }) {
         supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('carretas').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('precos_fabrica').select('codigo, tabela, preco, ipi, icms_revenda, base_calc').order('data_vigencia', { ascending: false }).limit(10000),
-        supabase.from('produtos_catalogo').select('codigo, descricao, tipo_marca, caixas_pallet').limit(5000),
       ])
       if (u) setOptUnidades(u)
       if (f) setOptFabricas(f)
@@ -1707,11 +1706,6 @@ export default function Dashboard({ mode = 'armazem' }) {
           }
         })
         setPrecosMap(pMap)
-      }
-      if (catData) {
-        const cMap = {}
-        catData.forEach(c => { cMap[c.codigo] = c })
-        setCatMap(cMap)
       }
     }
     loadOpts()
@@ -1807,7 +1801,8 @@ export default function Dashboard({ mode = 'armazem' }) {
         .lte('data_puxada', dataFim)
         .not('qtde_pallets', 'is', null)
         .gt('qtde_pallets', 0)
-        .neq('status', 'cancelado'),
+        .neq('status', 'cancelado')
+        .limit(10000),
       supabase
         .from('pedidos')
         .select('data_puxada, numero_pedido, unidade_id')
@@ -1828,6 +1823,20 @@ export default function Dashboard({ mode = 'armazem' }) {
     setPedPorDia(ppdMap)
     setRawPeds(rawPedsData ?? [])
     setRealizadoViagens(realizadoRaw ?? [])
+
+    // catálogo carregado sob demanda: só os SKUs do período atual
+    const uniqueSkus = [...new Set((rawPedsData ?? []).map(p => p.cod_produto).filter(Boolean))]
+    if (uniqueSkus.length) {
+      const { data: catData } = await supabase
+        .from('produtos_catalogo')
+        .select('codigo, descricao, tipo_marca, caixas_pallet')
+        .in('codigo', uniqueSkus)
+      if (catData) {
+        const cMap = {}
+        catData.forEach(c => { cMap[c.codigo] = c })
+        setCatMap(cMap)
+      }
+    }
 
     const vids = (vData ?? []).map(v => v.id)
 
