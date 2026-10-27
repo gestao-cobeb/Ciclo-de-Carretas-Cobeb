@@ -1360,8 +1360,8 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
     const calcValor = p => {
       const caixas = p.qtde_skus || 0
       const row    = precoAtual[p.cod_produto]
-      if (!row?.preco || !caixas) return 0
-      return caixas * (row.preco + (row.ipi || 0) + (row.icms_revenda || 0) + (row.base_calc || 0) * 0.02)
+      if (!row?.preco_total || !caixas) return 0
+      return caixas * row.preco_total
     }
 
     const getKey = iso => {
@@ -1414,10 +1414,10 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
     pedsPeriodo.forEach(p => {
       const cat    = catMap[p.cod_produto]
       const row    = precoAtual[p.cod_produto]
-      if (!row?.preco) return
+      if (!row?.preco_total) return
       const caixas = p.qtde_skus || 0
       if (!caixas) return
-      const valor  = caixas * (row.preco + (row.ipi || 0) + (row.icms_revenda || 0) + (row.base_calc || 0) * 0.02)
+      const valor  = caixas * row.preco_total
       if (valor <= 0) return
       const tipo = cat?.tipo_marca || 'Sem classificação'
       porTipoMap[tipo] = (porTipoMap[tipo] ?? 0) + valor
@@ -1681,7 +1681,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         supabase.from('turnos').select('unidade_id, nome, hora_inicio, hora_fim').eq('ativo', true),
         supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('carretas').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
-        supabase.from('precos_fabrica').select('codigo, tabela, preco, ipi, icms_revenda, base_calc').order('data_vigencia', { ascending: false }).limit(10000),
+        supabase.from('precos_fabrica').select('codigo, tabela, preco_total').order('data_vigencia', { ascending: false }).limit(10000),
       ])
       if (u) setOptUnidades(u)
       if (f) setOptFabricas(f)
@@ -1702,7 +1702,7 @@ export default function Dashboard({ mode = 'armazem' }) {
           if (!pMap[p.tabela]) pMap[p.tabela] = {}
           // ordem DESC por data_vigencia: primeiro registro = mais recente; não sobrescreve
           if (!pMap[p.tabela][p.codigo]) {
-            pMap[p.tabela][p.codigo] = { preco: p.preco, ipi: p.ipi, icms_revenda: p.icms_revenda, base_calc: p.base_calc }
+            pMap[p.tabela][p.codigo] = { preco_total: p.preco_total }
           }
         })
         setPrecosMap(pMap)
