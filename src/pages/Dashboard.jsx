@@ -1350,7 +1350,9 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
   const [drillTipo,    setDrillTipo]    = useState(null)
   const [drillUnidade, setDrillUnidade] = useState(null)
 
-  const temTabela = Object.keys(precosMap[tabelaPreco] ?? {}).length > 0
+  const temTabela = tabelaPreco === 'Diferença'
+    ? Object.keys(precosMap['Pratic'] ?? {}).length > 0 && Object.keys(precosMap['Cheia'] ?? {}).length > 0
+    : Object.keys(precosMap[tabelaPreco] ?? {}).length > 0
 
   const unidNomeMap = useMemo(() => {
     const m = {}
@@ -1368,9 +1370,16 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
   const data = useMemo(() => {
     const calcValor = p => {
       const caixas = p.qtde_skus || 0
-      const pt = findPreco(precosMap, tabelaPreco, p.cod_produto, p.data_puxada)
-      if (!pt || !caixas) return 0
+      if (!caixas) return 0
       const fator = /^01[78]/.test(p.embalagem ?? '') ? 2 : 1
+      if (tabelaPreco === 'Diferença') {
+        const ptC = findPreco(precosMap, 'Cheia',  p.cod_produto, p.data_puxada)
+        const ptP = findPreco(precosMap, 'Pratic', p.cod_produto, p.data_puxada)
+        if (!ptC || !ptP) return 0
+        return caixas * fator * (ptC - ptP)
+      }
+      const pt = findPreco(precosMap, tabelaPreco, p.cod_produto, p.data_puxada)
+      if (!pt) return 0
       return caixas * fator * pt
     }
 
@@ -1423,12 +1432,20 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
 
     pedsPeriodo.forEach(p => {
       const cat    = catMap[p.cod_produto]
-      const pt = findPreco(precosMap, tabelaPreco, p.cod_produto, p.data_puxada)
-      if (!pt) return
       const caixas = p.qtde_skus || 0
       if (!caixas) return
       const fator  = /^01[78]/.test(p.embalagem ?? '') ? 2 : 1
-      const valor  = caixas * fator * pt
+      let valor
+      if (tabelaPreco === 'Diferença') {
+        const ptC = findPreco(precosMap, 'Cheia',  p.cod_produto, p.data_puxada)
+        const ptP = findPreco(precosMap, 'Pratic', p.cod_produto, p.data_puxada)
+        if (!ptC || !ptP) return
+        valor = caixas * fator * (ptC - ptP)
+      } else {
+        const pt = findPreco(precosMap, tabelaPreco, p.cod_produto, p.data_puxada)
+        if (!pt) return
+        valor = caixas * fator * pt
+      }
       if (valor <= 0) return
       const tipo = cat?.tipo_marca || 'Sem classificação'
       porTipoMap[tipo] = (porTipoMap[tipo] ?? 0) + valor
@@ -1501,10 +1518,12 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
           )}
         </div>
         <div className="flex shrink-0 rounded-xl border border-cobeb-border overflow-hidden">
-          {['Pratic', 'Cheia'].map(t => (
+          {['Pratic', 'Cheia', 'Diferença'].map(t => (
             <button key={t} onClick={() => setTabelaPreco(t)}
               className={`px-3 py-1.5 text-xs font-semibold transition-colors ${
-                tabelaPreco === t ? 'bg-cobeb-navy text-white' : 'bg-white text-slate-500 hover:bg-cobeb-sky'
+                tabelaPreco === t
+                  ? t === 'Diferença' ? 'bg-violet-700 text-white' : 'bg-cobeb-navy text-white'
+                  : 'bg-white text-slate-500 hover:bg-cobeb-sky'
               }`}>
               {t}
             </button>
@@ -1515,18 +1534,18 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
 
       <div className="flex flex-wrap gap-4 mb-3">
         <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
-          <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" />
+          <span className={`w-2.5 h-2.5 rounded-sm inline-block ${tabelaPreco === 'Diferença' ? 'bg-violet-400' : 'bg-amber-400'}`} />
           Programado
         </span>
         <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
-          <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />
+          <span className={`w-2.5 h-2.5 rounded-sm inline-block ${tabelaPreco === 'Diferença' ? 'bg-violet-600' : 'bg-emerald-500'}`} />
           Real
         </span>
       </div>
 
       {!temTabela ? (
         <div className="flex items-center justify-center h-52 text-slate-400 text-sm text-center px-8">
-          Tabela {tabelaPreco} não importada. Acesse Importação de Bases para importar.
+          {tabelaPreco === 'Diferença' ? 'Tabelas Pratic e Cheia precisam estar importadas para exibir a diferença.' : `Tabela ${tabelaPreco} não importada. Acesse Importação de Bases para importar.`}
         </div>
       ) : semDados ? (
         <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
@@ -1541,11 +1560,11 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
               <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={{ stroke: '#BFDBFE' }} angle={-35} textAnchor="end" interval={0} />
               <YAxis tickFormatter={v => fmtR$(v, true)} tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={false} width={62} />
               <Tooltip content={<TooltipValorFabrica />} cursor={{ fill: '#EBF5FF' }} />
-              <Bar dataKey="programado" name="Programado" fill="#F59E0B" radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={p => handleBarClick(p, 'programado')}>
-                <LabelList dataKey="programado" position="top" formatter={v => v ? fmtR$(v, true) : ''} style={{ fontSize: 9, fill: '#92400E', fontWeight: 600 }} />
+              <Bar dataKey="programado" name="Programado" fill={tabelaPreco === 'Diferença' ? '#8B5CF6' : '#F59E0B'} radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={p => handleBarClick(p, 'programado')}>
+                <LabelList dataKey="programado" position="top" formatter={v => v ? fmtR$(v, true) : ''} style={{ fontSize: 9, fill: tabelaPreco === 'Diferença' ? '#5B21B6' : '#92400E', fontWeight: 600 }} />
               </Bar>
-              <Bar dataKey="real" name="Real" fill="#10B981" radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={p => handleBarClick(p, 'real')}>
-                <LabelList dataKey="real" position="top" formatter={v => v ? fmtR$(v, true) : ''} style={{ fontSize: 9, fill: '#065F46', fontWeight: 600 }} />
+              <Bar dataKey="real" name="Real" fill={tabelaPreco === 'Diferença' ? '#7C3AED' : '#10B981'} radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={p => handleBarClick(p, 'real')}>
+                <LabelList dataKey="real" position="top" formatter={v => v ? fmtR$(v, true) : ''} style={{ fontSize: 9, fill: tabelaPreco === 'Diferença' ? '#4C1D95' : '#065F46', fontWeight: 600 }} />
               </Bar>
             </ComposedChart>
           </ResponsiveContainer>
