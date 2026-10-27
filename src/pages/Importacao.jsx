@@ -470,9 +470,10 @@ export default function Importacao() {
         ipi:           parseFloat(r[9])  || null,
         icms_revenda:  parseFloat(r[10]) || null,
         base_calc:     parseFloat(r[17]) || null,
-        preco_total:   parseFloat(r[12]) || null,
-        data_vigencia: excelSerial(r[4]),
-        importado_em:  now,
+        preco_total:      parseFloat(r[12]) || null,
+        data_vigencia:    excelSerial(r[4]),
+        data_fim_vigencia: excelSerial(r[5]),
+        importado_em:     now,
         importado_por: profile?.id,
       }))
 

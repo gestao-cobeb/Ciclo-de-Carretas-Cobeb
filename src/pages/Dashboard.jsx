@@ -1334,14 +1334,23 @@ function TooltipValorFabrica({ active, payload, label }) {
   )
 }
 
+function findPreco(precosMap, tabela, codigo, date) {
+  const rows = precosMap[tabela]?.[codigo] ?? []
+  if (!date) return null
+  const d = date.slice(0, 10)
+  // retorna preco_total da vigência ativa: inicio <= d e (fim > d ou fim em aberto)
+  return rows.find(r =>
+    r.data_vigencia <= d && (r.data_fim_vigencia == null || r.data_fim_vigencia > d)
+  )?.preco_total ?? null
+}
+
 function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, filtroFabricaCodAmb, catMap, precosMap, optUnidades }) {
   const [tabelaPreco, setTabelaPreco] = useState('Pratic')
   const [detalhe,      setDetalhe]      = useState(null)
   const [drillTipo,    setDrillTipo]    = useState(null)
   const [drillUnidade, setDrillUnidade] = useState(null)
 
-  const precoAtual = precosMap[tabelaPreco] ?? {}
-  const temTabela  = Object.keys(precoAtual).length > 0
+  const temTabela = Object.keys(precosMap[tabelaPreco] ?? {}).length > 0
 
   const unidNomeMap = useMemo(() => {
     const m = {}
@@ -1359,10 +1368,10 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
   const data = useMemo(() => {
     const calcValor = p => {
       const caixas = p.qtde_skus || 0
-      const row    = precoAtual[p.cod_produto]
-      if (!row?.preco_total || !caixas) return 0
+      const pt = findPreco(precosMap, tabelaPreco, p.cod_produto, p.data_puxada)
+      if (!pt || !caixas) return 0
       const fator = /^01[78]/.test(p.embalagem ?? '') ? 2 : 1
-      return caixas * fator * row.preco_total
+      return caixas * fator * pt
     }
 
     const getKey = iso => {
@@ -1392,7 +1401,7 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
       ? allKeys.sort((a, b) => { const [da, ma] = a.split('/'); const [db, mb] = b.split('/'); return ma !== mb ? ma.localeCompare(mb) : da.localeCompare(db) })
       : allKeys.sort()
     return sorted.map(key => ({ day: key, programado: progMap[key] || null, real: realMap[key] || null }))
-  }, [pedsFiltrados, agrupamento, precoAtual, catMap])
+  }, [pedsFiltrados, agrupamento, precosMap, tabelaPreco, catMap])
 
   const semDados   = !data?.length || data.every(d => !d.programado && !d.real)
   const totalProg  = data.reduce((s, d) => s + (d.programado ?? 0), 0)
@@ -1414,12 +1423,12 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
 
     pedsPeriodo.forEach(p => {
       const cat    = catMap[p.cod_produto]
-      const row    = precoAtual[p.cod_produto]
-      if (!row?.preco_total) return
+      const pt = findPreco(precosMap, tabelaPreco, p.cod_produto, p.data_puxada)
+      if (!pt) return
       const caixas = p.qtde_skus || 0
       if (!caixas) return
       const fator  = /^01[78]/.test(p.embalagem ?? '') ? 2 : 1
-      const valor  = caixas * fator * row.preco_total
+      const valor  = caixas * fator * pt
       if (valor <= 0) return
       const tipo = cat?.tipo_marca || 'Sem classificação'
       porTipoMap[tipo] = (porTipoMap[tipo] ?? 0) + valor
@@ -1687,7 +1696,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         supabase.from('turnos').select('unidade_id, nome, hora_inicio, hora_fim').eq('ativo', true),
         supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('carretas').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
-        supabase.from('precos_fabrica').select('codigo, tabela, preco_total').not('data_vigencia', 'is', null).order('data_vigencia', { ascending: false }).limit(10000),
+        supabase.from('precos_fabrica').select('codigo, tabela, preco_total, data_vigencia, data_fim_vigencia').not('data_vigencia', 'is', null).order('data_vigencia', { ascending: false }).limit(10000),
       ])
       if (u) setOptUnidades(u)
       if (f) setOptFabricas(f)
@@ -1704,12 +1713,15 @@ export default function Dashboard({ mode = 'armazem' }) {
       }
       if (precosData) {
         const pMap = { Pratic: {}, Cheia: {} }
+        // dados chegam ORDER BY data_vigencia DESC — arrays já ficam em ordem decrescente
         precosData.forEach(p => {
           if (!pMap[p.tabela]) pMap[p.tabela] = {}
-          // ordem DESC por data_vigencia: primeiro registro = mais recente; não sobrescreve
-          if (!pMap[p.tabela][p.codigo]) {
-            pMap[p.tabela][p.codigo] = { preco_total: p.preco_total }
-          }
+          if (!pMap[p.tabela][p.codigo]) pMap[p.tabela][p.codigo] = []
+          pMap[p.tabela][p.codigo].push({
+            data_vigencia:     p.data_vigencia,
+            data_fim_vigencia: p.data_fim_vigencia,
+            preco_total:       p.preco_total,
+          })
         })
         setPrecosMap(pMap)
       }
