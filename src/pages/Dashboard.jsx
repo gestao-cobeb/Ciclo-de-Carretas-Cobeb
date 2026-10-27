@@ -1318,6 +1318,18 @@ function fmtR$(v, compact = false) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+const vertLabel = fill => ({ x, y, width, value }) => {
+  if (!value) return null
+  const cx = x + width / 2
+  const cy = y - 4
+  return (
+    <text x={cx} y={cy} fill={fill} fontSize={9} fontWeight={600}
+      textAnchor="start" transform={`rotate(-90,${cx},${cy})`}>
+      {fmtR$(value, true)}
+    </text>
+  )
+}
+
 function TooltipValorFabrica({ active, payload, label }) {
   if (!active || !payload?.length) return null
   const prog = payload.find(p => p.dataKey === 'programado')?.value
@@ -1561,10 +1573,10 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
               <YAxis tickFormatter={v => fmtR$(v, true)} tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={false} width={62} />
               <Tooltip content={<TooltipValorFabrica />} cursor={{ fill: '#EBF5FF' }} />
               <Bar dataKey="programado" name="Programado" fill={tabelaPreco === 'Diferença' ? '#8B5CF6' : '#F59E0B'} radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={p => handleBarClick(p, 'programado')}>
-                <LabelList dataKey="programado" position="top" angle={-90} offset={4} formatter={v => v ? fmtR$(v, true) : ''} style={{ fontSize: 9, fill: tabelaPreco === 'Diferença' ? '#5B21B6' : '#92400E', fontWeight: 600, textAnchor: 'start' }} />
+                <LabelList dataKey="programado" content={vertLabel(tabelaPreco === 'Diferença' ? '#5B21B6' : '#92400E')} />
               </Bar>
               <Bar dataKey="real" name="Real" fill={tabelaPreco === 'Diferença' ? '#7C3AED' : '#10B981'} radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={p => handleBarClick(p, 'real')}>
-                <LabelList dataKey="real" position="top" angle={-90} offset={4} formatter={v => v ? fmtR$(v, true) : ''} style={{ fontSize: 9, fill: tabelaPreco === 'Diferença' ? '#4C1D95' : '#065F46', fontWeight: 600, textAnchor: 'start' }} />
+                <LabelList dataKey="real" content={vertLabel(tabelaPreco === 'Diferença' ? '#4C1D95' : '#065F46')} />
               </Bar>
             </ComposedChart>
           </ResponsiveContainer>
