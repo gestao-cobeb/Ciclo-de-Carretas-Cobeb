@@ -409,8 +409,14 @@ export default function Viagem() {
         agendamento_id:  agendamento?.id ?? null,
       }
       if (dbOk) {
-        await supabase.from('portaria_atendimentos').insert(portariaAtend)
-        if (agendamento?.id) {
+        const { error: portariaErr } = await supabase.from('portaria_atendimentos').insert(portariaAtend)
+        if (portariaErr) {
+          alert(
+            'Chegada registrada, mas houve um erro ao notificar a portaria.\n' +
+            'Informe à portaria para fazer a entrada manual com a placa ' +
+            (portariaAtend.placa_cavalo ?? '') + '.\n\nDetalhe: ' + portariaErr.message
+          )
+        } else if (agendamento?.id) {
           await supabase.from('agendamentos').update({ status: 'realizado' }).eq('id', agendamento.id)
         }
       } else {
