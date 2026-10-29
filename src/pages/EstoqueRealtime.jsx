@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw, ArrowLeftRight, MapPin } from 'lucide-react'
+import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw, ArrowLeftRight, MapPin, Send } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import MapaRealtime from './MapaRealtime'
@@ -279,6 +279,7 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
   const [savingDestino,    setSavingDestino]    = useState(false)
 
   const [showModalAgendRev, setShowModalAgendRev] = useState(false)
+  const [reenviandoPortaria, setReenviandoPortaria] = useState(false)
 
   // Estado de substituição de produto
   const [substituindo,     setSubstituindo]     = useState(null)  // id do pedido sendo substituído
@@ -381,6 +382,47 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
       setSubNaoEncontrado(false)
     } else {
       setSubNaoEncontrado(true)
+    }
+  }
+
+  async function reenviarParaPortaria() {
+    setReenviandoPortaria(true)
+    const { data: existente } = await supabase
+      .from('portaria_atendimentos')
+      .select('id')
+      .eq('viagem_id', viagem.id)
+      .is('excluido_em', null)
+      .maybeSingle()
+    if (existente) {
+      alert('Já existe um card de portaria ativo para esta viagem.')
+      setReenviandoPortaria(false)
+      return
+    }
+    let unidadeId    = viagem.unidade_descarga_id
+    let agendamentoId = viagem.agendamento_id ?? null
+    if (agendamentoId) {
+      const { data: agend } = await supabase
+        .from('agendamentos').select('revenda_id').eq('id', agendamentoId).maybeSingle()
+      if (agend?.revenda_id) unidadeId = agend.revenda_id
+    }
+    const { error } = await supabase.from('portaria_atendimentos').insert({
+      viagem_id:       viagem.id,
+      unidade_id:      unidadeId,
+      placa_cavalo:    viagem.placa_cavalo  ?? null,
+      placa_carreta:   viagem.placa_carreta ?? null,
+      numero_nf:       viagem.numero_nf,
+      numero_nf_saida: viagem.numero_nf_saida ?? null,
+      agendamento_id:  agendamentoId,
+      status:          'aguardando',
+    })
+    setReenviandoPortaria(false)
+    if (error) {
+      alert('Erro ao reenviar para portaria: ' + error.message)
+    } else {
+      if (agendamentoId) {
+        await supabase.from('agendamentos').update({ status: 'realizado' }).eq('id', agendamentoId)
+      }
+      onRefresh?.()
     }
   }
 
@@ -817,6 +859,20 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
                   >
                     <Pencil size={11} />
                     Definir agendamento revenda
+                  </button>
+                )}
+
+                {/* Reenviar para portaria — só quando chegou e sem card */}
+                {viagem.status === 'aguardando_conferencia' && (
+                  <button
+                    onClick={reenviarParaPortaria}
+                    disabled={reenviandoPortaria}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border hover:border-cobeb-blue hover:bg-blue-50 disabled:opacity-50 px-3 py-1.5 rounded-xl transition-colors"
+                  >
+                    {reenviandoPortaria
+                      ? <div className="w-3 h-3 border border-cobeb-navy/40 border-t-cobeb-navy rounded-full animate-spin" />
+                      : <Send size={11} />}
+                    {reenviandoPortaria ? 'Enviando...' : 'Reenviar para portaria'}
                   </button>
                 )}
 
