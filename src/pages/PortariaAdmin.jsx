@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Trash2, RefreshCw, X, AlertTriangle, CheckCircle, Clock, Truck } from 'lucide-react'
+import { Trash2, RefreshCw, X, AlertTriangle, CheckCircle, Clock, Truck, Send } from 'lucide-react'
 import AdminLayout from '../components/AdminLayout'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -46,6 +46,8 @@ export default function PortariaAdmin() {
   const [filtroData,    setFiltroData]    = useState(isoToday())
   const [confirmarDel,  setConfirmarDel]  = useState(null)
   const [excluindo,     setExcluindo]     = useState(false)
+  const [viagensSemCard, setViagensSemCard] = useState([])
+  const [reenviando,    setReenviando]    = useState(null)
 
   useEffect(() => { carregar() }, [])
 
@@ -56,16 +58,62 @@ export default function PortariaAdmin() {
 
   async function carregar(silent = false) {
     if (!silent) setLoading(true)
-    const [{ data: atends }, { data: unis }] = await Promise.all([
+    const tresDiasAtras = new Date()
+    tresDiasAtras.setDate(tresDiasAtras.getDate() - 3)
+
+    const [{ data: atends }, { data: unis }, { data: viags }] = await Promise.all([
       supabase
         .from('portaria_atendimentos')
         .select('*')
         .order('created_at', { ascending: false }),
       supabase.from('unidades').select('id, nome, cidade').order('nome'),
+      supabase
+        .from('viagens')
+        .select('id, dt_chegada_revenda, numero_nf, numero_nf_saida, unidade_descarga_id, cavalo:cavalos(placa), carreta:carretas(placa)')
+        .eq('status', 'aguardando_conferencia')
+        .gte('dt_chegada_revenda', tresDiasAtras.toISOString())
+        .order('dt_chegada_revenda', { ascending: false }),
     ])
+
     setAtendimentos(atends ?? [])
     setUnidades(unis ?? [])
+
+    // Filtra viagens que não têm card de portaria ativo vinculado
+    const comCard = new Set((atends ?? []).filter(a => a.viagem_id && !a.excluido_em).map(a => a.viagem_id))
+    setViagensSemCard((viags ?? []).filter(v => !comCard.has(v.id)))
+
     if (!silent) setLoading(false)
+  }
+
+  async function reenviarCard(viagem) {
+    setReenviando(viagem.id)
+    const { data: agend } = await supabase
+      .from('agendamentos')
+      .select('id, revenda_id')
+      .eq('viagem_id', viagem.id)
+      .neq('status', 'cancelado')
+      .maybeSingle()
+
+    const unidadeId = agend?.revenda_id ?? viagem.unidade_descarga_id
+    const { error } = await supabase.from('portaria_atendimentos').insert({
+      viagem_id:       viagem.id,
+      unidade_id:      unidadeId,
+      placa_cavalo:    viagem.cavalo?.placa ?? null,
+      placa_carreta:   viagem.carreta?.placa ?? null,
+      numero_nf:       viagem.numero_nf,
+      numero_nf_saida: viagem.numero_nf_saida ?? null,
+      agendamento_id:  agend?.id ?? null,
+      status:          'aguardando',
+    })
+
+    if (error) {
+      alert('Erro ao reenviar card: ' + error.message)
+    } else if (agend?.id) {
+      await supabase.from('agendamentos').update({ status: 'realizado' }).eq('id', agend.id)
+    }
+
+    setReenviando(null)
+    await carregar()
   }
 
   const filtrados = useMemo(() => {
@@ -160,6 +208,43 @@ export default function PortariaAdmin() {
   return (
     <AdminLayout title="Portaria" subheader={filtrosJSX}>
       <div className="max-w-2xl mx-auto px-4 pt-4 pb-8 space-y-4">
+
+        {/* Viagens sem card de portaria — só admin total */}
+        {isAdminTotal && viagensSemCard.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 px-1">
+              <AlertTriangle size={14} className="text-cobeb-yellow shrink-0" />
+              <p className="text-cobeb-yellow text-xs font-semibold uppercase tracking-widest">
+                {viagensSemCard.length} viagem(ns) sem card de portaria
+              </p>
+            </div>
+            {viagensSemCard.map(v => (
+              <div key={v.id} className="bg-amber-50 border border-amber-300 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap mb-1">
+                    <Truck size={13} className="text-amber-500 shrink-0" />
+                    <span className="font-semibold text-sm font-mono text-cobeb-text">{v.cavalo?.placa ?? '—'}</span>
+                    {v.carreta?.placa && <span className="text-slate-500 text-xs font-mono">/ {v.carreta.placa}</span>}
+                    {v.numero_nf && <span className="text-cobeb-yellow text-xs font-mono font-semibold">NF {v.numero_nf}</span>}
+                  </div>
+                  <p className="text-[10px] text-slate-500">
+                    Chegou na revenda: {formatTs(v.dt_chegada_revenda)}
+                  </p>
+                </div>
+                <button
+                  onClick={() => reenviarCard(v)}
+                  disabled={reenviando === v.id}
+                  className="shrink-0 flex items-center gap-1.5 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white text-xs font-bold px-3 py-2 rounded-xl transition-colors"
+                >
+                  {reenviando === v.id
+                    ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                    : <Send size={13} />}
+                  {reenviando === v.id ? 'Enviando...' : 'Reenviar para portaria'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Lista */}
         {loading ? (
