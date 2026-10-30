@@ -477,16 +477,32 @@ export default function Viagem() {
 
   // ── sync offline ──────────────────────────────────────────────────────────
 
+  // Ordem crescente do ciclo — status offline nunca pode regredir um status já avançado online.
+  const STATUS_CYCLE = { em_transito: 1, aguardando_conferencia: 2, concluida: 3 }
+
   async function syncOffline() {
     setSyncing(true)
     try {
       for (const action of getOfflineQueue()) {
-        if (action.type === 'UPDATE_VIAGEM')
-          await supabase.from('viagens').update(action.updates).eq('id', action.viagem_id)
-        else if (action.type === 'INSERT_TAREFA')
+        if (action.type === 'UPDATE_VIAGEM') {
+          const updates = { ...action.updates }
+          if (updates.status) {
+            const { data: current } = await supabase
+              .from('viagens').select('status').eq('id', action.viagem_id).maybeSingle()
+            const curOrder = STATUS_CYCLE[current?.status] ?? 0
+            const newOrder = STATUS_CYCLE[updates.status]  ?? 0
+            if (curOrder > newOrder) {
+              // Ação offline mais antiga que o estado atual — aplica só o campo de timestamp.
+              delete updates.status
+            }
+          }
+          if (Object.keys(updates).length > 0)
+            await supabase.from('viagens').update(updates).eq('id', action.viagem_id)
+        } else if (action.type === 'INSERT_TAREFA') {
           await supabase.from('tarefas').insert(action.tarefa)
-        else if (action.type === 'INSERT_PORTARIA')
+        } else if (action.type === 'INSERT_PORTARIA') {
           await supabase.from('portaria_atendimentos').insert(action.portariaAtend)
+        }
       }
       clearOfflineQueue(); setPendingSync(false)
     } finally { setSyncing(false) }
