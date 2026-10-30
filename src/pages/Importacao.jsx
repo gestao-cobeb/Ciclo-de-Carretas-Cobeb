@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Upload, FileSpreadsheet, Trash2, RefreshCw,
-  AlertCircle, CheckCircle2, X, Database, AlertTriangle, Package, Download, Tag, TrendingUp,
+  AlertCircle, CheckCircle2, X, Database, AlertTriangle, Package, Download, Tag, TrendingUp, ArrowLeftRight,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import AdminLayout from '../components/AdminLayout'
@@ -75,6 +75,16 @@ export default function Importacao() {
   const [baixandoBase,     setBaixandoBase]     = useState(null)
   const [baixandoCatalogo, setBaixandoCatalogo] = useState(null)
 
+  // De-Para Zero
+  const fileRefDeParaZero = useRef(null)
+  const [infoDeParaZero,         setInfoDeParaZero]         = useState(null)
+  const [pendingFileDeParaZero,  setPendingFileDeParaZero]  = useState(null)
+  const [fileErrorDeParaZero,    setFileErrorDeParaZero]    = useState('')
+  const [importingDeParaZero,    setImportingDeParaZero]    = useState(false)
+  const [importResultDeParaZero, setImportResultDeParaZero] = useState(null)
+  const [confirmarDelDeParaZero, setConfirmarDelDeParaZero] = useState(false)
+  const [excluindoDeParaZero,    setExcluindoDeParaZero]    = useState(false)
+
   // Tabela de Demanda
   const fileRefDemanda = useRef(null)
   const [infoDemanda,         setInfoDemanda]         = useState(null) // { total, versao, ano, importado_em }
@@ -99,12 +109,13 @@ export default function Importacao() {
 
   async function carregar() {
     setLoading(true)
-    const [{ data: peds }, { data: unis }, { data: prods }, { count: precosCount, data: precosData }, { count: demandaCount, data: demandaData }] = await Promise.all([
+    const [{ data: peds }, { data: unis }, { data: prods }, { count: precosCount, data: precosData }, { count: demandaCount, data: demandaData }, { count: deParaZeroCount, data: deParaZeroData }] = await Promise.all([
       supabase.from('pedidos').select('arquivo_origem, data_puxada, viagem_id, importado_em, status'),
       supabase.from('unidades').select('id, nome, codigo, codigo_ambev, cidade, tipo').order('nome'),
       supabase.from('produtos_catalogo').select('arquivo_origem, importado_em'),
       supabase.from('precos_fabrica').select('importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
       supabase.from('demanda').select('versao, ano, importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
+      supabase.from('depara_zero').select('importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
     ])
 
     const map = {}
@@ -157,6 +168,7 @@ export default function Importacao() {
       ano:          demandaData?.[0]?.ano ?? null,
       importado_em: demandaData?.[0]?.importado_em ?? null,
     } : null)
+    setInfoDeParaZero(deParaZeroCount ? { total: deParaZeroCount, importado_em: deParaZeroData?.[0]?.importado_em ?? null } : null)
 
     setLoading(false)
   }
@@ -542,6 +554,74 @@ export default function Importacao() {
     await supabase.from('precos_fabrica').delete().neq('codigo', '')
     setConfirmarDelPreco(false)
     setExcluindoPreco(false)
+    await carregar()
+  }
+
+  // ── de-para zero ─────────────────────────────────────────────────────────────
+
+  function handleFileChangeDeParaZero(e) {
+    const file = e.target.files?.[0]
+    if (fileRefDeParaZero.current) fileRefDeParaZero.current.value = ''
+    setFileErrorDeParaZero(''); setImportResultDeParaZero(null); setPendingFileDeParaZero(null)
+    if (!file) return
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.XLSX')) {
+      setFileErrorDeParaZero('Selecione um arquivo .xlsx')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = ev => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array', cellDates: false })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true })
+        const dataRows = rows.slice(1).filter(r => r[2])
+        if (!dataRows.length) { setFileErrorDeParaZero('Arquivo sem dados válidos.'); return }
+        const tipos = [...new Set(dataRows.map(r => String(r[3]).trim()).filter(Boolean))]
+        setPendingFileDeParaZero({ name: file.name, data: dataRows, count: dataRows.length, tipos })
+      } catch {
+        setFileErrorDeParaZero('Erro ao ler o arquivo.')
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  async function handleImportDeParaZero() {
+    if (!pendingFileDeParaZero) return
+    setImportingDeParaZero(true); setImportResultDeParaZero(null)
+    try {
+      const now = new Date().toISOString()
+      const records = pendingFileDeParaZero.data.map(r => ({
+        cod_promax:    r[0] !== '' ? String(r[0]).trim() : null,
+        cod_sap:       r[1] !== '' ? String(r[1]).trim() : null,
+        produto:       String(r[2] ?? '').trim() || null,
+        tipo:          String(r[3] ?? '').trim(),
+        importado_em:  now,
+        importado_por: profile?.id,
+      })).filter(r => r.tipo)
+
+      const { error: delErr } = await supabase.from('depara_zero').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      if (delErr) throw delErr
+
+      for (const batch of chunk(records, 500)) {
+        const { error } = await supabase.from('depara_zero').insert(batch)
+        if (error) throw error
+      }
+
+      setImportResultDeParaZero({ ok: true, total: records.length })
+      setPendingFileDeParaZero(null)
+      await carregar()
+    } catch (err) {
+      setImportResultDeParaZero({ ok: false, msg: err.message || 'Erro ao importar.' })
+    } finally {
+      setImportingDeParaZero(false)
+    }
+  }
+
+  async function excluirDeParaZero() {
+    setExcluindoDeParaZero(true)
+    await supabase.from('depara_zero').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    setConfirmarDelDeParaZero(false)
+    setExcluindoDeParaZero(false)
     await carregar()
   }
 
@@ -1175,6 +1255,92 @@ export default function Importacao() {
             </button>
           </div>
         )}
+
+        {/* ── Card: De-Para Zero ── */}
+        <div className="bg-white rounded-2xl border border-cobeb-border overflow-hidden">
+          <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-cobeb-border">
+            <ArrowLeftRight size={16} className="text-cobeb-yellow" />
+            <span className="text-cobeb-text text-sm font-semibold">Importar De-Para Zero</span>
+          </div>
+          <div className="p-4 space-y-3">
+            <input ref={fileRefDeParaZero} type="file" accept=".xlsx" onChange={handleFileChangeDeParaZero} className="hidden" />
+
+            {!pendingFileDeParaZero ? (
+              <button
+                onClick={() => fileRefDeParaZero.current?.click()}
+                className="w-full border-2 border-dashed border-cobeb-border hover:border-orange-500/50 rounded-xl py-6 flex flex-col items-center gap-2 transition-colors group"
+              >
+                <Upload size={18} className="text-slate-500 group-hover:text-cobeb-yellow transition-colors" />
+                <span className="text-slate-500 text-sm">Selecionar tabela de-para...</span>
+                <span className="text-slate-600 text-xs">DEPARAZERO.xlsx · NAB ZERO e CERVEJA ZERO · Substitui tudo</span>
+              </button>
+            ) : (
+              <div className="bg-[#EBF5FF] rounded-xl p-3.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <ArrowLeftRight size={16} className="text-cobeb-yellow shrink-0" />
+                  <div>
+                    <p className="text-cobeb-text text-sm font-medium">{pendingFileDeParaZero.name}</p>
+                    <p className="text-slate-500 text-xs">
+                      {pendingFileDeParaZero.count} produtos · {pendingFileDeParaZero.tipos.join(' · ')}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => { setPendingFileDeParaZero(null); setImportResultDeParaZero(null) }} className="text-slate-500 hover:text-slate-400">
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+
+            {fileErrorDeParaZero && (
+              <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/10 rounded-xl px-4 py-3">
+                <AlertCircle size={13} className="shrink-0" />{fileErrorDeParaZero}
+              </div>
+            )}
+
+            {importResultDeParaZero && (
+              <div className={`rounded-xl px-4 py-3 text-xs ${importResultDeParaZero.ok ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                {importResultDeParaZero.ok ? (
+                  <div className="flex items-center gap-1.5 text-green-400 font-semibold">
+                    <CheckCircle2 size={13} />
+                    {importResultDeParaZero.total} produtos importados com sucesso
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-red-400">
+                    <AlertCircle size={13} className="shrink-0" />{importResultDeParaZero.msg}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {pendingFileDeParaZero && (
+              <button
+                onClick={handleImportDeParaZero}
+                disabled={importingDeParaZero}
+                className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white text-sm font-semibold rounded-xl py-3 transition-colors flex items-center justify-center gap-2"
+              >
+                {importingDeParaZero
+                  ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Importando...</>
+                  : <><Upload size={15} />Importar {pendingFileDeParaZero.count} produtos</>}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {infoDeParaZero && (
+          <div className="bg-white rounded-2xl border border-cobeb-border px-4 py-3 flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-cobeb-text text-sm font-semibold">De-Para Zero</p>
+              <p className="text-slate-500 text-xs mt-0.5">{infoDeParaZero.total} produtos · Importado em: {ptTs(infoDeParaZero.importado_em)}</p>
+            </div>
+            <button
+              onClick={() => setConfirmarDelDeParaZero(true)}
+              title="Excluir de-para zero"
+              className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors shrink-0"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Modal confirmar exclusão */}
@@ -1240,6 +1406,36 @@ export default function Importacao() {
               <button onClick={excluirBaseProd} disabled={excluindoProd}
                 className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-4 rounded-2xl text-sm transition-colors">
                 {excluindoProd ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal confirmar exclusão — de-para zero */}
+      {confirmarDelDeParaZero && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
+          <div className="w-full max-w-lg mx-auto bg-white rounded-t-3xl p-6 space-y-5">
+            <div className="w-10 h-1 bg-[#1E3A5F] rounded-full mx-auto" />
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} className="text-red-400" />
+              </div>
+              <div>
+                <p className="text-cobeb-text font-semibold text-base">Excluir De-Para Zero</p>
+                <p className="text-slate-500 text-sm mt-2">
+                  Todos os <span className="text-red-400 font-semibold">{infoDeParaZero?.total} produtos</span> serão excluídos permanentemente.
+                </p>
+                <p className="text-red-400 text-xs mt-2 font-medium">Esta ação não pode ser desfeita.</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmarDelDeParaZero(false)}
+                className="flex-1 bg-[#EBF5FF] border border-cobeb-border text-slate-400 font-semibold py-4 rounded-2xl text-sm">
+                Cancelar
+              </button>
+              <button onClick={excluirDeParaZero} disabled={excluindoDeParaZero}
+                className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-4 rounded-2xl text-sm transition-colors">
+                {excluindoDeParaZero ? 'Excluindo...' : 'Excluir'}
               </button>
             </div>
           </div>
