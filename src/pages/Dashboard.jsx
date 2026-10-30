@@ -1401,8 +1401,6 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
     const getKey = iso => {
       if (agrupamento === 'dia')    { const [, mm, dd] = iso.split('-'); return `${dd}/${mm}` }
       if (agrupamento === 'semana') return LABEL_SEMANA[(new Date(iso).getDay() + 6) % 7]
-      if (agrupamento === 'mes')    return LABEL_MES[new Date(iso).getMonth()]
-      if (agrupamento === 'ano')    return iso.slice(0, 4)
       return null
     }
 
@@ -1410,7 +1408,7 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
     pedsFiltrados.forEach(p => {
       const iso = p.data_puxada?.slice(0, 10)
       if (!iso) return
-      const key = getKey(iso)
+      const key = (agrupamento === 'mes' || agrupamento === 'ano') ? iso.slice(0, 7) : getKey(iso)
       if (!key) return
       const v = calcValor(p)
       progMap[key] = (progMap[key] ?? 0) + v
@@ -1418,7 +1416,14 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
     })
 
     if (agrupamento === 'semana') return LABEL_SEMANA.map(label => ({ day: label, programado: progMap[label] || null, real: realMap[label] || null }))
-    if (agrupamento === 'mes')    return LABEL_MES.map(label    => ({ day: label, programado: progMap[label] || null, real: realMap[label] || null }))
+    if (agrupamento === 'mes' || agrupamento === 'ano') {
+      const allKeys = [...new Set([...Object.keys(progMap), ...Object.keys(realMap)])]
+      return allKeys.sort().map(yyyymm => {
+        const [yyyy, mm] = yyyymm.split('-')
+        const label = `${LABEL_MES[parseInt(mm) - 1]}/${yyyy.slice(2)}`
+        return { day: label, yyyymm, programado: progMap[yyyymm] || null, real: realMap[yyyymm] || null }
+      })
+    }
 
     const allKeys = [...new Set([...Object.keys(progMap), ...Object.keys(realMap)])]
     const sorted  = agrupamento === 'dia'
@@ -1438,7 +1443,9 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
 
     const pedsPeriodo = pedsFiltrados.filter(p => {
       const iso = p.data_puxada?.slice(0, 10)
-      return iso && isoPeriodMatch(iso, agrupamento, day)
+      if (!iso) return false
+      if (payload.yyyymm) return iso.slice(0, 7) === payload.yyyymm
+      return isoPeriodMatch(iso, agrupamento, day)
     }).filter(p => mode === 'real' ? (p.viagem_id || p.status === 'realizado') : true)
 
     const porTipoMap = {}
@@ -1572,7 +1579,7 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={data} margin={{ top: 60, right: 12, left: 4, bottom: 32 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
-              <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={{ stroke: '#BFDBFE' }} angle={-35} textAnchor="end" interval={0} />
+              <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={{ stroke: '#BFDBFE' }} angle={-35} textAnchor="end" interval={agrupamento === 'ano' ? 'preserveStartEnd' : 0} />
               <YAxis tickFormatter={v => fmtR$(v, true)} tick={{ fontSize: 10, fill: '#94A3B8' }} tickLine={false} axisLine={false} width={62} />
               <Tooltip content={<TooltipValorFabrica />} cursor={{ fill: '#EBF5FF' }} />
               <Bar dataKey="programado" name="Programado" fill={tabelaPreco === 'Diferença' ? '#8B5CF6' : '#F59E0B'} radius={[4, 4, 0, 0]} maxBarSize={28} cursor="pointer" onClick={p => handleBarClick(p, 'programado')}>
