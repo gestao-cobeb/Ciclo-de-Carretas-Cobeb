@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Upload, FileSpreadsheet, Trash2, RefreshCw,
-  AlertCircle, CheckCircle2, X, Database, AlertTriangle, Package, Download, Tag,
+  AlertCircle, CheckCircle2, X, Database, AlertTriangle, Package, Download, Tag, TrendingUp,
 } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import AdminLayout from '../components/AdminLayout'
@@ -75,6 +75,16 @@ export default function Importacao() {
   const [baixandoBase,     setBaixandoBase]     = useState(null)
   const [baixandoCatalogo, setBaixandoCatalogo] = useState(null)
 
+  // Tabela de Demanda
+  const fileRefDemanda = useRef(null)
+  const [infoDemanda,         setInfoDemanda]         = useState(null) // { total, versao, ano, importado_em }
+  const [pendingFileDemanda,  setPendingFileDemanda]  = useState(null)
+  const [fileErrorDemanda,    setFileErrorDemanda]    = useState('')
+  const [importingDemanda,    setImportingDemanda]    = useState(false)
+  const [importResultDemanda, setImportResultDemanda] = useState(null)
+  const [confirmarDelDemanda, setConfirmarDelDemanda] = useState(false)
+  const [excluindoDemanda,    setExcluindoDemanda]    = useState(false)
+
   // Tabela de Preços Fábrica
   const fileRefPreco = useRef(null)
   const [infoPreco,        setInfoPreco]        = useState(null) // { total, importado_em }
@@ -89,11 +99,12 @@ export default function Importacao() {
 
   async function carregar() {
     setLoading(true)
-    const [{ data: peds }, { data: unis }, { data: prods }, { count: precosCount, data: precosData }] = await Promise.all([
+    const [{ data: peds }, { data: unis }, { data: prods }, { count: precosCount, data: precosData }, { count: demandaCount, data: demandaData }] = await Promise.all([
       supabase.from('pedidos').select('arquivo_origem, data_puxada, viagem_id, importado_em, status'),
       supabase.from('unidades').select('id, nome, codigo, codigo_ambev, cidade, tipo').order('nome'),
       supabase.from('produtos_catalogo').select('arquivo_origem, importado_em'),
       supabase.from('precos_fabrica').select('importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
+      supabase.from('demanda').select('versao, ano, importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
     ])
 
     const map = {}
@@ -140,6 +151,12 @@ export default function Importacao() {
     setBasesProd(Object.values(prodMap).sort((a, b) => (b.arquivo_origem ?? '').localeCompare(a.arquivo_origem ?? '')))
 
     setInfoPreco(precosCount ? { total: precosCount, importado_em: precosData?.[0]?.importado_em ?? null } : null)
+    setInfoDemanda(demandaCount ? {
+      total:        demandaCount,
+      versao:       demandaData?.[0]?.versao ?? null,
+      ano:          demandaData?.[0]?.ano ?? null,
+      importado_em: demandaData?.[0]?.importado_em ?? null,
+    } : null)
 
     setLoading(false)
   }
@@ -525,6 +542,98 @@ export default function Importacao() {
     await supabase.from('precos_fabrica').delete().neq('codigo', '')
     setConfirmarDelPreco(false)
     setExcluindoPreco(false)
+    await carregar()
+  }
+
+  // ── tabela de demanda ─────────────────────────────────────────────────────────
+
+  function handleFileChangeDemanda(e) {
+    const file = e.target.files?.[0]
+    if (fileRefDemanda.current) fileRefDemanda.current.value = ''
+    setFileErrorDemanda(''); setImportResultDemanda(null); setPendingFileDemanda(null)
+    if (!file) return
+    if (!file.name.endsWith('.xlsx') && !file.name.endsWith('.XLSX')) {
+      setFileErrorDemanda('Selecione um arquivo .xlsx')
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = ev => {
+      try {
+        const wb = XLSX.read(ev.target.result, { type: 'array', cellDates: false })
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true })
+        const dataRows = rows.slice(1).filter(r => r[0] && r[7])
+        if (!dataRows.length) { setFileErrorDemanda('Arquivo sem dados válidos.'); return }
+        const versoes = [...new Set(dataRows.map(r => String(r[0]).trim()))]
+        const anos    = [...new Set(dataRows.map(r => Number(r[2])))]
+        setPendingFileDemanda({ name: file.name, data: dataRows, count: dataRows.length, versoes, anos })
+      } catch {
+        setFileErrorDemanda('Erro ao ler o arquivo.')
+      }
+    }
+    reader.readAsArrayBuffer(file)
+  }
+
+  async function handleImportDemanda() {
+    if (!pendingFileDemanda) return
+    setImportingDemanda(true); setImportResultDemanda(null)
+    try {
+      const now = new Date().toISOString()
+      const records = pendingFileDemanda.data.map(r => ({
+        versao:             String(r[0] ?? '').trim(),
+        mes:                String(r[1] ?? '').trim(),
+        ano:                Number(r[2]) || null,
+        geo_uf:             String(r[3] ?? '').trim() || null,
+        comercial_operacao: String(r[5] ?? '').trim() || null,
+        canal:              String(r[6] ?? '').trim() || null,
+        cod_operacao:       String(r[7] ?? '').trim() || null,
+        nome_operacao:      String(r[8] ?? '').trim() || null,
+        cod_promax:         String(r[9] ?? '').trim() || null,
+        cod_sap:            String(r[10] ?? '').trim() || null,
+        produto:            String(r[11] ?? '').trim() || null,
+        tipo:               String(r[12] ?? '').trim() || null,
+        segmento:           String(r[13] ?? '').trim() || null,
+        sub_segmento:       String(r[14] ?? '').trim() || null,
+        marca:              String(r[15] ?? '').trim() || null,
+        sub_marca:          String(r[16] ?? '').trim() || null,
+        pack:               String(r[17] ?? '').trim() || null,
+        vol_media_l6m:      r[18] !== '' ? Number(r[18]) : null,
+        vol_media_l3m:      r[19] !== '' ? Number(r[19]) : null,
+        vol_tend:           r[20] !== '' ? Number(r[20]) : null,
+        demanda:            r[21] !== '' ? Number(r[21]) : null,
+        volume_real:        r[22] !== '' ? Number(r[22]) : null,
+        importado_em:       now,
+        importado_por:      profile?.id,
+      }))
+
+      // Substitui por (versao, ano) — mantém versões diferentes coexistindo
+      const versaoAnoKeys = [...new Set(records.map(r => `${r.versao}||${r.ano}`))]
+      for (const key of versaoAnoKeys) {
+        const [versao, ano] = key.split('||')
+        const { error: delErr } = await supabase.from('demanda').delete().eq('versao', versao).eq('ano', Number(ano))
+        if (delErr) throw delErr
+      }
+
+      for (const batch of chunk(records, 500)) {
+        const { error } = await supabase.from('demanda').insert(batch)
+        if (error) throw error
+      }
+
+      setImportResultDemanda({ ok: true, total: records.length })
+      setPendingFileDemanda(null)
+      await carregar()
+    } catch (err) {
+      setImportResultDemanda({ ok: false, msg: err.message || 'Erro ao importar.' })
+    } finally {
+      setImportingDemanda(false)
+    }
+  }
+
+  async function excluirDemanda() {
+    setExcluindoDemanda(true)
+    await supabase.from('demanda').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+    setConfirmarDelDemanda(false)
+    setExcluindoDemanda(false)
     await carregar()
   }
 
@@ -977,6 +1086,95 @@ export default function Importacao() {
             </button>
           </div>
         )}
+
+        {/* ── Card: Tabela de Demanda ── */}
+        <div className="bg-white rounded-2xl border border-cobeb-border overflow-hidden">
+          <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-cobeb-border">
+            <TrendingUp size={16} className="text-cobeb-yellow" />
+            <span className="text-cobeb-text text-sm font-semibold">Importar Tabela de Demanda</span>
+          </div>
+          <div className="p-4 space-y-3">
+            <input ref={fileRefDemanda} type="file" accept=".xlsx" onChange={handleFileChangeDemanda} className="hidden" />
+
+            {!pendingFileDemanda ? (
+              <button
+                onClick={() => fileRefDemanda.current?.click()}
+                className="w-full border-2 border-dashed border-cobeb-border hover:border-orange-500/50 rounded-xl py-6 flex flex-col items-center gap-2 transition-colors group"
+              >
+                <Upload size={18} className="text-slate-500 group-hover:text-cobeb-yellow transition-colors" />
+                <span className="text-slate-500 text-sm">Selecionar planilha de demanda...</span>
+                <span className="text-slate-600 text-xs">Padrão: DEMANDA.xlsx · Substitui por versão/ano</span>
+              </button>
+            ) : (
+              <div className="bg-[#EBF5FF] rounded-xl p-3.5 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <TrendingUp size={16} className="text-cobeb-yellow shrink-0" />
+                  <div>
+                    <p className="text-cobeb-text text-sm font-medium">{pendingFileDemanda.name}</p>
+                    <p className="text-slate-500 text-xs">
+                      {pendingFileDemanda.count.toLocaleString('pt-BR')} linhas ·{' '}
+                      {pendingFileDemanda.versoes.join(', ')} · {pendingFileDemanda.anos.join(', ')}
+                    </p>
+                  </div>
+                </div>
+                <button onClick={() => { setPendingFileDemanda(null); setImportResultDemanda(null) }} className="text-slate-500 hover:text-slate-400">
+                  <X size={15} />
+                </button>
+              </div>
+            )}
+
+            {fileErrorDemanda && (
+              <div className="flex items-center gap-2 text-red-400 text-xs bg-red-500/10 rounded-xl px-4 py-3">
+                <AlertCircle size={13} className="shrink-0" />{fileErrorDemanda}
+              </div>
+            )}
+
+            {importResultDemanda && (
+              <div className={`rounded-xl px-4 py-3 text-xs ${importResultDemanda.ok ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
+                {importResultDemanda.ok ? (
+                  <div className="flex items-center gap-1.5 text-green-400 font-semibold">
+                    <CheckCircle2 size={13} />
+                    {importResultDemanda.total.toLocaleString('pt-BR')} linhas importadas com sucesso
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 text-red-400">
+                    <AlertCircle size={13} className="shrink-0" />{importResultDemanda.msg}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {pendingFileDemanda && (
+              <button
+                onClick={handleImportDemanda}
+                disabled={importingDemanda}
+                className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white text-sm font-semibold rounded-xl py-3 transition-colors flex items-center justify-center gap-2"
+              >
+                {importingDemanda
+                  ? <><div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />Importando {pendingFileDemanda.count.toLocaleString('pt-BR')} linhas...</>
+                  : <><Upload size={15} />Importar {pendingFileDemanda.count.toLocaleString('pt-BR')} linhas</>}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {infoDemanda && (
+          <div className="bg-white rounded-2xl border border-cobeb-border px-4 py-3 flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-cobeb-text text-sm font-semibold">Tabela de Demanda</p>
+              <p className="text-slate-500 text-xs mt-0.5">
+                {infoDemanda.total.toLocaleString('pt-BR')} linhas · {infoDemanda.versao} {infoDemanda.ano} · Importado em: {ptTs(infoDemanda.importado_em)}
+              </p>
+            </div>
+            <button
+              onClick={() => setConfirmarDelDemanda(true)}
+              title="Excluir tabela de demanda"
+              className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors shrink-0"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Modal confirmar exclusão */}
@@ -1042,6 +1240,36 @@ export default function Importacao() {
               <button onClick={excluirBaseProd} disabled={excluindoProd}
                 className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-4 rounded-2xl text-sm transition-colors">
                 {excluindoProd ? 'Excluindo...' : 'Excluir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal confirmar exclusão — tabela de demanda */}
+      {confirmarDelDemanda && (
+        <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
+          <div className="w-full max-w-lg mx-auto bg-white rounded-t-3xl p-6 space-y-5">
+            <div className="w-10 h-1 bg-[#1E3A5F] rounded-full mx-auto" />
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} className="text-red-400" />
+              </div>
+              <div>
+                <p className="text-cobeb-text font-semibold text-base">Excluir tabela de demanda</p>
+                <p className="text-slate-500 text-sm mt-2">
+                  Todas as <span className="text-red-400 font-semibold">{infoDemanda?.total.toLocaleString('pt-BR')} linhas</span> serão excluídas permanentemente.
+                </p>
+                <p className="text-red-400 text-xs mt-2 font-medium">Esta ação não pode ser desfeita.</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmarDelDemanda(false)}
+                className="flex-1 bg-[#EBF5FF] border border-cobeb-border text-slate-400 font-semibold py-4 rounded-2xl text-sm">
+                Cancelar
+              </button>
+              <button onClick={excluirDemanda} disabled={excluindoDemanda}
+                className="flex-1 bg-red-500 hover:bg-red-600 disabled:opacity-50 text-white font-semibold py-4 rounded-2xl text-sm transition-colors">
+                {excluindoDemanda ? 'Excluindo...' : 'Excluir'}
               </button>
             </div>
           </div>
