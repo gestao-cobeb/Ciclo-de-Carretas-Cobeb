@@ -1680,7 +1680,7 @@ const selCls   = 'bg-white border border-cobeb-border rounded-xl px-3 py-2 text-
 const dateCls  = 'flex-1 bg-white border border-cobeb-border rounded-xl px-3 py-1.5 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue [color-scheme:light]'
 
 const DEFAULT_FIM    = new Date().toISOString().slice(0, 10)
-const DEFAULT_INICIO = new Date(Date.now() - 29 * 24 * 3600000).toISOString().slice(0, 10)
+const DEFAULT_INICIO = new Date(Date.now() - 10 * 24 * 3600000).toISOString().slice(0, 10)
 
 const LABEL_AGRUP = { dia: 'por Dia', semana: 'por Semana', mes: 'por Mês', ano: 'por Ano' }
 
@@ -1769,8 +1769,8 @@ export default function Dashboard({ mode = 'armazem' }) {
     const todayStr = today.toISOString().slice(0, 10)
 
     if (filtroAgrupamento === 'dia') {
-      setDataInicio(DEFAULT_INICIO)
-      setDataFim(DEFAULT_FIM)
+      setDataInicio(new Date(Date.now() - 10 * 24 * 3600000).toISOString().slice(0, 10))
+      setDataFim(todayStr)
     } else if (filtroAgrupamento === 'ano') {
       setDataInicio('2020-01-01')
       setDataFim(todayStr)
