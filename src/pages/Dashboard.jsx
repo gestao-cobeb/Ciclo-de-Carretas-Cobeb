@@ -1861,7 +1861,8 @@ export default function Dashboard({ mode = 'armazem' }) {
         .not('qtde_pallets', 'is', null)
         .gt('qtde_pallets', 0)
         .neq('status', 'cancelado')
-        .limit(10000),
+        .order('data_puxada', { ascending: false })
+        .limit(200000),
       supabase
         .from('pedidos')
         .select('data_puxada, numero_pedido, unidade_id')
