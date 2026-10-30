@@ -29,7 +29,8 @@ const PERFIL_ROTA = {
 }
 
 const MODO_ROTA = {
-  admin:      '/dashboard',
+  admin:      '/pedidos',
+  dashboard:  '/dashboard',
   motorista:  '/viagem',
   conferente: '/tarefas',
   portaria:   '/portaria',

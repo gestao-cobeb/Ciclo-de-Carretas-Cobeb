@@ -1,20 +1,31 @@
 import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet, Forklift } from 'lucide-react'
+import { LayoutDashboard, BarChart2, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet, Forklift } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
 export const MODULOS = [
   {
     key:    'admin',
-    rota:   '/dashboard',
+    rota:   '/pedidos',
     label:  'Administrador',
-    desc:   'Painel, histórico e relatórios',
+    desc:   'Pedidos, histórico e relatórios',
     Icon:   LayoutDashboard,
     cor:    'bg-cobeb-navy',
     borda:  'border-cobeb-navy/30',
     texto:  'text-cobeb-navy',
     fundo:  'bg-cobeb-navy/5 hover:bg-cobeb-navy/10',
+  },
+  {
+    key:    'dashboard',
+    rota:   '/dashboard',
+    label:  'Dashboard',
+    desc:   'Análise de armazém e puxada por período',
+    Icon:   BarChart2,
+    cor:    'bg-indigo-600',
+    borda:  'border-indigo-600/30',
+    texto:  'text-indigo-700',
+    fundo:  'bg-indigo-600/5 hover:bg-indigo-600/10',
   },
   {
     key:    'motorista',

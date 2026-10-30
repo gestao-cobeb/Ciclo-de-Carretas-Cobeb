@@ -1,5 +1,5 @@
 ﻿import { useNavigate, useLocation } from 'react-router-dom'
-import { LayoutDashboard, LogOut, Package, AlertTriangle, History, ClipboardCheck, DoorOpen, LayoutGrid, Monitor, Table2 } from 'lucide-react'
+import { LogOut, Package, AlertTriangle, History, ClipboardCheck, DoorOpen, LayoutGrid, Monitor, Table2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function AdminLayout({ title, subheader, children }) {
@@ -15,7 +15,6 @@ export default function AdminLayout({ title, subheader, children }) {
   const isAdminTotal = profile?.acesso_total === true
 
   const navItems = [
-    { path: '/dashboard',         icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/pedidos',           icon: Package,         label: 'Pedidos'   },
     { path: '/check-recebimento', icon: ClipboardCheck,  label: 'Check'     },
     { path: '/portaria-admin',    icon: DoorOpen,        label: 'Portaria'  },
