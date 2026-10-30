@@ -140,15 +140,10 @@ export default function Importacao() {
       if ((p.importado_em ?? '') > (b.importado_em ?? '')) b.importado_em = p.importado_em
     })
 
-    const today = new Date().toISOString().split('T')[0]
-    const yd = new Date(today + 'T12:00:00Z')
-    yd.setUTCDate(yd.getUTCDate() - 1)
-    const yesterday = yd.toISOString().split('T')[0]
-
     setBases(
       Object.values(map)
-        .filter(b => b.livres > 0 && b.arquivo_origem !== 'SUBSTITUICAO_ADMIN' && (b.data_puxada ?? '') >= yesterday)
-        .sort((a, b) => (b.data_puxada ?? '').localeCompare(a.data_puxada ?? ''))
+        .filter(b => b.arquivo_origem !== 'SUBSTITUICAO_ADMIN')
+        .sort((a, b) => (b.importado_em ?? '').localeCompare(a.importado_em ?? ''))
     )
     setUnidades(unis ?? [])
 
