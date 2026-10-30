@@ -140,9 +140,12 @@ export default function Importacao() {
       if ((p.importado_em ?? '') > (b.importado_em ?? '')) b.importado_em = p.importado_em
     })
 
+    const baseDate = b => b.importado_em
+      ? new Date(b.importado_em)
+      : new Date(arqOrigemToDate(b.arquivo_origem) ?? 0)
     const todasBases = Object.values(map)
       .filter(b => b.arquivo_origem !== 'SUBSTITUICAO_ADMIN')
-      .sort((a, b) => new Date(b.importado_em ?? 0) - new Date(a.importado_em ?? 0))
+      .sort((a, b) => baseDate(b) - baseDate(a))
     setBases(todasBases.slice(0, 1))
     setUnidades(unis ?? [])
 
@@ -219,6 +222,7 @@ export default function Importacao() {
         qtde_pallets:   Number(r[11]) || 0,
         qtde_skus:      Number(r[12]) || 0,
         arquivo_origem: pendingFile.arqOrigem,
+        importado_em:   new Date().toISOString(),
         importado_por:  profile?.id,
       }))
 
