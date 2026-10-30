@@ -72,8 +72,11 @@ export default function Importacao() {
   const [importResultProd, setImportResultProd] = useState(null)
   const [confirmarDelProd, setConfirmarDelProd] = useState(null)
   const [excluindoProd,    setExcluindoProd]    = useState(false)
-  const [baixandoBase,     setBaixandoBase]     = useState(null)
-  const [baixandoCatalogo, setBaixandoCatalogo] = useState(null)
+  const [baixandoBase,        setBaixandoBase]        = useState(null)
+  const [baixandoCatalogo,    setBaixandoCatalogo]    = useState(null)
+  const [baixandoPreco,       setBaixandoPreco]       = useState(false)
+  const [baixandoDemanda,     setBaixandoDemanda]     = useState(false)
+  const [baixandoDeParaZero,  setBaixandoDeParaZero]  = useState(false)
 
   // De-Para Zero
   const fileRefDeParaZero = useRef(null)
@@ -793,6 +796,54 @@ export default function Importacao() {
     }
   }
 
+  async function baixarPreco() {
+    setBaixandoPreco(true)
+    try {
+      const { data, error } = await supabase
+        .from('precos_fabrica')
+        .select('codigo, nome, tabela, data_vigencia, data_fim_vigencia, preco, ipi, icms_revenda, base_calc, preco_total')
+        .order('codigo').order('tabela').order('data_vigencia')
+      if (error || !data?.length) return
+      const header = ['Código', 'Nome', 'Tabela', 'Data Vigência', 'Data Fim Vigência', 'Preço', 'IPI', 'ICMS Revenda', 'Base Cálculo', 'Preço Total']
+      const rows = data.map(r => [r.codigo, r.nome, r.tabela, r.data_vigencia, r.data_fim_vigencia, r.preco, r.ipi, r.icms_revenda, r.base_calc, r.preco_total])
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...rows]), 'Preços')
+      XLSX.writeFile(wb, 'TABELA_PRECOS_FABRICA.xlsx')
+    } finally { setBaixandoPreco(false) }
+  }
+
+  async function baixarDemanda() {
+    setBaixandoDemanda(true)
+    try {
+      const { data, error } = await supabase
+        .from('demanda')
+        .select('versao, mes, ano, geo_uf, comercial_operacao, canal, cod_operacao, nome_operacao, cod_promax, cod_sap, produto, tipo, segmento, sub_segmento, marca, sub_marca, pack, vol_media_l6m, vol_media_l3m, vol_tend, demanda, volume_real')
+        .order('ano').order('mes').order('cod_operacao')
+      if (error || !data?.length) return
+      const header = ['Versão','Mês','Ano','geo_dpg_uf','comercial_dpg_operacao','descricao_dpg_canal','cod_dpg_operacao','descricao_dpg_operacao','Cod Promax','Cod Sap','Produto','TIpo','Segmento','SubSegmento','Marca','SubMarca','Pack','Vol Real Média L6M','Vol Real Média L3M','Vol Real/Tend','Demanda','Volume Real']
+      const rows = data.map(r => [r.versao, r.mes, r.ano, r.geo_uf, r.comercial_operacao, r.canal, r.cod_operacao, r.nome_operacao, r.cod_promax, r.cod_sap, r.produto, r.tipo, r.segmento, r.sub_segmento, r.marca, r.sub_marca, r.pack, r.vol_media_l6m, r.vol_media_l3m, r.vol_tend, r.demanda, r.volume_real])
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...rows]), 'Export')
+      XLSX.writeFile(wb, 'DEMANDA.xlsx')
+    } finally { setBaixandoDemanda(false) }
+  }
+
+  async function baixarDeParaZero() {
+    setBaixandoDeParaZero(true)
+    try {
+      const { data, error } = await supabase
+        .from('depara_zero')
+        .select('cod_promax, cod_sap, produto, tipo')
+        .order('tipo').order('produto')
+      if (error || !data?.length) return
+      const header = ['Cod Promax', 'Cod Sap', 'Produto', 'Tipo']
+      const rows = data.map(r => [r.cod_promax, r.cod_sap, r.produto, r.tipo])
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([header, ...rows]), 'De Para')
+      XLSX.writeFile(wb, 'DEPARAZERO.xlsx')
+    } finally { setBaixandoDeParaZero(false) }
+  }
+
   const basesFiltradas = useMemo(() => {
     if (!busca.trim()) return bases
     return bases.filter(b => b.arquivo_origem.toLowerCase().includes(busca.toLowerCase()))
@@ -1157,13 +1208,23 @@ export default function Importacao() {
               <p className="text-cobeb-text text-sm font-semibold">Tabela de Preços Fábrica</p>
               <p className="text-slate-500 text-xs mt-0.5">{infoPreco.total.toLocaleString('pt-BR')} produtos · Importado em: {ptTs(infoPreco.importado_em)}</p>
             </div>
-            <button
-              onClick={() => setConfirmarDelPreco(true)}
-              title="Excluir tabela de preços"
-              className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors shrink-0"
-            >
-              <Trash2 size={14} />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={baixarPreco}
+                disabled={baixandoPreco}
+                title="Baixar tabela de preços"
+                className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-cobeb-blue hover:border-cobeb-blue/40 transition-colors disabled:opacity-50 shrink-0"
+              >
+                {baixandoPreco ? <div className="w-3.5 h-3.5 border-2 border-cobeb-blue/40 border-t-cobeb-blue rounded-full animate-spin" /> : <Download size={14} />}
+              </button>
+              <button
+                onClick={() => setConfirmarDelPreco(true)}
+                title="Excluir tabela de preços"
+                className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors shrink-0"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           </div>
         )}
 
@@ -1246,13 +1307,23 @@ export default function Importacao() {
                 {infoDemanda.total.toLocaleString('pt-BR')} linhas · {infoDemanda.versao} {infoDemanda.ano} · Importado em: {ptTs(infoDemanda.importado_em)}
               </p>
             </div>
-            <button
-              onClick={() => setConfirmarDelDemanda(true)}
-              title="Excluir tabela de demanda"
-              className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors shrink-0"
-            >
-              <Trash2 size={14} />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={baixarDemanda}
+                disabled={baixandoDemanda}
+                title="Baixar tabela de demanda"
+                className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-cobeb-blue hover:border-cobeb-blue/40 transition-colors disabled:opacity-50 shrink-0"
+              >
+                {baixandoDemanda ? <div className="w-3.5 h-3.5 border-2 border-cobeb-blue/40 border-t-cobeb-blue rounded-full animate-spin" /> : <Download size={14} />}
+              </button>
+              <button
+                onClick={() => setConfirmarDelDemanda(true)}
+                title="Excluir tabela de demanda"
+                className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors shrink-0"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           </div>
         )}
 
@@ -1332,13 +1403,23 @@ export default function Importacao() {
               <p className="text-cobeb-text text-sm font-semibold">De-Para Zero</p>
               <p className="text-slate-500 text-xs mt-0.5">{infoDeParaZero.total} produtos · Importado em: {ptTs(infoDeParaZero.importado_em)}</p>
             </div>
-            <button
-              onClick={() => setConfirmarDelDeParaZero(true)}
-              title="Excluir de-para zero"
-              className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors shrink-0"
-            >
-              <Trash2 size={14} />
-            </button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                onClick={baixarDeParaZero}
+                disabled={baixandoDeParaZero}
+                title="Baixar de-para zero"
+                className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-cobeb-blue hover:border-cobeb-blue/40 transition-colors disabled:opacity-50 shrink-0"
+              >
+                {baixandoDeParaZero ? <div className="w-3.5 h-3.5 border-2 border-cobeb-blue/40 border-t-cobeb-blue rounded-full animate-spin" /> : <Download size={14} />}
+              </button>
+              <button
+                onClick={() => setConfirmarDelDeParaZero(true)}
+                title="Excluir de-para zero"
+                className="w-8 h-8 rounded-lg bg-[#EBF5FF] border border-cobeb-border flex items-center justify-center text-slate-500 hover:text-red-400 hover:border-red-500/40 transition-colors shrink-0"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           </div>
         )}
       </div>
