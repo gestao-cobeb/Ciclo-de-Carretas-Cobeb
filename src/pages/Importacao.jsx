@@ -140,11 +140,10 @@ export default function Importacao() {
       if ((p.importado_em ?? '') > (b.importado_em ?? '')) b.importado_em = p.importado_em
     })
 
-    setBases(
-      Object.values(map)
-        .filter(b => b.arquivo_origem !== 'SUBSTITUICAO_ADMIN')
-        .sort((a, b) => (b.importado_em ?? '').localeCompare(a.importado_em ?? ''))
-    )
+    const todasBases = Object.values(map)
+      .filter(b => b.arquivo_origem !== 'SUBSTITUICAO_ADMIN')
+      .sort((a, b) => (b.importado_em ?? '').localeCompare(a.importado_em ?? ''))
+    setBases(todasBases.slice(0, 1))
     setUnidades(unis ?? [])
 
     // Agrupa catálogos de produtos por arquivo_origem
