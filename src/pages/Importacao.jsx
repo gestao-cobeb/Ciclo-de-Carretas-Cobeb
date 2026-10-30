@@ -142,7 +142,7 @@ export default function Importacao() {
 
     const todasBases = Object.values(map)
       .filter(b => b.arquivo_origem !== 'SUBSTITUICAO_ADMIN')
-      .sort((a, b) => (b.importado_em ?? '').localeCompare(a.importado_em ?? ''))
+      .sort((a, b) => (arqOrigemToDate(b.arquivo_origem) ?? '').localeCompare(arqOrigemToDate(a.arquivo_origem) ?? ''))
     setBases(todasBases.slice(0, 1))
     setUnidades(unis ?? [])
 
