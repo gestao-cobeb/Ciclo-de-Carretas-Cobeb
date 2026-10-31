@@ -42,6 +42,15 @@ jobs:
           # no aplicativo nativo o `fetch` relativo le' o arquivo empacotado.
           VITE_CONFIG_URL: ${{ secrets.VITE_CONFIG_URL }}
 
+      - name: Atualizar versão no build.gradle
+        run: |
+          TAG=${{ github.ref_name }}
+          VERSION=${TAG#v}
+          CODE=$(echo "$VERSION" | awk -F. '{ printf "%d%02d%02d", $1, $2, $3 }')
+          sed -i "s/versionCode [0-9]*/versionCode $CODE/" android/app/build.gradle
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" android/app/build.gradle
+          echo "Versão atualizada: $VERSION (code $CODE)"
+
       - name: Capacitor sync
         run: npx cap sync android
 
