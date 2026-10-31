@@ -2256,6 +2256,15 @@ export default function Dashboard({ mode = 'armazem' }) {
                 <GraficoHistograma data={dadosHistograma} filtros={descFiltros} />
               </>
             )}
+            {mode === 'comercial' && (
+              <div className="flex flex-col items-center justify-center py-24 gap-3 text-slate-400">
+                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-40">
+                  <path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/>
+                </svg>
+                <p className="text-base font-semibold text-cobeb-text">Em construção</p>
+                <p className="text-sm">Os dados comerciais serão adicionados nos próximos passos.</p>
+              </div>
+            )}
             {mode === 'puxada' && (
               <>
                 <GraficoOciosidade data={dadosOciosidade} filtros={descFiltros} />
