@@ -278,6 +278,9 @@ export default function DashboardComercial() {
       const fabInfo    = p.codigo_fabrica ? (fabMap[p.codigo_fabrica] ?? null) : null
       const fabNome    = fabInfo?.nome ?? '—'
       const isTransfer = fabInfo != null && fabInfo.tipo !== 'fabrica'
+
+      // Transferências internas não têm valor comercial
+      if (isTransfer) valor = 0
       const tm         = cat.tipo_marca ?? ''
       const emb        = cat.embalagem  ?? ''
       const isCerv     = tm === '001 - CERVEJA' || tm === '028 - BEBIDAS QUENTES'
