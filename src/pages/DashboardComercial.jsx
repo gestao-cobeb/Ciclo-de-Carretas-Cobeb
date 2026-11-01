@@ -52,7 +52,11 @@ function fmtHora(ts) {
 }
 
 function StatusBadge({ info }) {
-  if (!info) return <span className="text-slate-300">—</span>
+  if (!info) return (
+    <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap bg-red-50 text-red-400">
+      Não vinculado
+    </span>
+  )
   const cfg = STATUS_CFG[info.status] ?? STATUS_CFG.iniciada
   const hora = fmtHora(cfg.ts(info))
   return (
