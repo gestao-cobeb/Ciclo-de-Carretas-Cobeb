@@ -14,14 +14,8 @@ const SEGMENTOS = [
 
 const TABELAS_PRECO = ['Pratic', 'Cheia', 'Diferença']
 
-function firstDay() {
-  const d = new Date()
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
-}
-
-function lastDay() {
-  const d = new Date()
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10)
+function todayStr() {
+  return new Date().toISOString().slice(0, 10)
 }
 
 function fmtHL(v) {
@@ -52,8 +46,8 @@ function findPreco(precosMap, tabela, codigo, date) {
 }
 
 export default function DashboardComercial() {
-  const [dataInicio,   setDataInicio]   = useState(firstDay)
-  const [dataFim,      setDataFim]      = useState(lastDay)
+  const [dataInicio,   setDataInicio]   = useState(todayStr)
+  const [dataFim,      setDataFim]      = useState(todayStr)
   const [unidades,     setUnidades]     = useState([])
   const [fabricas,     setFabricas]     = useState([])
   const [segFiltro,    setSegFiltro]    = useState([])
