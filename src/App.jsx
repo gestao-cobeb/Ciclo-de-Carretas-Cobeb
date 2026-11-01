@@ -4,6 +4,7 @@ import ProtectedRoute from './components/ProtectedRoute'
 import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import DashboardComercial from './pages/DashboardComercial'
 import Cadastros from './pages/Cadastros'
 import Pedidos from './pages/Pedidos'
 import Viagem from './pages/Viagem'
@@ -84,7 +85,7 @@ function AppRoutes() {
         element={<ProtectedRoute allowedRoles={['admin']}><Dashboard mode="puxada" /></ProtectedRoute>}
       />
       <Route path="/dashboard-comercial"
-        element={<ProtectedRoute allowedRoles={['admin']}><Dashboard mode="comercial" /></ProtectedRoute>}
+        element={<ProtectedRoute allowedRoles={['admin']}><DashboardComercial /></ProtectedRoute>}
       />
       <Route path="/pedidos"
         element={<ProtectedRoute allowedRoles={['admin']}><Pedidos /></ProtectedRoute>}
