@@ -32,12 +32,6 @@ function fmtN(v) {
   return Math.round(v).toLocaleString('pt-BR')
 }
 
-function ptDate(iso) {
-  if (!iso) return '—'
-  const [, mm, dd] = iso.split('-')
-  return `${dd}/${mm}`
-}
-
 export default function DashboardComercial() {
   const [dataInicio,  setDataInicio]  = useState(firstDay)
   const [dataFim,     setDataFim]     = useState(lastDay)
@@ -49,11 +43,12 @@ export default function DashboardComercial() {
   const [optUnidades, setOptUnidades] = useState([])
   const [optFabricas, setOptFabricas] = useState([])
 
-  const [catMap,      setCatMap]      = useState({})
-  const [zeroCervSet, setZeroCervSet] = useState(new Set())
-  const [zeroNabSet,  setZeroNabSet]  = useState(new Set())
-  const [highEndSet,  setHighEndSet]  = useState(new Set())
-  const [pedidos,     setPedidos]     = useState([])
+  const [catMap,       setCatMap]      = useState({})
+  const [placaMap,     setPlacaMap]    = useState({}) // viagem_id → placa do cavalo
+  const [zeroCervSet,  setZeroCervSet] = useState(new Set())
+  const [zeroNabSet,   setZeroNabSet]  = useState(new Set())
+  const [highEndSet,   setHighEndSet]  = useState(new Set())
+  const [pedidos,      setPedidos]     = useState([])
 
   // Dados estáticos — carregados uma vez
   useEffect(() => {
@@ -93,7 +88,7 @@ export default function DashboardComercial() {
 
       let q = supabase
         .from('pedidos')
-        .select('numero_pedido, placa, revenda, cod_produto, qtde_pallets, qtde_skus, data_puxada, viagem_id, status, unidade_id, codigo_fabrica')
+        .select('cod_produto, placa, qtde_pallets, qtde_skus, data_puxada, viagem_id, status, unidade_id, codigo_fabrica')
         .gte('data_puxada', dataInicio)
         .lte('data_puxada', dataFim)
         .neq('status', 'cancelado')
@@ -106,6 +101,31 @@ export default function DashboardComercial() {
       const { data: peds } = await q
       const pedList = peds ?? []
 
+      // Resolve placa da viagem (cavalo vinculado) — igual à guia Pedidos
+      const viagemIds = [...new Set(pedList.map(p => p.viagem_id).filter(Boolean))]
+      const pm = {}
+      if (viagemIds.length) {
+        const { data: viagens } = await supabase
+          .from('viagens')
+          .select('id, cavalo_id')
+          .in('id', viagemIds)
+
+        const cavaloIds = [...new Set((viagens ?? []).map(v => v.cavalo_id).filter(Boolean))]
+        if (cavaloIds.length) {
+          const { data: cavalos } = await supabase
+            .from('cavalos')
+            .select('id, placa')
+            .in('id', cavaloIds)
+
+          const cavPlacaMap = Object.fromEntries((cavalos ?? []).map(c => [c.id, c.placa]))
+          ;(viagens ?? []).forEach(v => {
+            if (v.cavalo_id && cavPlacaMap[v.cavalo_id]) pm[v.id] = cavPlacaMap[v.cavalo_id]
+          })
+        }
+      }
+      setPlacaMap(pm)
+
+      // Catálogo de produtos
       const skus = [...new Set(pedList.map(p => p.cod_produto).filter(Boolean))]
       if (skus.length) {
         const { data: cat } = await supabase
@@ -127,7 +147,7 @@ export default function DashboardComercial() {
 
   const today = new Date().toISOString().slice(0, 10)
 
-  // Classifica cada linha de pedido com segmentos e HL
+  // Classifica cada linha de pedido
   const linhasClassificadas = useMemo(() => {
     const result = []
     pedidos.forEach(p => {
@@ -143,18 +163,18 @@ export default function DashboardComercial() {
       const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
       if (hl <= 0) return
 
+      // Placa: prefere a do cavalo vinculado, fallback para a importada
+      const placa = (p.viagem_id ? placaMap[p.viagem_id] : null) ?? p.placa ?? '—'
+
       const tm     = cat.tipo_marca ?? ''
       const emb    = cat.embalagem  ?? ''
       const isCerv = tm === '001 - CERVEJA' || tm === '028 - BEBIDAS QUENTES'
       const isRGB  = isCerv && (emb.startsWith('017') || emb.startsWith('018') || emb.startsWith('085'))
 
       result.push({
-        numeroPedido: p.numero_pedido,
-        placa:        p.placa || '—',
-        revenda:      p.revenda || '—',
-        data:         iso,
-        codigo:       p.cod_produto,
-        descricao:    cat.descricao || p.cod_produto,
+        placa,
+        codigo:    p.cod_produto,
+        descricao: cat.descricao || p.cod_produto,
         hl,
         paletes: p.qtde_pallets || 0,
         cx:      p.qtde_skus    || 0,
@@ -170,9 +190,9 @@ export default function DashboardComercial() {
       })
     })
     return result
-  }, [pedidos, catMap, zeroCervSet, zeroNabSet, highEndSet, today])
+  }, [pedidos, catMap, placaMap, zeroCervSet, zeroNabSet, highEndSet, today])
 
-  // HL por segmento para os cards (sem filtro de segmento)
+  // HL por segmento para os cards de resumo (sem filtro de segmento)
   const hlPorSegmento = useMemo(() => {
     const acc = {}
     SEGMENTOS.forEach(s => { acc[s.key] = 0 })
@@ -182,33 +202,27 @@ export default function DashboardComercial() {
     return acc
   }, [linhasClassificadas])
 
-  // Cards agrupados por numero_pedido; filtro de segmento aplicado nos SKUs
-  const cards = useMemo(() => {
+  // Tabela agrupada por (placa + produto) com filtro de segmento
+  const tableData = useMemo(() => {
     const map = {}
     linhasClassificadas.forEach(l => {
-      const key = `${l.numeroPedido}`
-      if (!map[key]) map[key] = {
-        numeroPedido: l.numeroPedido,
-        placa:   l.placa,
-        revenda: l.revenda,
-        data:    l.data,
-        skus:    [],
-      }
       if (segFiltro.length > 0 && !segFiltro.some(s => l.tags[s])) return
-      map[key].skus.push(l)
+      const key = `${l.placa}||${l.codigo}`
+      if (!map[key]) map[key] = { placa: l.placa, codigo: l.codigo, descricao: l.descricao, hl: 0, paletes: 0, cx: 0 }
+      map[key].hl      += l.hl
+      map[key].paletes += l.paletes
+      map[key].cx      += l.cx
     })
-    return Object.values(map)
-      .filter(c => c.skus.length > 0)
-      .sort((a, b) =>
-        (a.placa).localeCompare(b.placa) || (a.data).localeCompare(b.data)
-      )
+    return Object.values(map).sort((a, b) =>
+      a.placa.localeCompare(b.placa) || b.hl - a.hl
+    )
   }, [linhasClassificadas, segFiltro])
 
-  const totaisGerais = useMemo(() => ({
-    hl:      cards.reduce((s, c) => s + c.skus.reduce((ss, sk) => ss + sk.hl,      0), 0),
-    paletes: cards.reduce((s, c) => s + c.skus.reduce((ss, sk) => ss + sk.paletes, 0), 0),
-    cx:      cards.reduce((s, c) => s + c.skus.reduce((ss, sk) => ss + sk.cx,      0), 0),
-  }), [cards])
+  const totais = useMemo(() => ({
+    hl:      tableData.reduce((s, r) => s + r.hl,      0),
+    paletes: tableData.reduce((s, r) => s + r.paletes, 0),
+    cx:      tableData.reduce((s, r) => s + r.cx,      0),
+  }), [tableData])
 
   function toggleUnidade(id) {
     setUnidades(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
@@ -302,82 +316,51 @@ export default function DashboardComercial() {
               ))}
             </div>
 
-            {/* ── Resumo geral ──────────────────────────────────────────────── */}
-            <div className="flex items-center justify-between px-1">
-              <p className="text-xs text-slate-400">
-                {cards.length} pedido{cards.length !== 1 ? 's' : ''} · {cards.reduce((s, c) => s + c.skus.length, 0)} SKUs
-              </p>
-              <div className="flex gap-3 text-xs text-cobeb-navy font-semibold">
-                <span>{fmtHL(totaisGerais.hl)} HL</span>
-                <span className="text-slate-400">·</span>
-                <span>{fmtN(totaisGerais.paletes)} plt</span>
-                <span className="text-slate-400">·</span>
-                <span>{fmtN(totaisGerais.cx)} cx</span>
+            {/* ── Tabela de produtos ────────────────────────────────────────── */}
+            <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-cobeb-border bg-cobeb-sky">
+                      <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Placa</th>
+                      <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Código</th>
+                      <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold">Descrição</th>
+                      <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">HL</th>
+                      <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Paletes</th>
+                      <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">CX</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tableData.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="text-center py-12 text-slate-400">
+                          Sem dados para o período
+                        </td>
+                      </tr>
+                    ) : tableData.map((row, i) => (
+                      <tr key={`${row.placa}||${row.codigo}`} className={i % 2 === 0 ? 'bg-white' : 'bg-cobeb-sky/30'}>
+                        <td className="px-3 py-2 font-semibold text-cobeb-text font-mono whitespace-nowrap">{row.placa}</td>
+                        <td className="px-3 py-2 text-slate-400 font-mono whitespace-nowrap">{row.codigo}</td>
+                        <td className="px-3 py-2 text-cobeb-text">{row.descricao}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-cobeb-navy tabular-nums">{fmtHL(row.hl)}</td>
+                        <td className="px-3 py-2 text-right text-cobeb-text tabular-nums">{fmtN(row.paletes)}</td>
+                        <td className="px-3 py-2 text-right text-cobeb-text tabular-nums">{fmtN(row.cx)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-cobeb-navy/20 bg-cobeb-sky">
+                      <td colSpan={3} className="px-3 py-2.5 font-bold text-cobeb-text">
+                        Total — {tableData.length} linha{tableData.length !== 1 ? 's' : ''}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy tabular-nums">{fmtHL(totais.hl)}</td>
+                      <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy tabular-nums">{fmtN(totais.paletes)}</td>
+                      <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy tabular-nums">{fmtN(totais.cx)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
               </div>
             </div>
-
-            {/* ── Cards de pedido ───────────────────────────────────────────── */}
-            {cards.length === 0 ? (
-              <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
-                Sem dados para o período
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-                {cards.map(card => {
-                  const totalHL  = card.skus.reduce((s, sk) => s + sk.hl,      0)
-                  const totalPlt = card.skus.reduce((s, sk) => s + sk.paletes, 0)
-                  const totalCx  = card.skus.reduce((s, sk) => s + sk.cx,      0)
-                  return (
-                    <div key={card.numeroPedido}
-                      className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
-
-                      {/* Cabeçalho do card */}
-                      <div className="bg-cobeb-navy px-4 py-2.5 flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="shrink-0 bg-cobeb-yellow text-cobeb-navy text-xs font-black px-2.5 py-0.5 rounded-lg tracking-wide">
-                            {card.placa}
-                          </span>
-                          <span className="text-white text-xs font-semibold truncate">{card.revenda}</span>
-                        </div>
-                        <span className="shrink-0 text-blue-300/60 text-[10px] font-medium">
-                          {ptDate(card.data)} · #{card.numeroPedido}
-                        </span>
-                      </div>
-
-                      {/* SKUs */}
-                      <div className="divide-y divide-cobeb-border/60">
-                        {card.skus.map(sku => (
-                          <div key={sku.codigo} className="px-4 py-2.5 flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                              <p className="text-cobeb-text text-xs font-semibold truncate">{sku.descricao}</p>
-                              <p className="text-slate-400 text-[10px] font-mono">{sku.codigo}</p>
-                            </div>
-                            <div className="shrink-0 text-right space-y-0.5">
-                              <p className="text-cobeb-navy text-xs font-bold tabular-nums">{fmtHL(sku.hl)} HL</p>
-                              <p className="text-slate-400 text-[10px] tabular-nums">
-                                {fmtN(sku.paletes)} plt · {fmtN(sku.cx)} cx
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      {/* Rodapé do card */}
-                      <div className="bg-cobeb-sky border-t border-cobeb-border px-4 py-2 flex items-center justify-between">
-                        <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Total</span>
-                        <div className="flex gap-3 text-[10px] font-bold text-cobeb-navy tabular-nums">
-                          <span>{fmtHL(totalHL)} HL</span>
-                          <span className="text-slate-300">·</span>
-                          <span>{fmtN(totalPlt)} plt</span>
-                          <span className="text-slate-300">·</span>
-                          <span>{fmtN(totalCx)} cx</span>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
           </>
         )}
       </div>
