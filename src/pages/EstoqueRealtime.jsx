@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw, ArrowLeftRight, MapPin, Send } from 'lucide-react'
+import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw, ArrowLeftRight, MapPin, Send, Plus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import MapaRealtime from './MapaRealtime'
@@ -282,12 +282,20 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
   const [reenviandoPortaria, setReenviandoPortaria] = useState(false)
 
   // Estado de substituição de produto
-  const [substituindo,     setSubstituindo]     = useState(null)  // id do pedido sendo substituído
+  const [substituindo,     setSubstituindo]     = useState(null)
   const [subCodigo,        setSubCodigo]        = useState('')
   const [subDescricao,     setSubDescricao]     = useState('')
   const [subQtde,          setSubQtde]          = useState('')
   const [subBuscando,      setSubBuscando]      = useState(false)
   const [subNaoEncontrado, setSubNaoEncontrado] = useState(false)
+
+  // Estado de adição de produto via BO
+  const [adicionando,      setAdicionando]      = useState(false)
+  const [addCodigo,        setAddCodigo]        = useState('')
+  const [addDescricao,     setAddDescricao]     = useState('')
+  const [addQtde,          setAddQtde]          = useState('')
+  const [addBuscando,      setAddBuscando]      = useState(false)
+  const [addNaoEncontrado, setAddNaoEncontrado] = useState(false)
 
   const podeReverter    = isAdminTotal && ['na_fabrica', 'retornando', 'aguardando_conferencia'].includes(viagem.status)
   const podeSubstituir  = isAdminTotal && ['iniciada', 'em_transito', 'na_fabrica'].includes(viagem.status)
@@ -424,6 +432,54 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
       }
       onRefresh?.()
     }
+  }
+
+  function abrirAdicao() {
+    setAdicionando(true)
+    setAddCodigo('')
+    setAddDescricao('')
+    setAddQtde('')
+    setAddBuscando(false)
+    setAddNaoEncontrado(false)
+  }
+
+  function fecharAdicao() {
+    setAdicionando(false)
+    setAddNaoEncontrado(false)
+  }
+
+  async function buscarDescricaoAdicao(codigo) {
+    if (!codigo.trim()) return
+    setAddBuscando(true)
+    setAddDescricao('')
+    setAddNaoEncontrado(false)
+    const { data } = await supabase
+      .from('produtos_catalogo')
+      .select('descricao')
+      .eq('codigo', codigo.trim())
+      .maybeSingle()
+    setAddBuscando(false)
+    if (data?.descricao) {
+      setAddDescricao(data.descricao)
+      setAddNaoEncontrado(false)
+    } else {
+      setAddNaoEncontrado(true)
+    }
+  }
+
+  async function confirmarAdicao() {
+    if (!addCodigo.trim() || !addDescricao.trim() || !addQtde) return
+    setAdminLoading(true)
+    const { error } = await supabase.rpc('admin_adicionar_produto_viagem', {
+      p_viagem_id:    viagem.id,
+      p_cod_produto:  addCodigo.trim(),
+      p_descricao:    addDescricao.trim(),
+      p_qtde_pallets: Number(addQtde),
+    })
+    setAdminLoading(false)
+    if (error) { alert('Erro ao adicionar produto: ' + error.message); return }
+    fecharAdicao()
+    onRefresh?.()
   }
 
   async function confirmarSubstituicao() {
@@ -829,6 +885,101 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
           ) : (
             <div className="px-4 py-4 text-center">
               <p className="text-slate-400 text-xs">Produtos não vinculados ao pedido ainda</p>
+            </div>
+          )}
+
+          {/* Adição de produto via BO */}
+          {podeSubstituir && (
+            <div className="border-t border-cobeb-border/30">
+              {!adicionando ? (
+                <div className="px-4 py-2.5">
+                  <button
+                    onClick={abrirAdicao}
+                    className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-600 hover:text-emerald-800 transition-colors"
+                  >
+                    <Plus size={11} />
+                    Adicionar produto via BO
+                  </button>
+                </div>
+              ) : (
+                <div className="px-4 pb-3.5 pt-2.5 bg-emerald-50/70">
+                  <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-2.5">
+                    + Adicionar produto
+                  </p>
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Código do produto"
+                        value={addCodigo}
+                        onChange={e => {
+                          setAddCodigo(e.target.value)
+                          setAddDescricao('')
+                          setAddNaoEncontrado(false)
+                        }}
+                        onKeyDown={e => e.key === 'Enter' && buscarDescricaoAdicao(addCodigo)}
+                        className="flex-1 text-[11px] border border-emerald-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-400 bg-white min-w-0"
+                      />
+                      <button
+                        onClick={() => buscarDescricaoAdicao(addCodigo)}
+                        disabled={!addCodigo.trim() || addBuscando}
+                        className="flex items-center gap-1 text-[11px] font-semibold text-white bg-emerald-500 hover:bg-emerald-600 disabled:opacity-40 px-2.5 py-1.5 rounded-lg transition-colors shrink-0"
+                      >
+                        {addBuscando
+                          ? <div className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+                          : 'Buscar'}
+                      </button>
+                    </div>
+                    {addNaoEncontrado && (
+                      <p className="text-[10px] text-emerald-700 flex items-center gap-1">
+                        <AlertTriangle size={9} />
+                        Não encontrado no cadastro — preencha a descrição manualmente.
+                      </p>
+                    )}
+                    {(addDescricao !== '' || addNaoEncontrado) && (
+                      <input
+                        type="text"
+                        placeholder="Descrição do produto"
+                        value={addDescricao}
+                        onChange={e => setAddDescricao(e.target.value)}
+                        className="w-full text-[11px] border border-emerald-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-400 bg-white"
+                      />
+                    )}
+                    {(addDescricao !== '' || addNaoEncontrado) && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0.5"
+                          step="0.5"
+                          placeholder="Paletes"
+                          value={addQtde}
+                          onChange={e => setAddQtde(e.target.value)}
+                          className="w-28 text-[11px] border border-emerald-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-400 bg-white"
+                        />
+                        <span className="text-[10px] text-slate-400">paletes</span>
+                      </div>
+                    )}
+                    <div className="flex gap-2 pt-0.5">
+                      <button
+                        onClick={confirmarAdicao}
+                        disabled={adminLoading || !addCodigo.trim() || !addDescricao.trim() || !addQtde}
+                        className="flex items-center gap-1.5 text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors"
+                      >
+                        {adminLoading
+                          ? <div className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+                          : <Check size={11} />}
+                        Confirmar adição
+                      </button>
+                      <button
+                        onClick={fecharAdicao}
+                        className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors px-2 py-1.5"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
