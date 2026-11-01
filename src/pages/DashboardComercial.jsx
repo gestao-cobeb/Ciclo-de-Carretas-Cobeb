@@ -88,7 +88,7 @@ export default function DashboardComercial() {
 
       let q = supabase
         .from('pedidos')
-        .select('cod_produto, qtde_pallets, qtde_skus, data_puxada, viagem_id, status, unidade_id, codigo_fabrica')
+        .select('cod_produto, qtde_pallets, qtde_skus, data_puxada, viagem_id, status, unidade_id, codigo_fabrica, placa')
         .gte('data_puxada', dataInicio)
         .lte('data_puxada', dataFim)
         .neq('status', 'cancelado')
@@ -144,11 +144,12 @@ export default function DashboardComercial() {
       const isRGB  = isCerv && (emb.startsWith('017') || emb.startsWith('018') || emb.startsWith('085'))
 
       result.push({
-        codigo:   p.cod_produto,
+        codigo:    p.cod_produto,
+        placa:     p.placa || '—',
         descricao: cat.descricao || p.cod_produto,
         hl,
-        paletes:  p.qtde_pallets || 0,
-        cx:       p.qtde_skus    || 0,
+        paletes:   p.qtde_pallets || 0,
+        cx:        p.qtde_skus    || 0,
         tags: {
           cerveja:  isCerv,
           nab:      !isCerv,
@@ -173,17 +174,20 @@ export default function DashboardComercial() {
     return acc
   }, [pedidosClassificados])
 
-  // Tabela agrupada por produto com filtro de segmento
+  // Tabela agrupada por (placa + produto) com filtro de segmento
   const tableData = useMemo(() => {
     const map = {}
     pedidosClassificados.forEach(p => {
       if (segFiltro.length > 0 && !segFiltro.some(s => p.tags[s])) return
-      if (!map[p.codigo]) map[p.codigo] = { codigo: p.codigo, descricao: p.descricao, hl: 0, paletes: 0, cx: 0 }
-      map[p.codigo].hl      += p.hl
-      map[p.codigo].paletes += p.paletes
-      map[p.codigo].cx      += p.cx
+      const key = `${p.placa}||${p.codigo}`
+      if (!map[key]) map[key] = { placa: p.placa, codigo: p.codigo, descricao: p.descricao, hl: 0, paletes: 0, cx: 0 }
+      map[key].hl      += p.hl
+      map[key].paletes += p.paletes
+      map[key].cx      += p.cx
     })
-    return Object.values(map).sort((a, b) => b.hl - a.hl)
+    return Object.values(map).sort((a, b) =>
+      a.placa.localeCompare(b.placa) || b.hl - a.hl
+    )
   }, [pedidosClassificados, segFiltro])
 
   const totais = useMemo(() => ({
@@ -309,6 +313,7 @@ export default function DashboardComercial() {
                   <thead>
                     <tr className="border-b border-cobeb-border bg-cobeb-sky">
                       <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold w-24 whitespace-nowrap">Código</th>
+                      <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Placa</th>
                       <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold">Descrição</th>
                       <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">HL</th>
                       <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Paletes</th>
@@ -318,13 +323,14 @@ export default function DashboardComercial() {
                   <tbody>
                     {tableData.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="text-center py-12 text-slate-400">
+                        <td colSpan={6} className="text-center py-12 text-slate-400">
                           Sem dados para o período
                         </td>
                       </tr>
                     ) : tableData.map((row, i) => (
-                      <tr key={row.codigo} className={i % 2 === 0 ? 'bg-white' : 'bg-cobeb-sky/30'}>
+                      <tr key={`${row.placa}||${row.codigo}`} className={i % 2 === 0 ? 'bg-white' : 'bg-cobeb-sky/30'}>
                         <td className="px-3 py-2 text-slate-400 font-mono">{row.codigo}</td>
+                        <td className="px-3 py-2 font-semibold text-cobeb-text whitespace-nowrap">{row.placa}</td>
                         <td className="px-3 py-2 text-cobeb-text">{row.descricao}</td>
                         <td className="px-3 py-2 text-right font-semibold text-cobeb-navy tabular-nums">{fmtHL(row.hl)}</td>
                         <td className="px-3 py-2 text-right text-cobeb-text tabular-nums">{fmtN(row.paletes)}</td>
@@ -334,8 +340,8 @@ export default function DashboardComercial() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-cobeb-navy/20 bg-cobeb-sky">
-                      <td colSpan={2} className="px-3 py-2.5 font-bold text-cobeb-text">
-                        Total — {tableData.length} produto{tableData.length !== 1 ? 's' : ''}
+                      <td colSpan={3} className="px-3 py-2.5 font-bold text-cobeb-text">
+                        Total — {tableData.length} linha{tableData.length !== 1 ? 's' : ''}
                       </td>
                       <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy tabular-nums">{fmtHL(totais.hl)}</td>
                       <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy tabular-nums">{fmtN(totais.paletes)}</td>
