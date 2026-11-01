@@ -51,6 +51,12 @@ function fmtHora(ts) {
   return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
+function fmtDataAgend(dateStr) {
+  if (!dateStr) return ''
+  const [, mm, dd] = dateStr.split('-')
+  return `${dd}/${mm}`
+}
+
 function StatusBadge({ info }) {
   if (!info) return (
     <span className="inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap bg-red-50 text-red-400">
@@ -59,10 +65,18 @@ function StatusBadge({ info }) {
   )
   const cfg = STATUS_CFG[info.status] ?? STATUS_CFG.iniciada
   const hora = fmtHora(cfg.ts(info))
+  const agend = info.status === 'retornando' ? info.agendamento : null
   return (
-    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${cfg.bg} ${cfg.text}`}>
-      {cfg.label}{hora ? ` ${hora}` : ''}
-    </span>
+    <div className="inline-flex flex-col gap-0.5">
+      <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${cfg.bg} ${cfg.text}`}>
+        {cfg.label}{hora ? ` ${hora}` : ''}
+      </span>
+      {agend && (
+        <span className="text-[9px] text-slate-400 pl-1 whitespace-nowrap">
+          Prev. {fmtDataAgend(agend.data_agendamento)} {agend.bloco}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -181,10 +195,20 @@ export default function DashboardComercial() {
       const pm  = {}   // viagem_id → placa
       const vim = {}   // viagem_id → info de status
       if (viagemIds.length) {
-        const { data: viagens } = await supabase
-          .from('viagens')
-          .select('id, cavalo_id, status, created_at, dt_saida_revenda, dt_chegada_fabrica, dt_saida_fabrica, dt_chegada_revenda')
-          .in('id', viagemIds)
+        const [{ data: viagens }, { data: agends }] = await Promise.all([
+          supabase
+            .from('viagens')
+            .select('id, cavalo_id, status, created_at, dt_saida_revenda, dt_chegada_fabrica, dt_saida_fabrica, dt_chegada_revenda')
+            .in('id', viagemIds),
+          supabase
+            .from('agendamentos')
+            .select('viagem_id, data_agendamento, bloco')
+            .in('viagem_id', viagemIds)
+            .neq('status', 'cancelado'),
+        ])
+
+        const agendMap = {}
+        ;(agends ?? []).forEach(a => { agendMap[a.viagem_id] = { data_agendamento: a.data_agendamento, bloco: a.bloco } })
 
         const cavaloIds = [...new Set((viagens ?? []).map(v => v.cavalo_id).filter(Boolean))]
         if (cavaloIds.length) {
@@ -200,6 +224,7 @@ export default function DashboardComercial() {
               dt_chegada_fabrica: v.dt_chegada_fabrica,
               dt_saida_fabrica:   v.dt_saida_fabrica,
               dt_chegada_revenda: v.dt_chegada_revenda,
+              agendamento:        agendMap[v.id] ?? null,
             }
           })
         } else {
@@ -211,6 +236,7 @@ export default function DashboardComercial() {
               dt_chegada_fabrica: v.dt_chegada_fabrica,
               dt_saida_fabrica:   v.dt_saida_fabrica,
               dt_chegada_revenda: v.dt_chegada_revenda,
+              agendamento:        agendMap[v.id] ?? null,
             }
           })
         }
@@ -382,7 +408,9 @@ export default function DashboardComercial() {
     const rows = tableData.map(r => {
       const cfg  = r.viagemInfo ? (STATUS_CFG[r.viagemInfo.status] ?? STATUS_CFG.iniciada) : null
       const hora = cfg ? fmtHora(cfg.ts(r.viagemInfo)) : ''
-      const statusTxt = cfg ? `${cfg.label}${hora ? ` ${hora}` : ''}` : '—'
+      const agend = r.viagemInfo?.status === 'retornando' ? r.viagemInfo.agendamento : null
+      const prevTxt = agend ? ` · Prev. ${fmtDataAgend(agend.data_agendamento)} ${agend.bloco}` : ''
+      const statusTxt = cfg ? `${cfg.label}${hora ? ` ${hora}` : ''}${prevTxt}` : '—'
       return [
         r.placa,
         r.isTransfer ? `[Transf.] ${r.fabNome}` : r.fabNome,
