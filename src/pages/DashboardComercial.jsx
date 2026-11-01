@@ -14,6 +14,16 @@ const SEGMENTOS = [
 
 const TABELAS_PRECO = ['Pratic', 'Cheia', 'Diferença']
 
+// Mapeamento de status → label, cores e qual timestamp usar
+const STATUS_CFG = {
+  iniciada:               { label: 'Saída',      bg: 'bg-slate-100',   text: 'text-slate-500',   ts: v => v.created_at },
+  em_transito:            { label: 'Em Rota',    bg: 'bg-purple-50',   text: 'text-purple-600',  ts: v => v.dt_saida_revenda },
+  na_fabrica:             { label: 'Fábrica',    bg: 'bg-blue-50',     text: 'text-blue-600',    ts: v => v.dt_chegada_fabrica },
+  retornando:             { label: 'Retornando', bg: 'bg-yellow-50',   text: 'text-yellow-600',  ts: v => v.dt_saida_fabrica },
+  aguardando_conferencia: { label: 'Chegou',     bg: 'bg-green-50',    text: 'text-green-600',   ts: v => v.dt_chegada_revenda },
+  concluida:              { label: 'Chegou',     bg: 'bg-green-50',    text: 'text-green-600',   ts: v => v.dt_chegada_revenda },
+}
+
 function todayStr() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -34,6 +44,22 @@ function fmtR$(v) {
   return v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 }
 
+function fmtHora(ts) {
+  if (!ts) return ''
+  return new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function StatusBadge({ info }) {
+  if (!info) return <span className="text-slate-300">—</span>
+  const cfg = STATUS_CFG[info.status] ?? STATUS_CFG.iniciada
+  const hora = fmtHora(cfg.ts(info))
+  return (
+    <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${cfg.bg} ${cfg.text}`}>
+      {cfg.label}{hora ? ` ${hora}` : ''}
+    </span>
+  )
+}
+
 // Igual ao Dashboard — busca preço vigente na data do pedido
 function findPreco(precosMap, tabela, codigo, date) {
   const rows = precosMap[tabela]?.[codigo] ?? []
@@ -47,24 +73,25 @@ function findPreco(precosMap, tabela, codigo, date) {
 }
 
 export default function DashboardComercial() {
-  const [dataInicio,   setDataInicio]   = useState(todayStr)
-  const [dataFim,      setDataFim]      = useState(todayStr)
-  const [unidades,     setUnidades]     = useState([])
-  const [fabricas,     setFabricas]     = useState([])
-  const [segFiltro,    setSegFiltro]    = useState([])
-  const [tabelaPreco,  setTabelaPreco]  = useState('Pratic')
+  const [dataInicio,    setDataInicio]    = useState(todayStr)
+  const [dataFim,       setDataFim]       = useState(todayStr)
+  const [unidades,      setUnidades]      = useState([])
+  const [fabricas,      setFabricas]      = useState([])
+  const [segFiltro,     setSegFiltro]     = useState([])
+  const [tabelaPreco,   setTabelaPreco]   = useState('Pratic')
 
-  const [loading,      setLoading]      = useState(true)
-  const [optUnidades,  setOptUnidades]  = useState([])
-  const [optFabricas,  setOptFabricas]  = useState([])
-  const [precosMap,    setPrecosMap]    = useState({ Pratic: {}, Cheia: {} })
+  const [loading,       setLoading]       = useState(true)
+  const [optUnidades,   setOptUnidades]   = useState([])
+  const [optFabricas,   setOptFabricas]   = useState([])
+  const [precosMap,     setPrecosMap]     = useState({ Pratic: {}, Cheia: {} })
 
-  const [catMap,       setCatMap]       = useState({})
-  const [placaMap,     setPlacaMap]     = useState({})
-  const [zeroCervSet,  setZeroCervSet]  = useState(new Set())
-  const [zeroNabSet,   setZeroNabSet]   = useState(new Set())
-  const [highEndSet,   setHighEndSet]   = useState(new Set())
-  const [pedidos,      setPedidos]      = useState([])
+  const [catMap,        setCatMap]        = useState({})
+  const [placaMap,      setPlacaMap]      = useState({})
+  const [viagemInfoMap, setViagemInfoMap] = useState({})
+  const [zeroCervSet,   setZeroCervSet]   = useState(new Set())
+  const [zeroNabSet,    setZeroNabSet]    = useState(new Set())
+  const [highEndSet,    setHighEndSet]    = useState(new Set())
+  const [pedidos,       setPedidos]       = useState([])
 
   // Dados estáticos — carregados uma vez
   useEffect(() => {
@@ -135,12 +162,16 @@ export default function DashboardComercial() {
       const { data: peds } = await q
       const pedList = peds ?? []
 
-      // Placa do cavalo vinculado (igual à guia Pedidos)
+      // Placa do cavalo + dados de status da viagem
       const viagemIds = [...new Set(pedList.map(p => p.viagem_id).filter(Boolean))]
-      const pm = {}
+      const pm  = {}   // viagem_id → placa
+      const vim = {}   // viagem_id → info de status
       if (viagemIds.length) {
         const { data: viagens } = await supabase
-          .from('viagens').select('id, cavalo_id').in('id', viagemIds)
+          .from('viagens')
+          .select('id, cavalo_id, status, created_at, dt_saida_revenda, dt_chegada_fabrica, dt_saida_fabrica, dt_chegada_revenda')
+          .in('id', viagemIds)
+
         const cavaloIds = [...new Set((viagens ?? []).map(v => v.cavalo_id).filter(Boolean))]
         if (cavaloIds.length) {
           const { data: cavalos } = await supabase
@@ -148,10 +179,30 @@ export default function DashboardComercial() {
           const cavPlacaMap = Object.fromEntries((cavalos ?? []).map(c => [c.id, c.placa]))
           ;(viagens ?? []).forEach(v => {
             if (v.cavalo_id && cavPlacaMap[v.cavalo_id]) pm[v.id] = cavPlacaMap[v.cavalo_id]
+            vim[v.id] = {
+              status:             v.status,
+              created_at:         v.created_at,
+              dt_saida_revenda:   v.dt_saida_revenda,
+              dt_chegada_fabrica: v.dt_chegada_fabrica,
+              dt_saida_fabrica:   v.dt_saida_fabrica,
+              dt_chegada_revenda: v.dt_chegada_revenda,
+            }
+          })
+        } else {
+          ;(viagens ?? []).forEach(v => {
+            vim[v.id] = {
+              status:             v.status,
+              created_at:         v.created_at,
+              dt_saida_revenda:   v.dt_saida_revenda,
+              dt_chegada_fabrica: v.dt_chegada_fabrica,
+              dt_saida_fabrica:   v.dt_saida_fabrica,
+              dt_chegada_revenda: v.dt_chegada_revenda,
+            }
           })
         }
       }
       setPlacaMap(pm)
+      setViagemInfoMap(vim)
 
       const skus = [...new Set(pedList.map(p => p.cod_produto).filter(Boolean))]
       if (skus.length) {
@@ -178,7 +229,7 @@ export default function DashboardComercial() {
     ? Object.keys(precosMap['Pratic'] ?? {}).length > 0 && Object.keys(precosMap['Cheia'] ?? {}).length > 0
     : Object.keys(precosMap[tabelaPreco] ?? {}).length > 0
 
-  // Classifica cada linha de pedido com segmentos, HL e Valor
+  // Classifica cada linha de pedido com segmentos, HL, Valor e status da viagem
   const linhasClassificadas = useMemo(() => {
     const result = []
     pedidos.forEach(p => {
@@ -209,14 +260,16 @@ export default function DashboardComercial() {
         }
       }
 
-      const placa  = (p.viagem_id ? placaMap[p.viagem_id] : null) ?? p.placa ?? '—'
-      const tm     = cat.tipo_marca ?? ''
-      const emb    = cat.embalagem  ?? ''
-      const isCerv = tm === '001 - CERVEJA' || tm === '028 - BEBIDAS QUENTES'
-      const isRGB  = isCerv && (emb.startsWith('017') || emb.startsWith('018') || emb.startsWith('085'))
+      const placa      = (p.viagem_id ? placaMap[p.viagem_id] : null) ?? p.placa ?? '—'
+      const viagemInfo = p.viagem_id ? (viagemInfoMap[p.viagem_id] ?? null) : null
+      const tm         = cat.tipo_marca ?? ''
+      const emb        = cat.embalagem  ?? ''
+      const isCerv     = tm === '001 - CERVEJA' || tm === '028 - BEBIDAS QUENTES'
+      const isRGB      = isCerv && (emb.startsWith('017') || emb.startsWith('018') || emb.startsWith('085'))
 
       result.push({
         placa,
+        viagemInfo,
         codigo:    p.cod_produto,
         descricao: cat.descricao || p.cod_produto,
         valor,
@@ -235,7 +288,7 @@ export default function DashboardComercial() {
       })
     })
     return result
-  }, [pedidos, catMap, placaMap, zeroCervSet, zeroNabSet, highEndSet, precosMap, tabelaPreco, today])
+  }, [pedidos, catMap, placaMap, viagemInfoMap, zeroCervSet, zeroNabSet, highEndSet, precosMap, tabelaPreco, today])
 
   // HL por segmento para os cards (sem filtro de segmento)
   const hlPorSegmento = useMemo(() => {
@@ -253,7 +306,18 @@ export default function DashboardComercial() {
     linhasClassificadas.forEach(l => {
       if (segFiltro.length > 0 && !segFiltro.some(s => l.tags[s])) return
       const key = `${l.placa}||${l.codigo}`
-      if (!map[key]) map[key] = { placa: l.placa, codigo: l.codigo, descricao: l.descricao, valor: 0, hl: 0, paletes: 0, cx: 0 }
+      if (!map[key]) {
+        map[key] = {
+          placa:      l.placa,
+          viagemInfo: l.viagemInfo,
+          codigo:     l.codigo,
+          descricao:  l.descricao,
+          valor:   0,
+          hl:      0,
+          paletes: 0,
+          cx:      0,
+        }
+      }
       map[key].valor   += l.valor
       map[key].hl      += l.hl
       map[key].paletes += l.paletes
@@ -397,12 +461,13 @@ export default function DashboardComercial() {
                       <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">HL</th>
                       <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Paletes</th>
                       <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">CX</th>
+                      <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {tableData.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="text-center py-12 text-slate-400">
+                        <td colSpan={8} className="text-center py-12 text-slate-400">
                           Sem dados para o período
                         </td>
                       </tr>
@@ -415,6 +480,7 @@ export default function DashboardComercial() {
                         <td className="px-3 py-2 text-right font-semibold text-cobeb-navy tabular-nums">{fmtHL(row.hl)}</td>
                         <td className="px-3 py-2 text-right text-cobeb-text tabular-nums">{fmtN(row.paletes)}</td>
                         <td className="px-3 py-2 text-right text-cobeb-text tabular-nums">{fmtN(row.cx)}</td>
+                        <td className="px-3 py-2"><StatusBadge info={row.viagemInfo} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -427,6 +493,7 @@ export default function DashboardComercial() {
                       <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy tabular-nums">{fmtHL(totais.hl)}</td>
                       <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy tabular-nums">{fmtN(totais.paletes)}</td>
                       <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy tabular-nums">{fmtN(totais.cx)}</td>
+                      <td className="px-3 py-2.5" />
                     </tr>
                   </tfoot>
                 </table>
