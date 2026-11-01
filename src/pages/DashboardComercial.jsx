@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import DashboardLayout from '../components/DashboardLayout'
 import { supabase } from '../lib/supabase'
+import * as XLSX from 'xlsx'
 
 const SEGMENTOS = [
   { key: 'cerveja',  label: 'Cerveja',    cor: '#003DA5' },
@@ -335,6 +336,41 @@ export default function DashboardComercial() {
     cx:      tableData.reduce((s, r) => s + r.cx,      0),
   }), [tableData])
 
+  function exportarExcel() {
+    const header = [
+      'Placa', 'Código', 'Descrição',
+      `Valor (${tabelaPreco})`, 'HL', 'Paletes', 'CX', 'Status',
+    ]
+    const rows = tableData.map(r => {
+      const cfg  = r.viagemInfo ? (STATUS_CFG[r.viagemInfo.status] ?? STATUS_CFG.iniciada) : null
+      const hora = cfg ? fmtHora(cfg.ts(r.viagemInfo)) : ''
+      const statusTxt = cfg ? `${cfg.label}${hora ? ` ${hora}` : ''}` : '—'
+      return [
+        r.placa,
+        r.codigo,
+        r.descricao,
+        temTabela ? r.valor : '',
+        r.hl,
+        r.paletes,
+        r.cx,
+        statusTxt,
+      ]
+    })
+    const totalRow = [
+      'TOTAL', '', '',
+      temTabela ? totais.valor : '',
+      totais.hl,
+      totais.paletes,
+      totais.cx,
+      '',
+    ]
+    const ws = XLSX.utils.aoa_to_sheet([header, ...rows, totalRow])
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Comercial')
+    const periodo = dataInicio === dataFim ? dataInicio : `${dataInicio}_${dataFim}`
+    XLSX.writeFile(wb, `Comercial_${periodo}.xlsx`)
+  }
+
   function toggleUnidade(id) {
     setUnidades(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
@@ -448,6 +484,18 @@ export default function DashboardComercial() {
 
             {/* ── Tabela de produtos ────────────────────────────────────────── */}
             <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-cobeb-border flex items-center justify-between">
+                <p className="text-[11px] font-semibold text-slate-500">
+                  {tableData.length} produto{tableData.length !== 1 ? 's' : ''}
+                </p>
+                <button
+                  onClick={exportarExcel}
+                  disabled={tableData.length === 0}
+                  className="flex items-center gap-1.5 text-[11px] font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border hover:border-cobeb-blue/50 hover:bg-blue-50 disabled:opacity-40 px-3 py-1.5 rounded-xl transition-colors"
+                >
+                  ↓ Exportar Excel
+                </button>
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
