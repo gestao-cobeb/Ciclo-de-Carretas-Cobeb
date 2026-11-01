@@ -32,16 +32,22 @@ function fmtN(v) {
   return Math.round(v).toLocaleString('pt-BR')
 }
 
+function ptDate(iso) {
+  if (!iso) return '—'
+  const [, mm, dd] = iso.split('-')
+  return `${dd}/${mm}`
+}
+
 export default function DashboardComercial() {
   const [dataInicio,  setDataInicio]  = useState(firstDay)
   const [dataFim,     setDataFim]     = useState(lastDay)
-  const [unidades,    setUnidades]    = useState([])  // [] = todos os CDs
-  const [fabricas,    setFabricas]    = useState([])  // [] = todas as fábricas (codigo_ambev)
-  const [segFiltro,   setSegFiltro]   = useState([])  // [] = todos os segmentos
+  const [unidades,    setUnidades]    = useState([])
+  const [fabricas,    setFabricas]    = useState([])
+  const [segFiltro,   setSegFiltro]   = useState([])
 
   const [loading,     setLoading]     = useState(true)
-  const [optUnidades, setOptUnidades] = useState([])  // tipo = revenda
-  const [optFabricas, setOptFabricas] = useState([])  // tipo = fabrica
+  const [optUnidades, setOptUnidades] = useState([])
+  const [optFabricas, setOptFabricas] = useState([])
 
   const [catMap,      setCatMap]      = useState({})
   const [zeroCervSet, setZeroCervSet] = useState(new Set())
@@ -58,7 +64,6 @@ export default function DashboardComercial() {
         supabase.from('depara_zero').select('cod_promax, tipo'),
         supabase.from('demanda').select('cod_promax, tipo'),
       ])
-
       setOptUnidades(unis ?? [])
       setOptFabricas((fabs ?? []).filter(f => f.codigo_ambev))
 
@@ -88,7 +93,7 @@ export default function DashboardComercial() {
 
       let q = supabase
         .from('pedidos')
-        .select('cod_produto, qtde_pallets, qtde_skus, data_puxada, viagem_id, status, unidade_id, codigo_fabrica, placa')
+        .select('numero_pedido, placa, revenda, cod_produto, qtde_pallets, qtde_skus, data_puxada, viagem_id, status, unidade_id, codigo_fabrica')
         .gte('data_puxada', dataInicio)
         .lte('data_puxada', dataFim)
         .neq('status', 'cancelado')
@@ -122,8 +127,8 @@ export default function DashboardComercial() {
 
   const today = new Date().toISOString().slice(0, 10)
 
-  // Classifica cada pedido nos segmentos e calcula HL
-  const pedidosClassificados = useMemo(() => {
+  // Classifica cada linha de pedido com segmentos e HL
+  const linhasClassificadas = useMemo(() => {
     const result = []
     pedidos.forEach(p => {
       const iso = p.data_puxada?.slice(0, 10)
@@ -144,12 +149,15 @@ export default function DashboardComercial() {
       const isRGB  = isCerv && (emb.startsWith('017') || emb.startsWith('018') || emb.startsWith('085'))
 
       result.push({
-        codigo:    p.cod_produto,
-        placa:     p.placa || '—',
-        descricao: cat.descricao || p.cod_produto,
+        numeroPedido: p.numero_pedido,
+        placa:        p.placa || '—',
+        revenda:      p.revenda || '—',
+        data:         iso,
+        codigo:       p.cod_produto,
+        descricao:    cat.descricao || p.cod_produto,
         hl,
-        paletes:   p.qtde_pallets || 0,
-        cx:        p.qtde_skus    || 0,
+        paletes: p.qtde_pallets || 0,
+        cx:      p.qtde_skus    || 0,
         tags: {
           cerveja:  isCerv,
           nab:      !isCerv,
@@ -168,42 +176,46 @@ export default function DashboardComercial() {
   const hlPorSegmento = useMemo(() => {
     const acc = {}
     SEGMENTOS.forEach(s => { acc[s.key] = 0 })
-    pedidosClassificados.forEach(p => {
-      SEGMENTOS.forEach(s => { if (p.tags[s.key]) acc[s.key] += p.hl })
+    linhasClassificadas.forEach(l => {
+      SEGMENTOS.forEach(s => { if (l.tags[s.key]) acc[s.key] += l.hl })
     })
     return acc
-  }, [pedidosClassificados])
+  }, [linhasClassificadas])
 
-  // Tabela agrupada por (placa + produto) com filtro de segmento
-  const tableData = useMemo(() => {
+  // Cards agrupados por numero_pedido; filtro de segmento aplicado nos SKUs
+  const cards = useMemo(() => {
     const map = {}
-    pedidosClassificados.forEach(p => {
-      if (segFiltro.length > 0 && !segFiltro.some(s => p.tags[s])) return
-      const key = `${p.placa}||${p.codigo}`
-      if (!map[key]) map[key] = { placa: p.placa, codigo: p.codigo, descricao: p.descricao, hl: 0, paletes: 0, cx: 0 }
-      map[key].hl      += p.hl
-      map[key].paletes += p.paletes
-      map[key].cx      += p.cx
+    linhasClassificadas.forEach(l => {
+      const key = `${l.numeroPedido}`
+      if (!map[key]) map[key] = {
+        numeroPedido: l.numeroPedido,
+        placa:   l.placa,
+        revenda: l.revenda,
+        data:    l.data,
+        skus:    [],
+      }
+      if (segFiltro.length > 0 && !segFiltro.some(s => l.tags[s])) return
+      map[key].skus.push(l)
     })
-    return Object.values(map).sort((a, b) =>
-      a.placa.localeCompare(b.placa) || b.hl - a.hl
-    )
-  }, [pedidosClassificados, segFiltro])
+    return Object.values(map)
+      .filter(c => c.skus.length > 0)
+      .sort((a, b) =>
+        (a.placa).localeCompare(b.placa) || (a.data).localeCompare(b.data)
+      )
+  }, [linhasClassificadas, segFiltro])
 
-  const totais = useMemo(() => ({
-    hl:      tableData.reduce((s, r) => s + r.hl,      0),
-    paletes: tableData.reduce((s, r) => s + r.paletes, 0),
-    cx:      tableData.reduce((s, r) => s + r.cx,      0),
-  }), [tableData])
+  const totaisGerais = useMemo(() => ({
+    hl:      cards.reduce((s, c) => s + c.skus.reduce((ss, sk) => ss + sk.hl,      0), 0),
+    paletes: cards.reduce((s, c) => s + c.skus.reduce((ss, sk) => ss + sk.paletes, 0), 0),
+    cx:      cards.reduce((s, c) => s + c.skus.reduce((ss, sk) => ss + sk.cx,      0), 0),
+  }), [cards])
 
   function toggleUnidade(id) {
     setUnidades(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
-
-  function toggleFabrica(codAmb) {
-    setFabricas(prev => prev.includes(codAmb) ? prev.filter(x => x !== codAmb) : [...prev, codAmb])
+  function toggleFabrica(cod) {
+    setFabricas(prev => prev.includes(cod) ? prev.filter(x => x !== cod) : [...prev, cod])
   }
-
   function toggleSeg(key) {
     setSegFiltro(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])
   }
@@ -213,7 +225,7 @@ export default function DashboardComercial() {
   const btnOn   = 'bg-cobeb-navy text-white border-cobeb-navy'
   const btnOff  = 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
 
-  const cardsAtivos = segFiltro.length > 0
+  const cardsHLAtivos = segFiltro.length > 0
     ? SEGMENTOS.filter(s => segFiltro.includes(s.key))
     : SEGMENTOS
 
@@ -224,7 +236,6 @@ export default function DashboardComercial() {
         {/* ── Filtros ─────────────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 space-y-3">
 
-          {/* Período */}
           <div className="flex items-center gap-2">
             <input type="date" value={dataInicio} max={dataFim || undefined}
               onChange={e => setDataInicio(e.target.value)} className={dateCls} />
@@ -233,47 +244,34 @@ export default function DashboardComercial() {
               onChange={e => setDataFim(e.target.value)} className={dateCls} />
           </div>
 
-          {/* CDs (somente revendas) */}
           <div>
             <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">CD</p>
             <div className="flex flex-wrap gap-1.5">
-              <button onClick={() => setUnidades([])} className={`${btnBase} ${unidades.length === 0 ? btnOn : btnOff}`}>
-                Todos os CDs
-              </button>
+              <button onClick={() => setUnidades([])} className={`${btnBase} ${unidades.length === 0 ? btnOn : btnOff}`}>Todos os CDs</button>
               {optUnidades.map(u => (
                 <button key={u.id} onClick={() => toggleUnidade(u.id)}
-                  className={`${btnBase} ${unidades.includes(u.id) ? btnOn : btnOff}`}>
-                  {u.nome}
-                </button>
+                  className={`${btnBase} ${unidades.includes(u.id) ? btnOn : btnOff}`}>{u.nome}</button>
               ))}
             </div>
           </div>
 
-          {/* Fábricas */}
           {optFabricas.length > 0 && (
             <div>
               <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Fábrica</p>
               <div className="flex flex-wrap gap-1.5">
-                <button onClick={() => setFabricas([])} className={`${btnBase} ${fabricas.length === 0 ? btnOn : btnOff}`}>
-                  Todas as fábricas
-                </button>
+                <button onClick={() => setFabricas([])} className={`${btnBase} ${fabricas.length === 0 ? btnOn : btnOff}`}>Todas as fábricas</button>
                 {optFabricas.map(f => (
                   <button key={f.id} onClick={() => toggleFabrica(f.codigo_ambev)}
-                    className={`${btnBase} ${fabricas.includes(f.codigo_ambev) ? btnOn : btnOff}`}>
-                    {f.nome}
-                  </button>
+                    className={`${btnBase} ${fabricas.includes(f.codigo_ambev) ? btnOn : btnOff}`}>{f.nome}</button>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Segmentos */}
           <div>
             <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Segmento</p>
             <div className="flex flex-wrap gap-1.5">
-              <button onClick={() => setSegFiltro([])} className={`${btnBase} ${segFiltro.length === 0 ? btnOn : btnOff}`}>
-                Todos
-              </button>
+              <button onClick={() => setSegFiltro([])} className={`${btnBase} ${segFiltro.length === 0 ? btnOn : btnOff}`}>Todos</button>
               {SEGMENTOS.map(s => (
                 <button key={s.key} onClick={() => toggleSeg(s.key)}
                   className={`${btnBase} ${segFiltro.includes(s.key) ? 'text-white border-transparent' : btnOff}`}
@@ -293,64 +291,93 @@ export default function DashboardComercial() {
           <>
             {/* ── Cards de HL por segmento ──────────────────────────────────── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              {cardsAtivos.map(s => (
+              {cardsHLAtivos.map(s => (
                 <div key={s.key}
                   className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 flex flex-col gap-1"
                   style={{ borderLeftWidth: 4, borderLeftColor: s.cor }}>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{s.label}</p>
-                  <p className="text-xl font-black tabular-nums" style={{ color: s.cor }}>
-                    {fmtHL(hlPorSegmento[s.key])}
-                  </p>
+                  <p className="text-xl font-black tabular-nums" style={{ color: s.cor }}>{fmtHL(hlPorSegmento[s.key])}</p>
                   <p className="text-[10px] text-slate-400">HL</p>
                 </div>
               ))}
             </div>
 
-            {/* ── Tabela de produtos ────────────────────────────────────────── */}
-            <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-cobeb-border bg-cobeb-sky">
-                      <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold w-24 whitespace-nowrap">Código</th>
-                      <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Placa</th>
-                      <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold">Descrição</th>
-                      <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">HL</th>
-                      <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Paletes</th>
-                      <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">CX</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {tableData.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="text-center py-12 text-slate-400">
-                          Sem dados para o período
-                        </td>
-                      </tr>
-                    ) : tableData.map((row, i) => (
-                      <tr key={`${row.placa}||${row.codigo}`} className={i % 2 === 0 ? 'bg-white' : 'bg-cobeb-sky/30'}>
-                        <td className="px-3 py-2 text-slate-400 font-mono">{row.codigo}</td>
-                        <td className="px-3 py-2 font-semibold text-cobeb-text whitespace-nowrap">{row.placa}</td>
-                        <td className="px-3 py-2 text-cobeb-text">{row.descricao}</td>
-                        <td className="px-3 py-2 text-right font-semibold text-cobeb-navy tabular-nums">{fmtHL(row.hl)}</td>
-                        <td className="px-3 py-2 text-right text-cobeb-text tabular-nums">{fmtN(row.paletes)}</td>
-                        <td className="px-3 py-2 text-right text-cobeb-text tabular-nums">{fmtN(row.cx)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 border-cobeb-navy/20 bg-cobeb-sky">
-                      <td colSpan={3} className="px-3 py-2.5 font-bold text-cobeb-text">
-                        Total — {tableData.length} linha{tableData.length !== 1 ? 's' : ''}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy tabular-nums">{fmtHL(totais.hl)}</td>
-                      <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy tabular-nums">{fmtN(totais.paletes)}</td>
-                      <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy tabular-nums">{fmtN(totais.cx)}</td>
-                    </tr>
-                  </tfoot>
-                </table>
+            {/* ── Resumo geral ──────────────────────────────────────────────── */}
+            <div className="flex items-center justify-between px-1">
+              <p className="text-xs text-slate-400">
+                {cards.length} pedido{cards.length !== 1 ? 's' : ''} · {cards.reduce((s, c) => s + c.skus.length, 0)} SKUs
+              </p>
+              <div className="flex gap-3 text-xs text-cobeb-navy font-semibold">
+                <span>{fmtHL(totaisGerais.hl)} HL</span>
+                <span className="text-slate-400">·</span>
+                <span>{fmtN(totaisGerais.paletes)} plt</span>
+                <span className="text-slate-400">·</span>
+                <span>{fmtN(totaisGerais.cx)} cx</span>
               </div>
             </div>
+
+            {/* ── Cards de pedido ───────────────────────────────────────────── */}
+            {cards.length === 0 ? (
+              <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
+                Sem dados para o período
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {cards.map(card => {
+                  const totalHL  = card.skus.reduce((s, sk) => s + sk.hl,      0)
+                  const totalPlt = card.skus.reduce((s, sk) => s + sk.paletes, 0)
+                  const totalCx  = card.skus.reduce((s, sk) => s + sk.cx,      0)
+                  return (
+                    <div key={card.numeroPedido}
+                      className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
+
+                      {/* Cabeçalho do card */}
+                      <div className="bg-cobeb-navy px-4 py-2.5 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="shrink-0 bg-cobeb-yellow text-cobeb-navy text-xs font-black px-2.5 py-0.5 rounded-lg tracking-wide">
+                            {card.placa}
+                          </span>
+                          <span className="text-white text-xs font-semibold truncate">{card.revenda}</span>
+                        </div>
+                        <span className="shrink-0 text-blue-300/60 text-[10px] font-medium">
+                          {ptDate(card.data)} · #{card.numeroPedido}
+                        </span>
+                      </div>
+
+                      {/* SKUs */}
+                      <div className="divide-y divide-cobeb-border/60">
+                        {card.skus.map(sku => (
+                          <div key={sku.codigo} className="px-4 py-2.5 flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-cobeb-text text-xs font-semibold truncate">{sku.descricao}</p>
+                              <p className="text-slate-400 text-[10px] font-mono">{sku.codigo}</p>
+                            </div>
+                            <div className="shrink-0 text-right space-y-0.5">
+                              <p className="text-cobeb-navy text-xs font-bold tabular-nums">{fmtHL(sku.hl)} HL</p>
+                              <p className="text-slate-400 text-[10px] tabular-nums">
+                                {fmtN(sku.paletes)} plt · {fmtN(sku.cx)} cx
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Rodapé do card */}
+                      <div className="bg-cobeb-sky border-t border-cobeb-border px-4 py-2 flex items-center justify-between">
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide">Total</span>
+                        <div className="flex gap-3 text-[10px] font-bold text-cobeb-navy tabular-nums">
+                          <span>{fmtHL(totalHL)} HL</span>
+                          <span className="text-slate-300">·</span>
+                          <span>{fmtN(totalPlt)} plt</span>
+                          <span className="text-slate-300">·</span>
+                          <span>{fmtN(totalCx)} cx</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </>
         )}
       </div>
