@@ -83,9 +83,10 @@ export default function DashboardComercial() {
   const [dataFim,       setDataFim]       = useState(todayStr)
   const [unidades,      setUnidades]      = useState([])
   const [fabricas,      setFabricas]      = useState([])
-  const [segFiltro,     setSegFiltro]     = useState([])
+  const [segFiltro,        setSegFiltro]        = useState([])
   const [tabelaPreco,      setTabelaPreco]      = useState('Pratic')
   const [filtrosVisiveis,  setFiltrosVisiveis]  = useState(true)
+  const [segmentoAtivo,    setSegmentoAtivo]    = useState(null)
 
   const [loading,       setLoading]       = useState(true)
   const [optUnidades,   setOptUnidades]   = useState([])
@@ -291,6 +292,7 @@ export default function DashboardComercial() {
         fabNome,
         isTransfer,
         viagemInfo,
+        embalagem: cat.embalagem || '—',
         codigo:    p.cod_produto,
         descricao: cat.descricao || p.cod_produto,
         valor,
@@ -321,6 +323,19 @@ export default function DashboardComercial() {
     })
     return acc
   }, [linhasClassificadas])
+
+  // Breakdown por embalagem para o card clicado
+  const hlPorEmbalagem = useMemo(() => {
+    if (!segmentoAtivo) return []
+    const acc = {}
+    linhasClassificadas.forEach(l => {
+      if (l.isTransfer || !l.tags[segmentoAtivo]) return
+      acc[l.embalagem] = (acc[l.embalagem] || 0) + l.hl
+    })
+    return Object.entries(acc)
+      .map(([emb, hl]) => ({ emb, hl }))
+      .sort((a, b) => b.hl - a.hl)
+  }, [linhasClassificadas, segmentoAtivo])
 
   // Tabela agrupada por (placa + produto) com filtro de segmento
   const tableData = useMemo(() => {
@@ -514,15 +529,71 @@ export default function DashboardComercial() {
             {/* ── Cards de HL por segmento ──────────────────────────────────── */}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {cardsHLAtivos.map(s => (
-                <div key={s.key}
-                  className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 flex flex-col gap-1"
+                <button key={s.key}
+                  onClick={() => setSegmentoAtivo(s.key)}
+                  className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 flex flex-col gap-1 text-left hover:shadow-md transition-shadow"
                   style={{ borderLeftWidth: 4, borderLeftColor: s.cor }}>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{s.label}</p>
                   <p className="text-xl font-black tabular-nums" style={{ color: s.cor }}>{fmtHL(hlPorSegmento[s.key])}</p>
-                  <p className="text-[10px] text-slate-400">HL</p>
-                </div>
+                  <p className="text-[10px] text-slate-400">HL · ver embalagens</p>
+                </button>
               ))}
             </div>
+
+            {/* ── Modal breakdown por embalagem ─────────────────────────────── */}
+            {segmentoAtivo && (() => {
+              const seg = SEGMENTOS.find(s => s.key === segmentoAtivo)
+              const totalHL = hlPorSegmento[segmentoAtivo] || 0
+              return (
+                <div
+                  className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50"
+                  onClick={() => setSegmentoAtivo(null)}
+                >
+                  <div
+                    className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-2xl shadow-xl overflow-hidden"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    {/* Header */}
+                    <div className="px-5 py-4 flex items-center justify-between border-b border-cobeb-border"
+                      style={{ borderTopWidth: 4, borderTopColor: seg?.cor }}>
+                      <div>
+                        <p className="text-xs font-bold text-cobeb-text uppercase tracking-wide">{seg?.label}</p>
+                        <p className="text-2xl font-black tabular-nums mt-0.5" style={{ color: seg?.cor }}>
+                          {fmtHL(totalHL)} <span className="text-sm font-semibold text-slate-400">HL</span>
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setSegmentoAtivo(null)}
+                        className="w-8 h-8 rounded-xl bg-cobeb-sky flex items-center justify-center text-slate-400 hover:text-cobeb-text transition-colors text-sm font-bold"
+                      >✕</button>
+                    </div>
+
+                    {/* Lista por embalagem */}
+                    <div className="px-5 py-3 max-h-72 overflow-y-auto divide-y divide-cobeb-border/40">
+                      {hlPorEmbalagem.length === 0 ? (
+                        <p className="text-slate-400 text-sm py-4 text-center">Sem dados</p>
+                      ) : hlPorEmbalagem.map(({ emb, hl }) => {
+                        const pct = totalHL > 0 ? (hl / totalHL) * 100 : 0
+                        return (
+                          <div key={emb} className="py-2.5 flex items-center gap-3">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-cobeb-text truncate">{emb}</p>
+                              <div className="mt-1 h-1.5 bg-cobeb-sky rounded-full overflow-hidden">
+                                <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: seg?.cor }} />
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-sm font-bold tabular-nums text-cobeb-navy">{fmtHL(hl)}</p>
+                              <p className="text-[10px] text-slate-400">{pct.toFixed(1)}%</p>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )
+            })()}
 
             {/* ── Tabela de produtos ────────────────────────────────────────── */}
             <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
