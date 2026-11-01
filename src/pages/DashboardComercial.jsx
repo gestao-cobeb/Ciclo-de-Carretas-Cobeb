@@ -73,7 +73,7 @@ export default function DashboardComercial() {
         supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
         supabase.from('unidades').select('id, nome, codigo_ambev').eq('tipo', 'fabrica').eq('ativo', true).order('nome'),
         supabase.from('depara_zero').select('cod_promax, tipo'),
-        supabase.from('demanda').select('cod_promax, tipo'),
+        supabase.from('demanda').select('cod_promax, segmento'),
         supabase.from('precos_fabrica')
           .select('codigo, tabela, preco_total, data_vigencia, data_fim_vigencia')
           .not('data_vigencia', 'is', null)
@@ -95,7 +95,7 @@ export default function DashboardComercial() {
 
       const hes = new Set()
       ;(dem ?? []).forEach(d => {
-        if (d.tipo?.toUpperCase().includes('HIGH END')) hes.add(d.cod_promax)
+        if (d.segmento?.toUpperCase().includes('HIGH END')) hes.add(d.cod_promax)
       })
       setHighEndSet(hes)
 
