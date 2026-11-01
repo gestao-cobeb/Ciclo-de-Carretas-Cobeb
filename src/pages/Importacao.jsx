@@ -113,9 +113,9 @@ export default function Importacao() {
   async function carregar() {
     setLoading(true)
     const [{ data: peds }, { data: unis }, { data: prods }, { count: precosCount, data: precosData }, { count: demandaCount, data: demandaData }, { count: deParaZeroCount, data: deParaZeroData }] = await Promise.all([
-      supabase.from('pedidos').select('arquivo_origem, data_puxada, viagem_id, importado_em, status'),
+      supabase.from('pedidos').select('arquivo_origem, data_puxada, viagem_id, importado_em, status').order('importado_em', { ascending: false }).limit(200000),
       supabase.from('unidades').select('id, nome, codigo, codigo_ambev, cidade, tipo').order('nome'),
-      supabase.from('produtos_catalogo').select('arquivo_origem, importado_em'),
+      supabase.from('produtos_catalogo').select('arquivo_origem, importado_em').order('importado_em', { ascending: false }).limit(50000),
       supabase.from('precos_fabrica').select('importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
       supabase.from('demanda').select('versao, ano, importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
       supabase.from('depara_zero').select('importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
