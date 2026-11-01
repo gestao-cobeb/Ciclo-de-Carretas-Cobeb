@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import DashboardLayout from '../components/DashboardLayout'
 import { supabase } from '../lib/supabase'
 import * as XLSX from 'xlsx'
+import { SlidersHorizontal } from 'lucide-react'
 
 const SEGMENTOS = [
   { key: 'cerveja',  label: 'Cerveja',    cor: '#003DA5' },
@@ -79,7 +80,8 @@ export default function DashboardComercial() {
   const [unidades,      setUnidades]      = useState([])
   const [fabricas,      setFabricas]      = useState([])
   const [segFiltro,     setSegFiltro]     = useState([])
-  const [tabelaPreco,   setTabelaPreco]   = useState('Pratic')
+  const [tabelaPreco,      setTabelaPreco]      = useState('Pratic')
+  const [filtrosVisiveis,  setFiltrosVisiveis]  = useState(true)
 
   const [loading,       setLoading]       = useState(true)
   const [optUnidades,   setOptUnidades]   = useState([])
@@ -395,72 +397,90 @@ export default function DashboardComercial() {
       <div className="px-4 pt-5 pb-8 space-y-4">
 
         {/* ── Filtros ─────────────────────────────────────────────────────── */}
-        <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 space-y-3">
-
-          <div className="flex items-center gap-2">
-            <input type="date" value={dataInicio} max={dataFim || undefined}
-              onChange={e => setDataInicio(e.target.value)} className={dateCls} />
-            <span className="text-slate-400 text-xs shrink-0">até</span>
-            <input type="date" value={dataFim} min={dataInicio || undefined}
-              onChange={e => setDataFim(e.target.value)} className={dateCls} />
-          </div>
-
-          <div>
-            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">CD</p>
-            <div className="flex flex-wrap gap-1.5">
-              <button onClick={() => setUnidades([])} className={`${btnBase} ${unidades.length === 0 ? btnOn : btnOff}`}>Todos os CDs</button>
-              {optUnidades.map(u => (
-                <button key={u.id} onClick={() => toggleUnidade(u.id)}
-                  className={`${btnBase} ${unidades.includes(u.id) ? btnOn : btnOff}`}>{u.nome}</button>
-              ))}
+        <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
+          <button
+            onClick={() => setFiltrosVisiveis(v => !v)}
+            className="w-full flex items-center justify-between px-4 py-3 hover:bg-cobeb-sky/50 transition-colors"
+          >
+            <div className="flex items-center gap-2 text-cobeb-text text-xs font-semibold">
+              <SlidersHorizontal size={13} />
+              Filtros
+              {(unidades.length > 0 || fabricas.length > 0 || segFiltro.length > 0) && (
+                <span className="bg-cobeb-navy text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
+                  {unidades.length + fabricas.length + segFiltro.length}
+                </span>
+              )}
             </div>
-          </div>
+            <span className="text-slate-400 text-[10px]">{filtrosVisiveis ? 'Ocultar' : 'Mostrar'}</span>
+          </button>
 
-          {optFabricas.length > 0 && (
+          {filtrosVisiveis && <div className="px-4 pb-4 space-y-3">
+
+            <div className="flex items-center gap-2 pt-1">
+              <input type="date" value={dataInicio} max={dataFim || undefined}
+                onChange={e => setDataInicio(e.target.value)} className={dateCls} />
+              <span className="text-slate-400 text-xs shrink-0">até</span>
+              <input type="date" value={dataFim} min={dataInicio || undefined}
+                onChange={e => setDataFim(e.target.value)} className={dateCls} />
+            </div>
+
             <div>
-              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Fábrica</p>
+              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">CD</p>
               <div className="flex flex-wrap gap-1.5">
-                <button onClick={() => setFabricas([])} className={`${btnBase} ${fabricas.length === 0 ? btnOn : btnOff}`}>Todas as fábricas</button>
-                {optFabricas.map(f => (
-                  <button key={f.id} onClick={() => toggleFabrica(f.codigo_ambev)}
-                    className={`${btnBase} ${fabricas.includes(f.codigo_ambev) ? btnOn : btnOff}`}>{f.nome}</button>
+                <button onClick={() => setUnidades([])} className={`${btnBase} ${unidades.length === 0 ? btnOn : btnOff}`}>Todos os CDs</button>
+                {optUnidades.map(u => (
+                  <button key={u.id} onClick={() => toggleUnidade(u.id)}
+                    className={`${btnBase} ${unidades.includes(u.id) ? btnOn : btnOff}`}>{u.nome}</button>
                 ))}
               </div>
             </div>
-          )}
 
-          <div>
-            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Segmento</p>
-            <div className="flex flex-wrap gap-1.5">
-              <button onClick={() => setSegFiltro([])} className={`${btnBase} ${segFiltro.length === 0 ? btnOn : btnOff}`}>Todos</button>
-              {SEGMENTOS.map(s => (
-                <button key={s.key} onClick={() => toggleSeg(s.key)}
-                  className={`${btnBase} ${segFiltro.includes(s.key) ? 'text-white border-transparent' : btnOff}`}
-                  style={segFiltro.includes(s.key) ? { backgroundColor: s.cor, borderColor: s.cor } : {}}>
-                  {s.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Tabela de Preço</p>
-            <div className="flex gap-1.5">
-              {TABELAS_PRECO.map(t => (
-                <button key={t} onClick={() => setTabelaPreco(t)}
-                  className={`${btnBase} ${tabelaPreco === t ? btnOn : btnOff}`}>
-                  {t}
-                </button>
-              ))}
-            </div>
-            {!temTabela && (
-              <p className="text-[10px] text-amber-600 mt-1.5">
-                {tabelaPreco === 'Diferença'
-                  ? 'Tabelas Pratic e Cheia precisam estar importadas.'
-                  : `Tabela ${tabelaPreco} não importada. Acesse Importação de Bases.`}
-              </p>
+            {optFabricas.length > 0 && (
+              <div>
+                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Fábrica</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button onClick={() => setFabricas([])} className={`${btnBase} ${fabricas.length === 0 ? btnOn : btnOff}`}>Todas as fábricas</button>
+                  {optFabricas.map(f => (
+                    <button key={f.id} onClick={() => toggleFabrica(f.codigo_ambev)}
+                      className={`${btnBase} ${fabricas.includes(f.codigo_ambev) ? btnOn : btnOff}`}>{f.nome}</button>
+                  ))}
+                </div>
+              </div>
             )}
-          </div>
+
+            <div>
+              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Segmento</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button onClick={() => setSegFiltro([])} className={`${btnBase} ${segFiltro.length === 0 ? btnOn : btnOff}`}>Todos</button>
+                {SEGMENTOS.map(s => (
+                  <button key={s.key} onClick={() => toggleSeg(s.key)}
+                    className={`${btnBase} ${segFiltro.includes(s.key) ? 'text-white border-transparent' : btnOff}`}
+                    style={segFiltro.includes(s.key) ? { backgroundColor: s.cor, borderColor: s.cor } : {}}>
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Tabela de Preço</p>
+              <div className="flex gap-1.5">
+                {TABELAS_PRECO.map(t => (
+                  <button key={t} onClick={() => setTabelaPreco(t)}
+                    className={`${btnBase} ${tabelaPreco === t ? btnOn : btnOff}`}>
+                    {t}
+                  </button>
+                ))}
+              </div>
+              {!temTabela && (
+                <p className="text-[10px] text-amber-600 mt-1.5">
+                  {tabelaPreco === 'Diferença'
+                    ? 'Tabelas Pratic e Cheia precisam estar importadas.'
+                    : `Tabela ${tabelaPreco} não importada. Acesse Importação de Bases.`}
+                </p>
+              )}
+            </div>
+          </div>}
         </div>
 
         {loading ? (
