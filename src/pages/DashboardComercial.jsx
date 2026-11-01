@@ -93,6 +93,7 @@ export default function DashboardComercial() {
   const [precosMap,     setPrecosMap]     = useState({ Pratic: {}, Cheia: {} })
 
   const [catMap,        setCatMap]        = useState({})
+  const [fabMap,        setFabMap]        = useState({})   // codigo_ambev → { nome, tipo }
   const [placaMap,      setPlacaMap]      = useState({})
   const [viagemInfoMap, setViagemInfoMap] = useState({})
   const [zeroCervSet,   setZeroCervSet]   = useState(new Set())
@@ -103,9 +104,10 @@ export default function DashboardComercial() {
   // Dados estáticos — carregados uma vez
   useEffect(() => {
     async function load() {
-      const [{ data: unis }, { data: fabs }, { data: dpz }, { data: dem }, { data: precos }] = await Promise.all([
+      const [{ data: unis }, { data: fabs }, { data: todasUnis }, { data: dpz }, { data: dem }, { data: precos }] = await Promise.all([
         supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
         supabase.from('unidades').select('id, nome, codigo_ambev').eq('tipo', 'fabrica').eq('ativo', true).order('nome'),
+        supabase.from('unidades').select('nome, tipo, codigo_ambev').not('codigo_ambev', 'is', null),
         supabase.from('depara_zero').select('cod_promax, tipo'),
         supabase.from('demanda').select('cod_promax, segmento'),
         supabase.from('precos_fabrica')
@@ -117,6 +119,10 @@ export default function DashboardComercial() {
 
       setOptUnidades(unis ?? [])
       setOptFabricas((fabs ?? []).filter(f => f.codigo_ambev))
+
+      const fm = {}
+      ;(todasUnis ?? []).forEach(u => { if (u.codigo_ambev) fm[u.codigo_ambev] = { nome: u.nome, tipo: u.tipo } })
+      setFabMap(fm)
 
       const czs = new Set()
       const nzs = new Set()
@@ -269,6 +275,9 @@ export default function DashboardComercial() {
 
       const placa      = (p.viagem_id ? placaMap[p.viagem_id] : null) ?? p.placa ?? '—'
       const viagemInfo = p.viagem_id ? (viagemInfoMap[p.viagem_id] ?? null) : null
+      const fabInfo    = p.codigo_fabrica ? (fabMap[p.codigo_fabrica] ?? null) : null
+      const fabNome    = fabInfo?.nome ?? '—'
+      const isTransfer = fabInfo != null && fabInfo.tipo !== 'fabrica'
       const tm         = cat.tipo_marca ?? ''
       const emb        = cat.embalagem  ?? ''
       const isCerv     = tm === '001 - CERVEJA' || tm === '028 - BEBIDAS QUENTES'
@@ -276,6 +285,8 @@ export default function DashboardComercial() {
 
       result.push({
         placa,
+        fabNome,
+        isTransfer,
         viagemInfo,
         codigo:    p.cod_produto,
         descricao: cat.descricao || p.cod_produto,
@@ -295,13 +306,14 @@ export default function DashboardComercial() {
       })
     })
     return result
-  }, [pedidos, catMap, placaMap, viagemInfoMap, zeroCervSet, zeroNabSet, highEndSet, precosMap, tabelaPreco, today])
+  }, [pedidos, catMap, fabMap, placaMap, viagemInfoMap, zeroCervSet, zeroNabSet, highEndSet, precosMap, tabelaPreco, today])
 
-  // HL por segmento para os cards (sem filtro de segmento)
+  // HL por segmento para os cards (sem filtro de segmento; exclui transferências internas)
   const hlPorSegmento = useMemo(() => {
     const acc = {}
     SEGMENTOS.forEach(s => { acc[s.key] = 0 })
     linhasClassificadas.forEach(l => {
+      if (l.isTransfer) return
       SEGMENTOS.forEach(s => { if (l.tags[s.key]) acc[s.key] += l.hl })
     })
     return acc
@@ -316,6 +328,8 @@ export default function DashboardComercial() {
       if (!map[key]) {
         map[key] = {
           placa:      l.placa,
+          fabNome:    l.fabNome,
+          isTransfer: l.isTransfer,
           viagemInfo: l.viagemInfo,
           codigo:     l.codigo,
           descricao:  l.descricao,
@@ -344,7 +358,7 @@ export default function DashboardComercial() {
 
   function exportarExcel() {
     const header = [
-      'Placa', 'Código', 'Descrição',
+      'Placa', 'Fábrica', 'Código', 'Descrição',
       `Valor (${tabelaPreco})`, 'HL', 'Paletes', 'CX', 'Status',
     ]
     const rows = tableData.map(r => {
@@ -353,6 +367,7 @@ export default function DashboardComercial() {
       const statusTxt = cfg ? `${cfg.label}${hora ? ` ${hora}` : ''}` : '—'
       return [
         r.placa,
+        r.isTransfer ? `[Transf.] ${r.fabNome}` : r.fabNome,
         r.codigo,
         r.descricao,
         temTabela ? r.valor : '',
@@ -363,7 +378,7 @@ export default function DashboardComercial() {
       ]
     })
     const totalRow = [
-      'TOTAL', '', '',
+      'TOTAL', '', '', '',
       temTabela ? totais.valor : '',
       totais.hl,
       totais.paletes,
@@ -525,6 +540,7 @@ export default function DashboardComercial() {
                   <thead>
                     <tr className="border-b border-cobeb-border bg-cobeb-sky">
                       <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Placa</th>
+                      <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Fábrica</th>
                       <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">Código</th>
                       <th className="text-left px-3 py-2.5 text-cobeb-text font-semibold">Descrição</th>
                       <th className="text-right px-3 py-2.5 text-cobeb-text font-semibold whitespace-nowrap">
@@ -539,13 +555,22 @@ export default function DashboardComercial() {
                   <tbody>
                     {tableData.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="text-center py-12 text-slate-400">
+                        <td colSpan={9} className="text-center py-12 text-slate-400">
                           Sem dados para o período
                         </td>
                       </tr>
                     ) : tableData.map((row, i) => (
                       <tr key={`${row.placa}||${row.codigo}`} className={i % 2 === 0 ? 'bg-white' : 'bg-cobeb-sky/30'}>
                         <td className="px-3 py-2 font-semibold text-cobeb-text font-mono whitespace-nowrap">{row.placa}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          {row.isTransfer ? (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-50 text-orange-500">
+                              ⇄ {row.fabNome}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-cobeb-text">{row.fabNome}</span>
+                          )}
+                        </td>
                         <td className="px-3 py-2 text-slate-400 font-mono whitespace-nowrap">{row.codigo}</td>
                         <td className="px-3 py-2 text-cobeb-text">{row.descricao}</td>
                         <td className="px-3 py-2 text-right font-semibold text-emerald-700 tabular-nums">{temTabela ? fmtR$(row.valor) : '—'}</td>
@@ -558,7 +583,7 @@ export default function DashboardComercial() {
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 border-cobeb-navy/20 bg-cobeb-sky">
-                      <td colSpan={3} className="px-3 py-2.5 font-bold text-cobeb-text">
+                      <td colSpan={4} className="px-3 py-2.5 font-bold text-cobeb-text">
                         Total — {tableData.length} linha{tableData.length !== 1 ? 's' : ''}
                       </td>
                       <td className="px-3 py-2.5 text-right font-bold text-emerald-700 tabular-nums">{temTabela ? fmtR$(totais.valor) : '—'}</td>
