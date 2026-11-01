@@ -3,13 +3,13 @@ import DashboardLayout from '../components/DashboardLayout'
 import { supabase } from '../lib/supabase'
 
 const SEGMENTOS = [
-  { key: 'cerveja',  label: 'Cerveja',      cor: '#003DA5' },
-  { key: 'nab',      label: 'NAB',           cor: '#0D9488' },
-  { key: 'rgb',      label: 'RGB Cerveja',   cor: '#7C3AED' },
-  { key: 'cervZero', label: 'Zero Álcool',   cor: '#6366F1' },
-  { key: 'nabZero',  label: 'NAB Zero',      cor: '#14B8A6' },
-  { key: 'highEnd',  label: 'High End',      cor: '#F59E0B' },
-  { key: 'match',    label: 'Match',         cor: '#EF4444' },
+  { key: 'cerveja',  label: 'Cerveja',    cor: '#003DA5' },
+  { key: 'nab',      label: 'NAB',        cor: '#0D9488' },
+  { key: 'rgb',      label: 'RGB Cerveja',cor: '#7C3AED' },
+  { key: 'cervZero', label: 'Zero Álcool',cor: '#6366F1' },
+  { key: 'nabZero',  label: 'NAB Zero',   cor: '#14B8A6' },
+  { key: 'highEnd',  label: 'High End',   cor: '#F59E0B' },
+  { key: 'match',    label: 'Match',      cor: '#EF4444' },
 ]
 
 function firstDay() {
@@ -33,29 +33,34 @@ function fmtN(v) {
 }
 
 export default function DashboardComercial() {
-  const [dataInicio,   setDataInicio]   = useState(firstDay)
-  const [dataFim,      setDataFim]      = useState(lastDay)
-  const [unidades,     setUnidades]     = useState([])   // [] = todos
-  const [segFiltro,    setSegFiltro]    = useState([])   // [] = todos
+  const [dataInicio,  setDataInicio]  = useState(firstDay)
+  const [dataFim,     setDataFim]     = useState(lastDay)
+  const [unidades,    setUnidades]    = useState([])  // [] = todos os CDs
+  const [fabricas,    setFabricas]    = useState([])  // [] = todas as fábricas (codigo_ambev)
+  const [segFiltro,   setSegFiltro]   = useState([])  // [] = todos os segmentos
 
-  const [loading,      setLoading]      = useState(true)
-  const [optUnidades,  setOptUnidades]  = useState([])
+  const [loading,     setLoading]     = useState(true)
+  const [optUnidades, setOptUnidades] = useState([])  // tipo = revenda
+  const [optFabricas, setOptFabricas] = useState([])  // tipo = fabrica
 
-  const [catMap,       setCatMap]       = useState({})
-  const [zeroCervSet,  setZeroCervSet]  = useState(new Set())
-  const [zeroNabSet,   setZeroNabSet]   = useState(new Set())
-  const [highEndSet,   setHighEndSet]   = useState(new Set())
-  const [pedidos,      setPedidos]      = useState([])
+  const [catMap,      setCatMap]      = useState({})
+  const [zeroCervSet, setZeroCervSet] = useState(new Set())
+  const [zeroNabSet,  setZeroNabSet]  = useState(new Set())
+  const [highEndSet,  setHighEndSet]  = useState(new Set())
+  const [pedidos,     setPedidos]     = useState([])
 
-  // Carrega dados estáticos uma vez
+  // Dados estáticos — carregados uma vez
   useEffect(() => {
     async function load() {
-      const [{ data: unis }, { data: dpz }, { data: dem }] = await Promise.all([
-        supabase.from('unidades').select('id, nome').order('nome'),
+      const [{ data: unis }, { data: fabs }, { data: dpz }, { data: dem }] = await Promise.all([
+        supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
+        supabase.from('unidades').select('id, nome, codigo_ambev').eq('tipo', 'fabrica').eq('ativo', true).order('nome'),
         supabase.from('depara_zero').select('cod_promax, tipo'),
         supabase.from('demanda').select('cod_promax, tipo'),
       ])
+
       setOptUnidades(unis ?? [])
+      setOptFabricas((fabs ?? []).filter(f => f.codigo_ambev))
 
       const czs = new Set()
       const nzs = new Set()
@@ -75,20 +80,23 @@ export default function DashboardComercial() {
     load()
   }, [])
 
-  // Carrega pedidos quando data ou unidade muda
+  // Pedidos — recarrega quando data, CD ou fábrica muda
   useEffect(() => {
     if (!dataInicio || !dataFim) return
     async function load() {
       setLoading(true)
+
       let q = supabase
         .from('pedidos')
-        .select('cod_produto, qtde_pallets, qtde_skus, data_puxada, viagem_id, status, unidade_id')
+        .select('cod_produto, qtde_pallets, qtde_skus, data_puxada, viagem_id, status, unidade_id, codigo_fabrica')
         .gte('data_puxada', dataInicio)
         .lte('data_puxada', dataFim)
         .neq('status', 'cancelado')
         .not('cod_produto', 'is', null)
         .gt('qtde_pallets', 0)
+
       if (unidades.length) q = q.in('unidade_id', unidades)
+      if (fabricas.length) q = q.in('codigo_fabrica', fabricas)
 
       const { data: peds } = await q
       const pedList = peds ?? []
@@ -110,18 +118,18 @@ export default function DashboardComercial() {
       setLoading(false)
     }
     load()
-  }, [dataInicio, dataFim, unidades])
+  }, [dataInicio, dataFim, unidades, fabricas])
 
   const today = new Date().toISOString().slice(0, 10)
 
-  // Classifica cada pedido válido nos segmentos e calcula HL
+  // Classifica cada pedido nos segmentos e calcula HL
   const pedidosClassificados = useMemo(() => {
     const result = []
     pedidos.forEach(p => {
       const iso = p.data_puxada?.slice(0, 10)
       if (!iso) return
-      const isPast      = iso < today
-      const isRealized  = p.viagem_id != null || p.status === 'realizado'
+      const isPast     = iso < today
+      const isRealized = p.viagem_id != null || p.status === 'realizado'
       if (isPast && !isRealized) return
 
       const cat = catMap[p.cod_produto]
@@ -130,10 +138,10 @@ export default function DashboardComercial() {
       const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
       if (hl <= 0) return
 
-      const tm      = cat.tipo_marca ?? ''
-      const emb     = cat.embalagem  ?? ''
-      const isCerv  = tm === '001 - CERVEJA' || tm === '028 - BEBIDAS QUENTES'
-      const isRGB   = isCerv && (emb.startsWith('017') || emb.startsWith('018') || emb.startsWith('085'))
+      const tm     = cat.tipo_marca ?? ''
+      const emb    = cat.embalagem  ?? ''
+      const isCerv = tm === '001 - CERVEJA' || tm === '028 - BEBIDAS QUENTES'
+      const isRGB  = isCerv && (emb.startsWith('017') || emb.startsWith('018') || emb.startsWith('085'))
 
       result.push({
         codigo:   p.cod_produto,
@@ -155,7 +163,7 @@ export default function DashboardComercial() {
     return result
   }, [pedidos, catMap, zeroCervSet, zeroNabSet, highEndSet, today])
 
-  // HL por segmento (sem filtro de segmento — sempre mostra todos nos cards)
+  // HL por segmento para os cards (sem filtro de segmento)
   const hlPorSegmento = useMemo(() => {
     const acc = {}
     SEGMENTOS.forEach(s => { acc[s.key] = 0 })
@@ -165,7 +173,7 @@ export default function DashboardComercial() {
     return acc
   }, [pedidosClassificados])
 
-  // Tabela com filtro de segmento aplicado, agrupada por produto
+  // Tabela agrupada por produto com filtro de segmento
   const tableData = useMemo(() => {
     const map = {}
     pedidosClassificados.forEach(p => {
@@ -188,13 +196,19 @@ export default function DashboardComercial() {
     setUnidades(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
+  function toggleFabrica(codAmb) {
+    setFabricas(prev => prev.includes(codAmb) ? prev.filter(x => x !== codAmb) : [...prev, codAmb])
+  }
+
   function toggleSeg(key) {
     setSegFiltro(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])
   }
 
   const dateCls = 'border border-cobeb-border rounded-xl px-3 py-2 text-xs text-cobeb-text bg-white focus:outline-none focus:border-cobeb-blue/60'
+  const btnBase = 'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors'
+  const btnOn   = 'bg-cobeb-navy text-white border-cobeb-navy'
+  const btnOff  = 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
 
-  // Segmentos a exibir nos cards: os selecionados, ou todos se nenhum selecionado
   const cardsAtivos = segFiltro.length > 0
     ? SEGMENTOS.filter(s => segFiltro.includes(s.key))
     : SEGMENTOS
@@ -203,7 +217,7 @@ export default function DashboardComercial() {
     <DashboardLayout>
       <div className="px-4 pt-5 pb-8 space-y-4">
 
-        {/* ── Filtros ───────────────────────────────────────────────────────── */}
+        {/* ── Filtros ─────────────────────────────────────────────────────── */}
         <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 space-y-3">
 
           {/* Período */}
@@ -215,42 +229,55 @@ export default function DashboardComercial() {
               onChange={e => setDataFim(e.target.value)} className={dateCls} />
           </div>
 
-          {/* CDs */}
-          <div className="flex flex-wrap gap-1.5">
-            <button onClick={() => setUnidades([])}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                unidades.length === 0
-                  ? 'bg-cobeb-navy text-white border-cobeb-navy'
-                  : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
-              }`}>Todos os CDs</button>
-            {optUnidades.map(u => (
-              <button key={u.id} onClick={() => toggleUnidade(u.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                  unidades.includes(u.id)
-                    ? 'bg-cobeb-navy text-white border-cobeb-navy'
-                    : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
-                }`}>{u.nome}</button>
-            ))}
+          {/* CDs (somente revendas) */}
+          <div>
+            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">CD</p>
+            <div className="flex flex-wrap gap-1.5">
+              <button onClick={() => setUnidades([])} className={`${btnBase} ${unidades.length === 0 ? btnOn : btnOff}`}>
+                Todos os CDs
+              </button>
+              {optUnidades.map(u => (
+                <button key={u.id} onClick={() => toggleUnidade(u.id)}
+                  className={`${btnBase} ${unidades.includes(u.id) ? btnOn : btnOff}`}>
+                  {u.nome}
+                </button>
+              ))}
+            </div>
           </div>
 
+          {/* Fábricas */}
+          {optFabricas.length > 0 && (
+            <div>
+              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Fábrica</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button onClick={() => setFabricas([])} className={`${btnBase} ${fabricas.length === 0 ? btnOn : btnOff}`}>
+                  Todas as fábricas
+                </button>
+                {optFabricas.map(f => (
+                  <button key={f.id} onClick={() => toggleFabrica(f.codigo_ambev)}
+                    className={`${btnBase} ${fabricas.includes(f.codigo_ambev) ? btnOn : btnOff}`}>
+                    {f.nome}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Segmentos */}
-          <div className="flex flex-wrap gap-1.5">
-            <button onClick={() => setSegFiltro([])}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                segFiltro.length === 0
-                  ? 'bg-cobeb-navy text-white border-cobeb-navy'
-                  : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
-              }`}>Todos</button>
-            {SEGMENTOS.map(s => (
-              <button key={s.key} onClick={() => toggleSeg(s.key)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${
-                  segFiltro.includes(s.key)
-                    ? 'text-white border-transparent'
-                    : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
-                }`}
-                style={segFiltro.includes(s.key) ? { backgroundColor: s.cor, borderColor: s.cor } : {}}
-              >{s.label}</button>
-            ))}
+          <div>
+            <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Segmento</p>
+            <div className="flex flex-wrap gap-1.5">
+              <button onClick={() => setSegFiltro([])} className={`${btnBase} ${segFiltro.length === 0 ? btnOn : btnOff}`}>
+                Todos
+              </button>
+              {SEGMENTOS.map(s => (
+                <button key={s.key} onClick={() => toggleSeg(s.key)}
+                  className={`${btnBase} ${segFiltro.includes(s.key) ? 'text-white border-transparent' : btnOff}`}
+                  style={segFiltro.includes(s.key) ? { backgroundColor: s.cor, borderColor: s.cor } : {}}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
@@ -265,11 +292,9 @@ export default function DashboardComercial() {
               {cardsAtivos.map(s => (
                 <div key={s.key}
                   className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 flex flex-col gap-1"
-                  style={{ borderLeftWidth: 4, borderLeftColor: s.cor }}
-                >
+                  style={{ borderLeftWidth: 4, borderLeftColor: s.cor }}>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">{s.label}</p>
-                  <p className="text-xl font-black tabular-nums"
-                    style={{ color: s.cor }}>
+                  <p className="text-xl font-black tabular-nums" style={{ color: s.cor }}>
                     {fmtHL(hlPorSegmento[s.key])}
                   </p>
                   <p className="text-[10px] text-slate-400">HL</p>
