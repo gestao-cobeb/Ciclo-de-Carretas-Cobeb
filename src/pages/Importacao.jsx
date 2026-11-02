@@ -11,6 +11,19 @@ import { useAuth } from '../contexts/AuthContext'
 const FILE_PATTERN      = /^BASE_(\d{2})-(\d{2})-(\d{4})\.xlsx$/i
 const FILE_PATTERN_PROD = /^\d{2}\.\d{2}\.xlsx$/i
 
+async function fetchAllPages(buildQuery, pageSize = 10000) {
+  const results = []
+  let from = 0
+  while (true) {
+    const { data, error } = await buildQuery().range(from, from + pageSize - 1)
+    if (error || !data) break
+    results.push(...data)
+    if (data.length < pageSize) break
+    from += pageSize
+  }
+  return results
+}
+
 function excelSerial(n) {
   if (!n) return null
   if (typeof n === 'number')
@@ -112,17 +125,17 @@ export default function Importacao() {
 
   async function carregar() {
     setLoading(true)
-    const [{ data: peds }, { data: unis }, { data: prods }, { count: precosCount, data: precosData }, { count: demandaCount, data: demandaData }, { count: deParaZeroCount, data: deParaZeroData }] = await Promise.all([
-      supabase.from('pedidos').select('arquivo_origem, data_puxada, viagem_id, importado_em, status').order('importado_em', { ascending: false }).limit(200000),
+    const [peds, { data: unis }, prods, { count: precosCount, data: precosData }, { count: demandaCount, data: demandaData }, { count: deParaZeroCount, data: deParaZeroData }] = await Promise.all([
+      fetchAllPages(() => supabase.from('pedidos').select('arquivo_origem, data_puxada, viagem_id, importado_em, status')),
       supabase.from('unidades').select('id, nome, codigo, codigo_ambev, cidade, tipo').order('nome'),
-      supabase.from('produtos_catalogo').select('arquivo_origem, importado_em').order('importado_em', { ascending: false }).limit(50000),
+      fetchAllPages(() => supabase.from('produtos_catalogo').select('arquivo_origem, importado_em')),
       supabase.from('precos_fabrica').select('importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
       supabase.from('demanda').select('versao, ano, importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
       supabase.from('depara_zero').select('importado_em', { count: 'exact' }).order('importado_em', { ascending: false }).limit(1),
     ])
 
     const map = {}
-    ;(peds ?? []).forEach(p => {
+    ;peds.forEach(p => {
       if (!map[p.arquivo_origem]) {
         map[p.arquivo_origem] = {
           arquivo_origem: p.arquivo_origem,
@@ -151,7 +164,7 @@ export default function Importacao() {
 
     // Agrupa catálogos de produtos por arquivo_origem
     const prodMap = {}
-    ;(prods ?? []).forEach(p => {
+    ;prods.forEach(p => {
       if (!prodMap[p.arquivo_origem]) {
         prodMap[p.arquivo_origem] = { arquivo_origem: p.arquivo_origem, total: 0, importado_em: p.importado_em }
       }
