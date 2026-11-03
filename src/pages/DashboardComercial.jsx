@@ -26,6 +26,21 @@ const STATUS_CFG = {
   concluida:              { label: 'Chegou',     bg: 'bg-green-50',    text: 'text-green-600',   ts: v => v.dt_chegada_revenda },
 }
 
+const STATUS_FILTER_OPTS = [
+  { key: 'na_fabrica',    label: 'Fábrica',       cor: '#2563EB' },
+  { key: 'chegou',        label: 'Chegou',         cor: '#059669' },
+  { key: 'em_transito',   label: 'Em Rota',        cor: '#9333EA' },
+  { key: 'retornando',    label: 'Retornando',     cor: '#D97706' },
+  { key: 'iniciada',      label: 'Saída',          cor: '#64748B' },
+  { key: 'nao_vinculado', label: 'Não vinculado',  cor: '#EF4444' },
+]
+
+function matchStatus(viagemInfo, key) {
+  if (key === 'nao_vinculado') return viagemInfo == null
+  if (key === 'chegou') return viagemInfo?.status === 'aguardando_conferencia' || viagemInfo?.status === 'concluida'
+  return viagemInfo?.status === key
+}
+
 function todayStr() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -98,6 +113,7 @@ export default function DashboardComercial() {
   const [unidades,      setUnidades]      = useState([])
   const [fabricas,      setFabricas]      = useState([])
   const [segFiltro,        setSegFiltro]        = useState([])
+  const [statusFiltro,     setStatusFiltro]     = useState([])
   const [tabelaPreco,      setTabelaPreco]      = useState('Pratic')
   const [filtrosVisiveis,  setFiltrosVisiveis]  = useState(true)
   const [segmentoAtivo,    setSegmentoAtivo]    = useState(null)
@@ -339,16 +355,17 @@ export default function DashboardComercial() {
     return result
   }, [pedidos, catMap, fabMap, placaMap, viagemInfoMap, zeroCervSet, zeroNabSet, highEndSet, precosMap, tabelaPreco, today])
 
-  // HL por segmento para os cards (sem filtro de segmento; exclui transferências internas)
+  // HL por segmento para os cards (sem filtro de segmento; respeita filtro de status; exclui transferências internas)
   const hlPorSegmento = useMemo(() => {
     const acc = {}
     SEGMENTOS.forEach(s => { acc[s.key] = 0 })
     linhasClassificadas.forEach(l => {
       if (l.isTransfer) return
+      if (statusFiltro.length > 0 && !STATUS_FILTER_OPTS.some(o => statusFiltro.includes(o.key) && matchStatus(l.viagemInfo, o.key))) return
       SEGMENTOS.forEach(s => { if (l.tags[s.key]) acc[s.key] += l.hl })
     })
     return acc
-  }, [linhasClassificadas])
+  }, [linhasClassificadas, statusFiltro])
 
   // Breakdown por embalagem para o card clicado
   const hlPorEmbalagem = useMemo(() => {
@@ -363,11 +380,12 @@ export default function DashboardComercial() {
       .sort((a, b) => b.hl - a.hl)
   }, [linhasClassificadas, segmentoAtivo])
 
-  // Tabela agrupada por (placa + produto) com filtro de segmento
+  // Tabela agrupada por (placa + produto) com filtro de segmento e status
   const tableData = useMemo(() => {
     const map = {}
     linhasClassificadas.forEach(l => {
       if (segFiltro.length > 0 && !segFiltro.some(s => l.tags[s])) return
+      if (statusFiltro.length > 0 && !STATUS_FILTER_OPTS.some(o => statusFiltro.includes(o.key) && matchStatus(l.viagemInfo, o.key))) return
       const key = `${l.placa}||${l.codigo}`
       if (!map[key]) {
         map[key] = {
@@ -391,7 +409,7 @@ export default function DashboardComercial() {
     return Object.values(map).sort((a, b) =>
       a.placa.localeCompare(b.placa) || b.hl - a.hl
     )
-  }, [linhasClassificadas, segFiltro])
+  }, [linhasClassificadas, segFiltro, statusFiltro])
 
   const totais = useMemo(() => ({
     valor:   tableData.reduce((s, r) => s + r.valor,   0),
@@ -447,6 +465,9 @@ export default function DashboardComercial() {
   function toggleSeg(key) {
     setSegFiltro(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])
   }
+  function toggleStatus(key) {
+    setStatusFiltro(prev => prev.includes(key) ? prev.filter(x => x !== key) : [...prev, key])
+  }
 
   const dateCls = 'border border-cobeb-border rounded-xl px-3 py-2 text-xs text-cobeb-text bg-white focus:outline-none focus:border-cobeb-blue/60'
   const btnBase = 'px-3 py-1.5 rounded-xl text-xs font-semibold border transition-colors'
@@ -470,9 +491,9 @@ export default function DashboardComercial() {
             <div className="flex items-center gap-2 text-cobeb-text text-xs font-semibold">
               <SlidersHorizontal size={13} />
               Filtros
-              {(unidades.length > 0 || fabricas.length > 0 || segFiltro.length > 0) && (
+              {(unidades.length > 0 || fabricas.length > 0 || segFiltro.length > 0 || statusFiltro.length > 0) && (
                 <span className="bg-cobeb-navy text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                  {unidades.length + fabricas.length + segFiltro.length}
+                  {unidades.length + fabricas.length + segFiltro.length + statusFiltro.length}
                 </span>
               )}
             </div>
@@ -522,6 +543,20 @@ export default function DashboardComercial() {
                     className={`${btnBase} ${segFiltro.includes(s.key) ? 'text-white border-transparent' : btnOff}`}
                     style={segFiltro.includes(s.key) ? { backgroundColor: s.cor, borderColor: s.cor } : {}}>
                     {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wide mb-1.5">Status</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button onClick={() => setStatusFiltro([])} className={`${btnBase} ${statusFiltro.length === 0 ? btnOn : btnOff}`}>Todos</button>
+                {STATUS_FILTER_OPTS.map(o => (
+                  <button key={o.key} onClick={() => toggleStatus(o.key)}
+                    className={`${btnBase} ${statusFiltro.includes(o.key) ? 'text-white border-transparent' : btnOff}`}
+                    style={statusFiltro.includes(o.key) ? { backgroundColor: o.cor, borderColor: o.cor } : {}}>
+                    {o.label}
                   </button>
                 ))}
               </div>
