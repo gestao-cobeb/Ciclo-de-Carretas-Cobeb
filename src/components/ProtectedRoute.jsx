@@ -15,9 +15,10 @@ export default function ProtectedRoute({ children, allowedRoles, requireAdminTot
   if (loading) return null
   if (!user)   return <Navigate to="/login" replace />
 
-  // Admin, empilheira ou conferente com módulos: passa se tiver modo selecionado
+  // Admin, ajudante ou conferente/empilheira com módulos: passa se tiver modo selecionado
   const usaSelector =
     profile?.perfil === 'admin' ||
+    profile?.perfil === 'ajudante' ||
     (profile?.perfil === 'empilheira' && profile?.modulos_permitidos?.length > 0) ||
     (profile?.perfil === 'conferente' && profile?.modulos_permitidos?.length > 0)
   if (usaSelector) {

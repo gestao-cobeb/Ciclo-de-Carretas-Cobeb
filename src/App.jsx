@@ -59,6 +59,7 @@ function AppRoutes() {
   if (profile) {
     const usaSelector =
       profile.perfil === 'admin' ||
+      profile.perfil === 'ajudante' ||
       (profile.perfil === 'empilheira' && profile.modulos_permitidos?.length > 0) ||
       (profile.perfil === 'conferente' && profile.modulos_permitidos?.length > 0)
     if (usaSelector) {

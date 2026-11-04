@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Truck, Users, ClipboardList, Tractor, Shield, DoorOpen, Forklift, Building2, LayoutGrid, Clock, Target } from 'lucide-react'
+import { Truck, Users, ClipboardList, Tractor, Shield, DoorOpen, Forklift, Building2, LayoutGrid, Clock, Target, HardHat } from 'lucide-react'
 import AdminLayout from '../components/AdminLayout'
 import ErrorBoundary from '../components/ErrorBoundary'
 import { useAuth } from '../contexts/AuthContext'
 import Motoristas from './cadastros/Motoristas'
 import Conferentes from './cadastros/Conferentes'
+import AjudantesArmazem from './cadastros/AjudantesArmazem'
 import Portaria from './cadastros/Portaria'
 import Empilhadeiras from './cadastros/Empilhadeiras'
 import Carretas from './cadastros/Carretas'
@@ -18,6 +19,7 @@ import Metas from './cadastros/Metas'
 const TABS_BASE = [
   { id: 'motoristas',    label: 'Motoristas',    icon: Users,        adminTotal: false },
   { id: 'conferentes',   label: 'Conferentes',   icon: ClipboardList, adminTotal: false },
+  { id: 'ajudantes',     label: 'Ajudantes',     icon: HardHat,      adminTotal: false },
   { id: 'portaria',      label: 'Portaria',      icon: DoorOpen,     adminTotal: false },
   { id: 'empilhadeiras', label: 'Empilhadeiras', icon: Forklift,     adminTotal: false },
   { id: 'carretas',      label: 'Carretas',      icon: Truck,        adminTotal: false },
@@ -68,6 +70,7 @@ export default function Cadastros() {
       <ErrorBoundary>
         {abaAtiva === 'motoristas'    && <Motoristas />}
         {abaAtiva === 'conferentes'   && <Conferentes />}
+        {abaAtiva === 'ajudantes'     && <AjudantesArmazem />}
         {abaAtiva === 'portaria'      && <Portaria />}
         {abaAtiva === 'empilhadeiras' && <Empilhadeiras />}
         {abaAtiva === 'carretas'      && <Carretas />}
