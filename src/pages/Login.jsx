@@ -8,6 +8,7 @@ const PERFIL_ROTA = {
   admin:      '/dashboard',
   motorista:  '/viagem',
   conferente: '/tarefas',
+  ajudante:   '/selecionar-modulo',
 }
 
 function LogoCobeb({ baseUrl }) {
@@ -239,11 +240,16 @@ export default function Login() {
     if (!email.trim()) { setErro('Preencha o acesso.'); return }
     setLoading(true); setErro('')
     const digits = email.trim().replace(/\D/g, '')
-    const emailLogin = (!email.trim().includes('@') && digits.length === 11)
-      ? `${digits}@motorista.cobeb.com.br`
-      : email.trim()
-    const { error } = await signIn(emailLogin, password)
-    if (error) { setErro('Acesso ou senha inválidos. Verifique e tente novamente.'); setLoading(false) }
+    const isCpf = !email.trim().includes('@') && digits.length === 11
+    if (isCpf) {
+      const { error: err1 } = await signIn(`${digits}@motorista.cobeb.com.br`, password)
+      if (!err1) return
+      const { error: err2 } = await signIn(`${digits}@cobeb.com.br`, password)
+      if (err2) { setErro('Acesso ou senha inválidos. Verifique e tente novamente.'); setLoading(false) }
+    } else {
+      const { error } = await signIn(email.trim(), password)
+      if (error) { setErro('Acesso ou senha inválidos. Verifique e tente novamente.'); setLoading(false) }
+    }
   }
 
   const handleNovaSenha = async (e) => {
@@ -258,13 +264,6 @@ export default function Login() {
     navigate(PERFIL_ROTA[profile.perfil] ?? '/login', { replace: true })
   }
 
-  const resolveEmail = (raw) => {
-    const digits = raw.replace(/\D/g, '')
-    return (!raw.includes('@') && digits.length === 11)
-      ? `${digits}@motorista.cobeb.com.br`
-      : raw
-  }
-
   const handleRedefinirSenha = async (e) => {
     e.preventDefault()
     if (!rdEmail.trim()) { setRdErro('Preencha o acesso.'); return }
@@ -272,10 +271,25 @@ export default function Login() {
 
     setRdLoading(true); setRdErro('')
 
-    const { error: loginErr } = await supabase.auth.signInWithPassword({
-      email: resolveEmail(rdEmail.trim()),
-      password: rdSenhaAtual,
-    })
+    const rdDigits = rdEmail.trim().replace(/\D/g, '')
+    const rdIsCpf = !rdEmail.trim().includes('@') && rdDigits.length === 11
+    let loginErr = null
+    if (rdIsCpf) {
+      const { error: err1 } = await supabase.auth.signInWithPassword({
+        email: `${rdDigits}@motorista.cobeb.com.br`, password: rdSenhaAtual,
+      })
+      if (err1) {
+        const { error: err2 } = await supabase.auth.signInWithPassword({
+          email: `${rdDigits}@cobeb.com.br`, password: rdSenhaAtual,
+        })
+        loginErr = err2
+      }
+    } else {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: rdEmail.trim(), password: rdSenhaAtual,
+      })
+      loginErr = error
+    }
     if (loginErr) { setRdErro('Acesso ou senha atual incorretos.'); setRdLoading(false); return }
 
     const { error: updateErr } = await supabase.auth.updateUser({ password: rdNovaSenha })
