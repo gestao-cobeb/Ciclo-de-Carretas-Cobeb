@@ -12,6 +12,13 @@ const BackgroundGeolocation = registerPlugin('BackgroundGeolocation')
 export const IS_NATIVE_APP =
   typeof window !== 'undefined' && window.Capacitor?.isNativePlatform?.() === true
 
+const LAST_POS_KEY = 'cobeb_last_gps_pos'
+
+function lerPosCache() {
+  try { return JSON.parse(localStorage.getItem(LAST_POS_KEY) ?? 'null') }
+  catch { return null }
+}
+
 // ── Haversine ─────────────────────────────────────────────────────────────────
 
 function distanciaMetros(lat1, lng1, lat2, lng2) {
@@ -31,6 +38,10 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
   const watcherIdRef    = useRef(null)
   const syncTimerRef    = useRef(null)
   const posRef          = useRef(null)
+  // Última posição GPS confirmada — persiste entre reinicializações do app via
+  // localStorage. Permite que sincronizar() atualize last_seen_at mesmo quando
+  // o GPS perde sinal temporariamente (galpão, área coberta, zona rural).
+  const lastKnownPosRef = useRef(lerPosCache())
   const dentroFabRef    = useRef(false)
   const pontosForaRef   = useRef(0)
   const callbackRef     = useRef(null)
@@ -46,9 +57,11 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
     dentroFabRef.current = statusRef.current === 'na_fabrica'
   }, [statusRef.current])
 
-  // Sync JS — fallback para browser e sync imediata na abertura do app
+  // Sync JS — fallback para browser e sync imediata na abertura do app.
+  // Usa posRef (GPS fresco) se disponível, senão lastKnownPosRef (última posição
+  // confirmada). Isso mantém last_seen_at vivo mesmo em áreas sem cobertura GPS.
   const sincronizar = useCallback(async () => {
-    const pos = posRef.current
+    const pos = posRef.current ?? lastKnownPosRef.current
     const vid = viagemIdRef.current
     if (!pos || !vid || !isOnlineRef.current) return
     await supabase
@@ -63,6 +76,8 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
 
   function processarPosicao(lat, lng) {
     posRef.current = { lat, lng }
+    lastKnownPosRef.current = { lat, lng }
+    try { localStorage.setItem(LAST_POS_KEY, JSON.stringify({ lat, lng })) } catch {}
     const status = statusRef.current
     if (!fabricasAlvo?.length) return
 
@@ -158,13 +173,31 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
       sincronizar()
       syncTimerRef.current = setInterval(sincronizar, 30000)
 
+      // Fallback de posição por rede (cell/WiFi): funciona em galpões e áreas sem
+      // GPS. Não bloqueia — dispara e esquece. Só popula posRef se o watcher ainda
+      // não entregou uma posição mais precisa.
+      if (!lastKnownPosRef.current) {
+        navigator.geolocation?.getCurrentPosition(
+          (p) => {
+            if (!posRef.current) {
+              posRef.current = { lat: p.coords.latitude, lng: p.coords.longitude }
+            }
+          },
+          () => {},
+          { enableHighAccuracy: false, timeout: 5000, maximumAge: 600000 },
+        )
+      }
+
       try {
         const id = await BackgroundGeolocation.addWatcher(
           {
             backgroundMessage:  'COBEB está rastreando sua localização',
             backgroundTitle:    'COBEB Ciclo — Rastreamento ativo',
             requestPermissions: true,
-            stale:              false,
+            // stale: true entrega a última posição cacheada pelo Android
+            // imediatamente, sem esperar um fix GPS fresco. Reduz o tempo inicial
+            // em que posRef fica nulo (e last_seen_at para de atualizar).
+            stale:              true,
             distanceFilter:     20,
           },
           (location, error) => {
