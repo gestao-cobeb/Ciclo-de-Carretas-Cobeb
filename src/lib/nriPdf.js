@@ -55,8 +55,8 @@ export function renderNRI(doc, {
   // Row 1
   doc.setFontSize(20); doc.setFont('helvetica', 'bold'); doc.setTextColor(...BLUE)
   doc.text('COBEB', x0 + 3, r1Y + 9)
-  doc.setFontSize(6); doc.setFont('courier', 'normal'); doc.setTextColor(...GRAY_BR)
-  doc.text(String(nri.numero).padStart(12, '0'), x0 + W - 3, r1Y + 9, { align: 'right' })
+  doc.setFontSize(10); doc.setFont('helvetica', 'bold'); doc.setTextColor(...BLACK)
+  doc.text(String(nri.numero).padStart(8, '0'), x0 + W - 3, r1Y + 9, { align: 'right' })
   hline(r1Y + r1H)
 
   // Row 2 — Código 40pt (destaque) + Descrição 20pt
