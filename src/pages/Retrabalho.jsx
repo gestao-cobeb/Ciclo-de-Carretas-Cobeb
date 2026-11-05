@@ -218,9 +218,9 @@ export default function Retrabalho() {
       numero_nri_ref:       form.numeroNri ? Number(form.numeroNri) : null,
       unidade_id:           profile?.unidade_id ?? null,
       criado_manualmente:   true,
-      numero_nf:            null,
-      motorista_nome:       null,
-      placa_carreta:        null,
+      numero_nf:            form.nriNumeroNf   ?? null,
+      motorista_nome:       form.nriMotorista  ?? null,
+      placa_carreta:        form.nriPlaca      ?? null,
     }).select().single()
     if (error) { alert('Erro ao criar: ' + error.message); return false }
     setItens(prev => [data, ...prev])
@@ -393,25 +393,20 @@ export default function Retrabalho() {
                     )}
 
                     <div className="flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
-                      {item.criado_manualmente
-                        ? <>
-                            <span className="inline-flex items-center gap-0.5 bg-purple-500/10 text-purple-600 border border-purple-500/20 px-1.5 py-0.5 rounded-full font-semibold">
-                              <FilePlus size={9} /> Manual
-                            </span>
-                            {item.data_chegada && (
-                              <span className="flex items-center gap-1">
-                                <CalendarDays size={9} className="text-purple-400" />
-                                Chegada: {formatData(item.data_chegada)}
-                              </span>
-                            )}
-                            {item.numero_nri_ref && <span>· NRI {item.numero_nri_ref}</span>}
-                          </>
-                        : <>
-                            {item.numero_nf      && <span>NF {item.numero_nf}</span>}
-                            {item.motorista_nome && <span>· {item.motorista_nome}</span>}
-                            {item.placa_carreta  && <span>· {item.placa_carreta}</span>}
-                          </>
-                      }
+                      {item.criado_manualmente && (
+                        <span className="inline-flex items-center gap-0.5 bg-purple-500/10 text-purple-600 border border-purple-500/20 px-1.5 py-0.5 rounded-full font-semibold">
+                          <FilePlus size={9} /> Manual
+                        </span>
+                      )}
+                      {item.data_chegada && (
+                        <span className="flex items-center gap-1">
+                          <CalendarDays size={9} className="text-purple-400" />
+                          Chegada: {formatData(item.data_chegada)}
+                        </span>
+                      )}
+                      {item.numero_nf      && <span>{item.data_chegada ? '·' : ''} NF {item.numero_nf}</span>}
+                      {item.motorista_nome && <span>· {item.motorista_nome}</span>}
+                      {item.placa_carreta  && <span>· {item.placa_carreta}</span>}
                       <span className="ml-auto">{formatTs(item.created_at)}</span>
                     </div>
 
@@ -565,6 +560,9 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
 
   const [numeroNri,    setNumeroNri]    = useState('')
   const [dataChegada,  setDataChegada]  = useState(null)
+  const [nriNumeroNf,  setNriNumeroNf]  = useState(null)
+  const [nriMotorista, setNriMotorista] = useState(null)
+  const [nriPlaca,     setNriPlaca]     = useState(null)
   const [buscandoNri,  setBuscandoNri]  = useState(false)
   const [erroNri,      setErroNri]      = useState(null)
 
@@ -598,9 +596,21 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
     setBuscandoNri(true)
     setErroNri(null)
     setDataChegada(null)
+    setNriNumeroNf(null)
+    setNriMotorista(null)
+    setNriPlaca(null)
     const { data, error } = await supabase
       .from('nri_emissoes')
-      .select('created_at')
+      .select(`
+        created_at, numero_nf,
+        tarefa:tarefas(
+          numero_nf,
+          viagem:viagens(
+            motorista:profiles(nome),
+            carreta:carretas(placa)
+          )
+        )
+      `)
       .lte('primeiro_numero', n)
       .gte('ultimo_numero', n)
       .order('created_at', { ascending: false })
@@ -609,6 +619,9 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
     setBuscandoNri(false)
     if (error || !data) { setErroNri('NRI não encontrado'); return }
     setDataChegada(data.created_at.split('T')[0])
+    setNriNumeroNf(data.tarefa?.numero_nf ?? data.numero_nf ?? null)
+    setNriMotorista(data.tarefa?.viagem?.motorista?.nome ?? null)
+    setNriPlaca(data.tarefa?.viagem?.carreta?.placa ?? null)
   }
 
   async function handleSave() {
@@ -620,7 +633,10 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
       qtdePaletes,
       motivoId,
       dataChegada,
-      numeroNri: numeroNri.trim(),
+      numeroNri:   numeroNri.trim(),
+      nriNumeroNf,
+      nriMotorista,
+      nriPlaca,
     })
     if (!ok) setSalvando(false)
   }
@@ -681,7 +697,7 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
               <input
                 type="number" placeholder="Ex: 10234"
                 value={numeroNri}
-                onChange={e => { setNumeroNri(e.target.value); setDataChegada(null); setErroNri(null) }}
+                onChange={e => { setNumeroNri(e.target.value); setDataChegada(null); setNriNumeroNf(null); setNriMotorista(null); setNriPlaca(null); setErroNri(null) }}
                 onKeyDown={e => e.key === 'Enter' && buscarNri()}
                 className="flex-1 bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-2.5 text-sm text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors"
               />
@@ -694,11 +710,18 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
             </div>
             {erroNri && <p className="text-red-500 text-[11px] mt-1.5">{erroNri}</p>}
             {dataChegada && (
-              <div className="mt-2 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2 flex items-center gap-2">
-                <CalendarDays size={13} className="text-green-600 shrink-0" />
-                <p className="text-green-700 text-xs font-semibold">
-                  Data de chegada: {new Date(dataChegada + 'T12:00:00').toLocaleDateString('pt-BR')}
-                </p>
+              <div className="mt-2 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2.5 space-y-1">
+                <div className="flex items-center gap-2">
+                  <CalendarDays size={13} className="text-green-600 shrink-0" />
+                  <p className="text-green-700 text-xs font-semibold">
+                    Chegada: {new Date(dataChegada + 'T12:00:00').toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-500 pl-5">
+                  {nriNumeroNf   && <span>NF {nriNumeroNf}</span>}
+                  {nriMotorista  && <span>· {nriMotorista}</span>}
+                  {nriPlaca      && <span>· {nriPlaca}</span>}
+                </div>
               </div>
             )}
           </div>
