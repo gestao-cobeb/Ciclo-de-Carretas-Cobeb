@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RotateCcw, Package, RefreshCw, LogOut, LayoutGrid } from 'lucide-react'
+import { RotateCcw, Package, RefreshCw, LogOut, LayoutGrid, CheckCircle, Clock, Undo2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -18,10 +18,15 @@ function formatTs(iso) {
 export default function Retrabalho() {
   const { profile, signOut, modoVisao, setModoVisao } = useAuth()
   const navigate = useNavigate()
-  const [itens,   setItens]   = useState([])
-  const [loading, setLoading] = useState(true)
-  const [filtro,  setFiltro]  = useState('7dias')
-  const [erro,    setErro]    = useState(null)
+
+  const [itens,        setItens]        = useState([])
+  const [loading,      setLoading]      = useState(true)
+  const [filtro,       setFiltro]       = useState('7dias')
+  const [erro,         setErro]         = useState(null)
+  const [confirmando,  setConfirmando]  = useState(null)
+
+  const podeConfirmar = profile?.perfil === 'empilheira' || profile?.acesso_total
+  const podeDesfazer  = profile?.acesso_total
 
   useEffect(() => { load() }, [filtro])
 
@@ -33,7 +38,9 @@ export default function Retrabalho() {
       .select(`
         id, qtde_unidades, qtde_paletes, data_validade, descricao_motivo,
         cod_produto, descricao_produto, embalagem_produto,
-        numero_nf, motorista_nome, placa_carreta, created_at
+        numero_nf, motorista_nome, placa_carreta,
+        enviado_retrabalho, enviado_em, enviado_por_nome,
+        created_at
       `)
       .order('created_at', { ascending: false })
 
@@ -52,6 +59,38 @@ export default function Retrabalho() {
     if (error) setErro(error.message)
     setItens(data ?? [])
     setLoading(false)
+  }
+
+  async function confirmarEnvio(item) {
+    setConfirmando(item.id)
+    const { error } = await supabase
+      .from('tarefas_retrabalho')
+      .update({
+        enviado_retrabalho: true,
+        enviado_em:         new Date().toISOString(),
+        enviado_por_nome:   profile.nome ?? '',
+      })
+      .eq('id', item.id)
+    if (error) { alert('Erro: ' + error.message); setConfirmando(null); return }
+    setItens(prev => prev.map(i => i.id === item.id
+      ? { ...i, enviado_retrabalho: true, enviado_em: new Date().toISOString(), enviado_por_nome: profile.nome }
+      : i
+    ))
+    setConfirmando(null)
+  }
+
+  async function desfazerEnvio(item) {
+    setConfirmando(item.id)
+    const { error } = await supabase
+      .from('tarefas_retrabalho')
+      .update({ enviado_retrabalho: false, enviado_em: null, enviado_por_nome: null })
+      .eq('id', item.id)
+    if (error) { alert('Erro: ' + error.message); setConfirmando(null); return }
+    setItens(prev => prev.map(i => i.id === item.id
+      ? { ...i, enviado_retrabalho: false, enviado_em: null, enviado_por_nome: null }
+      : i
+    ))
+    setConfirmando(null)
   }
 
   return (
@@ -131,44 +170,91 @@ export default function Retrabalho() {
           </div>
         ) : (
           <div className="space-y-3">
-            {itens.map(item => (
-              <div key={item.id} className="bg-white rounded-2xl border border-purple-500/20 overflow-hidden">
-                <div className="px-4 pt-3 pb-2.5 border-b border-cobeb-border/50">
-                  <p className="text-cobeb-text text-xs font-medium leading-snug">
-                    {item.descricao_produto ?? 'Produto'}
-                  </p>
-                  <p className="text-slate-500 text-[10px] font-mono mt-0.5">
-                    {item.cod_produto}
-                    {item.embalagem_produto ? ` · ${item.embalagem_produto}` : ''}
-                  </p>
-                </div>
-                <div className="px-4 py-3 space-y-1.5">
-                  <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500">
-                    <span className="flex items-center gap-1">
-                      <Package size={11} className="text-purple-500" />
-                      <span className="text-cobeb-text font-semibold">{Number(item.qtde_paletes).toLocaleString('pt-BR')}</span> plt
-                      {item.qtde_unidades != null && (
-                        <span className="ml-1">· <span className="text-cobeb-text font-semibold">{Number(item.qtde_unidades).toLocaleString('pt-BR')}</span> und</span>
-                      )}
-                    </span>
-                    {item.data_validade && (
-                      <span>Val: {formatData(item.data_validade)}</span>
+            {itens.map(item => {
+              const enviado  = !!item.enviado_retrabalho
+              const carregando = confirmando === item.id
+              return (
+                <div key={item.id} className={`bg-white rounded-2xl border overflow-hidden ${
+                  enviado ? 'border-green-500/30' : 'border-purple-500/20'
+                }`}>
+                  {/* Produto */}
+                  <div className="px-4 pt-3 pb-2.5 border-b border-cobeb-border/50">
+                    <p className="text-cobeb-text text-xs font-medium leading-snug">
+                      {item.descricao_produto ?? 'Produto'}
+                    </p>
+                    <p className="text-slate-500 text-[10px] font-mono mt-0.5">
+                      {item.cod_produto}
+                      {item.embalagem_produto ? ` · ${item.embalagem_produto}` : ''}
+                    </p>
+                  </div>
+
+                  {/* Detalhes */}
+                  <div className="px-4 py-3 space-y-2.5">
+                    <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500">
+                      <span className="flex items-center gap-1">
+                        <Package size={11} className="text-purple-500" />
+                        <span className="text-cobeb-text font-semibold">{Number(item.qtde_paletes).toLocaleString('pt-BR')}</span> plt
+                        {item.qtde_unidades != null && (
+                          <span className="ml-1">· <span className="text-cobeb-text font-semibold">{Number(item.qtde_unidades).toLocaleString('pt-BR')}</span> und</span>
+                        )}
+                      </span>
+                      {item.data_validade && <span>Val: {formatData(item.data_validade)}</span>}
+                    </div>
+
+                    {item.descricao_motivo && (
+                      <span className="inline-flex text-[10px] font-semibold bg-orange-500/10 text-orange-600 border border-orange-500/20 px-2 py-0.5 rounded-full">
+                        {item.descricao_motivo}
+                      </span>
                     )}
-                  </div>
-                  {item.descricao_motivo && (
-                    <span className="inline-flex text-[10px] font-semibold bg-orange-500/10 text-orange-600 border border-orange-500/20 px-2 py-0.5 rounded-full">
-                      {item.descricao_motivo}
-                    </span>
-                  )}
-                  <div className="flex items-center gap-2 text-[10px] text-slate-400 pt-0.5 flex-wrap">
-                    {item.numero_nf      && <span>NF {item.numero_nf}</span>}
-                    {item.motorista_nome && <span>· {item.motorista_nome}</span>}
-                    {item.placa_carreta  && <span>· {item.placa_carreta}</span>}
-                    <span className="ml-auto">{formatTs(item.created_at)}</span>
+
+                    <div className="flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
+                      {item.numero_nf      && <span>NF {item.numero_nf}</span>}
+                      {item.motorista_nome && <span>· {item.motorista_nome}</span>}
+                      {item.placa_carreta  && <span>· {item.placa_carreta}</span>}
+                      <span className="ml-auto">{formatTs(item.created_at)}</span>
+                    </div>
+
+                    {/* Status de envio */}
+                    <div className="pt-1 border-t border-cobeb-border/50">
+                      {enviado ? (
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <span className="flex items-center gap-1.5 text-xs font-semibold text-green-600">
+                              <CheckCircle size={13} /> Enviado para área de retrabalho
+                            </span>
+                            {item.enviado_por_nome && (
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                por {item.enviado_por_nome} · {formatTs(item.enviado_em)}
+                              </p>
+                            )}
+                          </div>
+                          {podeDesfazer && (
+                            <button onClick={() => desfazerEnvio(item)} disabled={carregando}
+                              className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-cobeb-navy underline transition-colors shrink-0 disabled:opacity-40">
+                              <Undo2 size={11} /> Desfazer
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-orange-500">
+                            <Clock size={11} /> Pendente envio para área de retrabalho
+                          </span>
+                          {podeConfirmar && (
+                            <button onClick={() => confirmarEnvio(item)} disabled={carregando}
+                              className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                              {carregando
+                                ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                : <><CheckCircle size={13} /> Palete enviado à área de retrabalho</>}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </main>
