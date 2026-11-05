@@ -207,10 +207,10 @@ export default function Retrabalho() {
       tarefa_id:            null,
       conferencia_item_id:  null,
       pedido_id:            null,
-      cod_produto:          form.codProduto,
-      descricao_produto:    form.descricaoProduto,
-      embalagem_produto:    form.embalagemproduto,
-      qtde_paletes:         Number(form.qtdePaletes),
+      cod_produto:          form.codProduto      ?? null,
+      descricao_produto:    form.descricaoProduto ?? null,
+      embalagem_produto:    form.embalagemproduto ?? null,
+      qtde_paletes:         1,
       qtde_unidades:        null,
       motivo_id:            form.motivoId,
       descricao_motivo:     motivo?.descricao ?? '',
@@ -218,9 +218,9 @@ export default function Retrabalho() {
       numero_nri_ref:       form.numeroNri ? Number(form.numeroNri) : null,
       unidade_id:           profile?.unidade_id ?? null,
       criado_manualmente:   true,
-      numero_nf:            form.nriNumeroNf   ?? null,
-      motorista_nome:       form.nriMotorista  ?? null,
-      placa_carreta:        form.nriPlaca      ?? null,
+      numero_nf:            form.nriNumeroNf  ?? null,
+      motorista_nome:       form.nriMotorista ?? null,
+      placa_carreta:        form.nriPlaca     ?? null,
     }).select().single()
     if (error) { alert('Erro ao criar: ' + error.message); return false }
     setItens(prev => [data, ...prev])
@@ -551,63 +551,71 @@ export default function Retrabalho() {
 
 // ── Modal de criação manual ───────────────────────────────────────────────────
 
+function identificarProduto(emissao, nriNum) {
+  const offset = nriNum - emissao.primeiro_numero
+
+  if (emissao.itens?.length > 0) {
+    let pos = 0
+    for (const item of emissao.itens) {
+      const count = item.isKeg ? Math.ceil(item.qtdePaletes) : Math.ceil(item.qtdePaletes) * 3
+      if (offset < pos + count) return { cod: item.codigo, desc: item.descricao, emb: null }
+      pos += count
+    }
+  }
+
+  const citens = emissao.tarefa?.conferencia_itens ?? []
+  if (citens.length === 1) {
+    const p = citens[0].pedido
+    return { cod: p?.cod_produto ?? null, desc: p?.descricao ?? null, emb: p?.embalagem ?? null }
+  }
+  if (citens.length > 1) {
+    let pos = 0
+    for (const ci of citens) {
+      const count = Math.ceil(Number(ci.qtde_paletes) || 1) * 3
+      if (offset < pos + count) {
+        const p = ci.pedido
+        return { cod: p?.cod_produto ?? null, desc: p?.descricao ?? null, emb: p?.embalagem ?? null }
+      }
+      pos += count
+    }
+  }
+
+  return { cod: null, desc: null, emb: null }
+}
+
 function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
-  const [codProduto,       setCodProduto]       = useState('')
-  const [descricaoProduto, setDescricaoProduto] = useState(null)
-  const [embalagemproduto, setEmbalagemproduto] = useState(null)
-  const [buscandoProd,     setBuscandoProd]     = useState(false)
-  const [erroProd,         setErroProd]         = useState(null)
+  const [numeroNri,       setNumeroNri]       = useState('')
+  const [nriInfo,         setNriInfo]         = useState(null)   // { dataChegada, nf, motorista, placa, cod, desc, emb }
+  const [buscandoNri,     setBuscandoNri]     = useState(false)
+  const [erroNri,         setErroNri]         = useState(null)
+  const [motivoId,        setMotivoId]        = useState('')
+  const [salvando,        setSalvando]        = useState(false)
 
-  const [numeroNri,    setNumeroNri]    = useState('')
-  const [dataChegada,  setDataChegada]  = useState(null)
-  const [nriNumeroNf,  setNriNumeroNf]  = useState(null)
-  const [nriMotorista, setNriMotorista] = useState(null)
-  const [nriPlaca,     setNriPlaca]     = useState(null)
-  const [buscandoNri,  setBuscandoNri]  = useState(false)
-  const [erroNri,      setErroNri]      = useState(null)
+  const canSave = nriInfo && motivoId
 
-  const [qtdePaletes,  setQtdePaletes]  = useState('')
-  const [motivoId,     setMotivoId]     = useState('')
-  const [salvando,     setSalvando]     = useState(false)
-
-  const canSave = descricaoProduto && dataChegada && qtdePaletes && Number(qtdePaletes) > 0 && motivoId
-
-  async function buscarProduto() {
-    const cod = codProduto.trim()
-    if (!cod) return
-    setBuscandoProd(true)
-    setErroProd(null)
-    setDescricaoProduto(null)
-    setEmbalagemproduto(null)
-    const { data, error } = await supabase
-      .from('produtos_catalogo')
-      .select('descricao, embalagem')
-      .eq('codigo', cod)
-      .maybeSingle()
-    setBuscandoProd(false)
-    if (error || !data) { setErroProd('Código não encontrado no catálogo'); return }
-    setDescricaoProduto(data.descricao)
-    setEmbalagemproduto(data.embalagem ?? null)
+  function resetNri() {
+    setNriInfo(null)
+    setErroNri(null)
   }
 
   async function buscarNri() {
     const n = Number(numeroNri.trim())
     if (!n) return
     setBuscandoNri(true)
-    setErroNri(null)
-    setDataChegada(null)
-    setNriNumeroNf(null)
-    setNriMotorista(null)
-    setNriPlaca(null)
+    resetNri()
     const { data, error } = await supabase
       .from('nri_emissoes')
       .select(`
-        created_at, numero_nf,
+        created_at, numero_nf, primeiro_numero, itens,
         tarefa:tarefas(
           numero_nf,
           viagem:viagens(
             motorista:profiles(nome),
             carreta:carretas(placa)
+          ),
+          conferencia_itens(
+            qtde_paletes,
+            pedido:pedidos(cod_produto, descricao, embalagem)
           )
         )
       `)
@@ -618,25 +626,30 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
       .maybeSingle()
     setBuscandoNri(false)
     if (error || !data) { setErroNri('NRI não encontrado'); return }
-    setDataChegada(data.created_at.split('T')[0])
-    setNriNumeroNf(data.tarefa?.numero_nf ?? data.numero_nf ?? null)
-    setNriMotorista(data.tarefa?.viagem?.motorista?.nome ?? null)
-    setNriPlaca(data.tarefa?.viagem?.carreta?.placa ?? null)
+    const prod = identificarProduto(data, n)
+    setNriInfo({
+      dataChegada: data.created_at.split('T')[0],
+      nf:          data.tarefa?.numero_nf ?? data.numero_nf ?? null,
+      motorista:   data.tarefa?.viagem?.motorista?.nome ?? null,
+      placa:       data.tarefa?.viagem?.carreta?.placa ?? null,
+      cod:         prod.cod,
+      desc:        prod.desc,
+      emb:         prod.emb,
+    })
   }
 
   async function handleSave() {
     setSalvando(true)
     const ok = await onSave({
-      codProduto,
-      descricaoProduto,
-      embalagemproduto,
-      qtdePaletes,
+      codProduto:       nriInfo.cod,
+      descricaoProduto: nriInfo.desc,
+      embalagemproduto: nriInfo.emb,
       motivoId,
-      dataChegada,
-      numeroNri:   numeroNri.trim(),
-      nriNumeroNf,
-      nriMotorista,
-      nriPlaca,
+      dataChegada:  nriInfo.dataChegada,
+      numeroNri:    numeroNri.trim(),
+      nriNumeroNf:  nriInfo.nf,
+      nriMotorista: nriInfo.motorista,
+      nriPlaca:     nriInfo.placa,
     })
     if (!ok) setSalvando(false)
   }
@@ -659,35 +672,6 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
 
         <div className="space-y-5">
 
-          {/* Código do produto */}
-          <div>
-            <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-1.5">
-              Código do produto <span className="text-cobeb-yellow">*</span>
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text" placeholder="Ex: 123456"
-                value={codProduto}
-                onChange={e => { setCodProduto(e.target.value); setDescricaoProduto(null); setErroProd(null) }}
-                onKeyDown={e => e.key === 'Enter' && buscarProduto()}
-                className="flex-1 bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-2.5 text-sm text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors font-mono"
-              />
-              <button onClick={buscarProduto} disabled={!codProduto.trim() || buscandoProd}
-                className="px-4 py-2.5 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-1.5">
-                {buscandoProd
-                  ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                  : <Search size={14} />}
-              </button>
-            </div>
-            {erroProd && <p className="text-red-500 text-[11px] mt-1.5">{erroProd}</p>}
-            {descricaoProduto && (
-              <div className="mt-2 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2">
-                <p className="text-green-700 text-xs font-semibold">{descricaoProduto}</p>
-                {embalagemproduto && <p className="text-slate-500 text-[10px] mt-0.5">{embalagemproduto}</p>}
-              </div>
-            )}
-          </div>
-
           {/* NRI */}
           <div>
             <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-1.5">
@@ -697,7 +681,7 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
               <input
                 type="number" placeholder="Ex: 10234"
                 value={numeroNri}
-                onChange={e => { setNumeroNri(e.target.value); setDataChegada(null); setNriNumeroNf(null); setNriMotorista(null); setNriPlaca(null); setErroNri(null) }}
+                onChange={e => { setNumeroNri(e.target.value); resetNri() }}
                 onKeyDown={e => e.key === 'Enter' && buscarNri()}
                 className="flex-1 bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-2.5 text-sm text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors"
               />
@@ -709,64 +693,64 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
               </button>
             </div>
             {erroNri && <p className="text-red-500 text-[11px] mt-1.5">{erroNri}</p>}
-            {dataChegada && (
-              <div className="mt-2 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2.5 space-y-1">
-                <div className="flex items-center gap-2">
-                  <CalendarDays size={13} className="text-green-600 shrink-0" />
-                  <p className="text-green-700 text-xs font-semibold">
-                    Chegada: {new Date(dataChegada + 'T12:00:00').toLocaleDateString('pt-BR')}
+
+            {/* Preview dos dados encontrados */}
+            {nriInfo && (
+              <div className="mt-3 bg-[#EBF5FF] border border-cobeb-border rounded-2xl px-4 py-3 space-y-2">
+                {/* Produto */}
+                <div className="border-b border-cobeb-border/50 pb-2">
+                  <p className="text-cobeb-text text-xs font-semibold">
+                    {nriInfo.desc ?? <span className="text-slate-400 italic">Produto não identificado</span>}
                   </p>
+                  <p className="text-slate-500 text-[10px] font-mono mt-0.5">
+                    {nriInfo.cod}
+                    {nriInfo.emb ? ` · ${nriInfo.emb}` : ''}
+                  </p>
+                  <p className="text-purple-600 text-[10px] font-semibold mt-1">1 palete</p>
                 </div>
-                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-500 pl-5">
-                  {nriNumeroNf   && <span>NF {nriNumeroNf}</span>}
-                  {nriMotorista  && <span>· {nriMotorista}</span>}
-                  {nriPlaca      && <span>· {nriPlaca}</span>}
+                {/* Viagem */}
+                <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <CalendarDays size={9} className="text-purple-400" />
+                    Chegada: <span className="font-semibold text-cobeb-text ml-0.5">
+                      {new Date(nriInfo.dataChegada + 'T12:00:00').toLocaleDateString('pt-BR')}
+                    </span>
+                  </span>
+                  {nriInfo.nf        && <span>· NF {nriInfo.nf}</span>}
+                  {nriInfo.motorista && <span>· {nriInfo.motorista}</span>}
+                  {nriInfo.placa     && <span>· {nriInfo.placa}</span>}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Quantidade */}
-          <div>
-            <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-1.5">
-              Quantidade de paletes enviados <span className="text-cobeb-yellow">*</span>
-            </label>
-            <div className="flex items-center gap-2">
-              <input
-                type="number" min="1" step="1" placeholder="0"
-                value={qtdePaletes}
-                onChange={e => setQtdePaletes(e.target.value)}
-                className="w-28 bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-2.5 text-sm text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors text-right"
-              />
-              <span className="text-slate-500 text-sm">paletes</span>
+          {/* Motivo — só aparece após lookup com sucesso */}
+          {nriInfo && (
+            <div>
+              <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-2">
+                Motivo <span className="text-cobeb-yellow">*</span>
+              </label>
+              {motivos.length === 0 ? (
+                <p className="text-slate-400 text-xs bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-3">
+                  Nenhum motivo cadastrado em Metas.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {motivos.map(m => (
+                    <button key={m.id} type="button"
+                      onClick={() => setMotivoId(m.id)}
+                      className={`px-3 py-2.5 rounded-xl border text-xs font-medium text-left transition-colors ${
+                        motivoId === m.id
+                          ? 'bg-orange-500/10 border-orange-500/50 text-orange-700'
+                          : 'bg-[#EBF5FF] border-cobeb-border text-slate-500 hover:border-orange-500/30'
+                      }`}>
+                      {m.descricao}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          </div>
-
-          {/* Motivo */}
-          <div>
-            <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-2">
-              Motivo <span className="text-cobeb-yellow">*</span>
-            </label>
-            {motivos.length === 0 ? (
-              <p className="text-slate-400 text-xs bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-3">
-                Nenhum motivo cadastrado em Metas.
-              </p>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {motivos.map(m => (
-                  <button key={m.id} type="button"
-                    onClick={() => setMotivoId(m.id)}
-                    className={`px-3 py-2.5 rounded-xl border text-xs font-medium text-left transition-colors ${
-                      motivoId === m.id
-                        ? 'bg-orange-500/10 border-orange-500/50 text-orange-700'
-                        : 'bg-[#EBF5FF] border-cobeb-border text-slate-500 hover:border-orange-500/30'
-                    }`}>
-                    {m.descricao}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+          )}
 
           <div className="flex gap-3 pt-1">
             <button onClick={onClose}
