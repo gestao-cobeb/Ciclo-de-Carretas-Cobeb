@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 const AuthContext = createContext({})
@@ -13,6 +13,12 @@ export function AuthProvider({ children }) {
     () => localStorage.getItem(MODO_KEY) || null
   )
 
+  // Distingue logout explícito (botão Sair) de SIGNED_OUT disparado pelo Supabase
+  // quando a renovação do token falha por queda momentânea de rede. Sem isso, o
+  // motorista é jogado para a tela de login toda vez que o Android retoma o app
+  // e a rede ainda não está pronta — a viagem ativa fica visualmente quebrada.
+  const signOutIntentional = useRef(false)
+
   function setModoVisao(modo) {
     if (modo) {
       localStorage.setItem(MODO_KEY, modo)
@@ -25,12 +31,13 @@ export function AuthProvider({ children }) {
   const fetchProfile = async (userId) => {
     const { data, error } = await supabase
       .from('profiles')
-      .select('*, unidade:unidades(id, nome, codigo, cidade)')
+      .select('*, unidade:unidades(id, nome, cidade, codigo)')
       .eq('id', userId)
       .single()
 
     if (!error && data) {
       if (!data.ativo) {
+        signOutIntentional.current = true
         await supabase.auth.signOut()
         setLoading(false)
         return
@@ -49,6 +56,11 @@ export function AuthProvider({ children }) {
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      // SIGNED_OUT não intencional = falha de renovação de token por rede instável.
+      // Manter a sessão; o auto-refresh tentará de novo quando a rede voltar.
+      if (_event === 'SIGNED_OUT' && !signOutIntentional.current) return
+
+      signOutIntentional.current = false
       const u = session?.user ?? null
       setUser(u)
       if (u) {
@@ -79,6 +91,7 @@ export function AuthProvider({ children }) {
     supabase.auth.signInWithPassword({ email, password })
 
   const signOut = async () => {
+    signOutIntentional.current = true
     setModoVisao(null)
     await supabase.auth.signOut()
   }
