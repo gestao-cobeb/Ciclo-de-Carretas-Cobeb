@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   LogOut, ClipboardList, MapPin, ChevronLeft, CheckCircle, Clock,
-  AlertCircle, Package, Truck, RefreshCw, Camera, AlertTriangle, Plus, X, FileText, LayoutGrid, ShoppingCart, ArrowLeftRight,
+  AlertCircle, Package, Truck, RefreshCw, Camera, AlertTriangle, Plus, X, FileText, LayoutGrid, ShoppingCart, ArrowLeftRight, RotateCcw,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import EmissaoNRI from './EmissaoNRI'
+import BlitzView from './BlitzView'
 
 const uid = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
 
@@ -342,6 +343,17 @@ export default function Tarefas() {
     }
   }
 
+  function abrirBlitz(tarefa) {
+    setTarefaSel(tarefa)
+    setView('blitz')
+  }
+
+  function voltarDaBlitz() {
+    setView('lista')
+    setTarefaSel(null)
+    loadLista()
+  }
+
   async function abrirNRIMarketplace(tarefa) {
     setAbrindoNRI(tarefa.id)
     setGruposNRI([])
@@ -527,6 +539,10 @@ export default function Tarefas() {
     pendente:     tarefasComData.filter(t => t.status === 'pendente').length,
     em_andamento: tarefasComData.filter(t => t.status === 'em_andamento').length,
     concluida:    tarefasComData.filter(t => t.status === 'concluida').length,
+  }
+
+  if (view === 'blitz' && tarefaSel) {
+    return <BlitzView tarefa={tarefaSel} onVoltar={voltarDaBlitz} />
   }
 
   if (view === 'nri' && tarefaSel) {
@@ -823,18 +839,30 @@ export default function Tarefas() {
                         )
                       )}
                       {tarefa.status === 'concluida' && (
-                        <div className="flex gap-2">
-                          <button onClick={() => openConferencia(tarefa)}
-                            className="flex-1 bg-[#EBF5FF] border border-green-500/30 hover:border-green-500/60 text-green-400 text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
-                            <CheckCircle size={13} />Ver Conferência
-                          </button>
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <button onClick={() => openConferencia(tarefa)}
+                              className="flex-1 bg-[#EBF5FF] border border-green-500/30 hover:border-green-500/60 text-green-400 text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                              <CheckCircle size={13} />Ver Conferência
+                            </button>
+                            <button
+                              onClick={() => abrirNRI(tarefa)}
+                              disabled={abrindoNRI === tarefa.id}
+                              className="flex-1 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                              {abrindoNRI === tarefa.id
+                                ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                : <><FileText size={13} />Gerar NRI</>}
+                            </button>
+                          </div>
                           <button
-                            onClick={() => abrirNRI(tarefa)}
-                            disabled={abrindoNRI === tarefa.id}
-                            className="flex-1 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
-                            {abrindoNRI === tarefa.id
-                              ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
-                              : <><FileText size={13} />Gerar NRI</>}
+                            onClick={() => abrirBlitz(tarefa)}
+                            className={`w-full text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 ${
+                              tarefa.blitz_concluida
+                                ? 'bg-purple-500/10 border border-purple-500/30 hover:border-purple-500/60 text-purple-500'
+                                : 'bg-purple-600 hover:bg-purple-700 text-white'
+                            }`}>
+                            <RotateCcw size={13} />
+                            {tarefa.blitz_concluida ? 'Ver Blitz' : 'Blitz Puxada'}
                           </button>
                         </div>
                       )}

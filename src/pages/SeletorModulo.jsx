@@ -116,15 +116,16 @@ export const MODULOS = [
     fundo:  'bg-amber-500/5 hover:bg-amber-500/10',
   },
   {
-    key:    'retrabalho',
-    rota:   '/retrabalho',
-    label:  'Retrabalho',
-    desc:   'Paletes encaminhados para retrabalho na blitz de puxada',
-    Icon:   RotateCcw,
-    cor:    'bg-purple-600',
-    borda:  'border-purple-600/30',
-    texto:  'text-purple-700',
-    fundo:  'bg-purple-600/5 hover:bg-purple-600/10',
+    key:            'retrabalho',
+    rota:           '/retrabalho',
+    label:          'Retrabalho',
+    desc:           'Paletes encaminhados para retrabalho na blitz de puxada',
+    Icon:           RotateCcw,
+    cor:            'bg-purple-600',
+    borda:          'border-purple-600/30',
+    texto:          'text-purple-700',
+    fundo:          'bg-purple-600/5 hover:bg-purple-600/10',
+    sempreExplicito: true,
   },
 ]
 
@@ -178,9 +179,9 @@ export default function SeletorModulo() {
     return <Navigate to={mod?.rota ?? '/dashboard'} replace />
   }
 
-  // Módulos visíveis: acesso_total vê todos; demais veem apenas os autorizados
+  // Módulos visíveis: acesso_total vê todos exceto sempreExplicito sem permissão; demais veem apenas os autorizados
   const modulosVisiveis = profile.acesso_total
-    ? MODULOS
+    ? MODULOS.filter(m => !m.sempreExplicito || profile.modulos_permitidos?.includes(m.key))
     : MODULOS.filter(m => profile.modulos_permitidos?.includes(m.key))
 
   function entrar(modulo) {

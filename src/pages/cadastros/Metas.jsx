@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Target } from 'lucide-react'
+import { Target, RotateCcw, Plus, Trash2, ToggleLeft, ToggleRight } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 
 const CHAVE_VIAGENS = 'planejado_viagens'
@@ -116,6 +116,100 @@ function MetaViagens() {
   )
 }
 
+function MotivosBlitz() {
+  const [motivos,   setMotivos]   = useState([])
+  const [loading,   setLoading]   = useState(true)
+  const [novoDesc,  setNovoDesc]  = useState('')
+  const [salvando,  setSalvando]  = useState(false)
+  const [toggling,  setToggling]  = useState(null)
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('motivos_blitz')
+      .select('id, descricao, ativo')
+      .order('descricao')
+    setMotivos(data ?? [])
+    setLoading(false)
+  }
+
+  async function adicionar() {
+    const desc = novoDesc.trim()
+    if (!desc) return
+    setSalvando(true)
+    const { error } = await supabase.from('motivos_blitz').insert({ descricao: desc, ativo: true })
+    setSalvando(false)
+    if (error) { alert('Erro: ' + error.message); return }
+    setNovoDesc('')
+    load()
+  }
+
+  async function toggleAtivo(motivo) {
+    setToggling(motivo.id)
+    await supabase.from('motivos_blitz').update({ ativo: !motivo.ativo }).eq('id', motivo.id)
+    setMotivos(prev => prev.map(m => m.id === motivo.id ? { ...m, ativo: !m.ativo } : m))
+    setToggling(null)
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-5">
+      <div className="mb-4">
+        <p className="text-cobeb-text font-semibold text-sm">Motivos de Blitz de Puxada</p>
+        <p className="text-slate-500 text-xs mt-0.5">Motivos disponíveis para apontamento de anomalia na blitz</p>
+      </div>
+
+      {/* Adicionar */}
+      <div className="flex gap-2 mb-4">
+        <input
+          type="text"
+          placeholder="Ex: Furado, Amassado, Quebrado..."
+          value={novoDesc}
+          onChange={e => setNovoDesc(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && adicionar()}
+          className="flex-1 text-sm border border-cobeb-border rounded-xl px-3 py-2 focus:outline-none focus:border-cobeb-blue transition-colors"
+        />
+        <button
+          onClick={adicionar}
+          disabled={salvando || !novoDesc.trim()}
+          className="px-4 py-2 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-1.5">
+          <Plus size={14} /> Adicionar
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-6">
+          <div className="w-5 h-5 border-2 border-cobeb-navy border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : motivos.length === 0 ? (
+        <p className="text-slate-400 text-sm text-center py-4">Nenhum motivo cadastrado.</p>
+      ) : (
+        <div className="space-y-2">
+          {motivos.map(m => (
+            <div key={m.id} className={`flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border transition-colors ${
+              m.ativo ? 'border-cobeb-border bg-[#EBF5FF]/50' : 'border-cobeb-border/40 bg-slate-50 opacity-50'
+            }`}>
+              <span className="text-sm text-cobeb-text">{m.descricao}</span>
+              <button
+                onClick={() => toggleAtivo(m)}
+                disabled={toggling === m.id}
+                className="text-slate-400 hover:text-cobeb-navy transition-colors shrink-0 p-1"
+                title={m.ativo ? 'Desativar' : 'Ativar'}>
+                {toggling === m.id
+                  ? <div className="w-4 h-4 border-2 border-cobeb-navy/30 border-t-cobeb-navy rounded-full animate-spin" />
+                  : m.ativo
+                    ? <ToggleRight size={18} className="text-green-500" />
+                    : <ToggleLeft size={18} />}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Metas() {
   return (
     <div className="px-5 py-4 max-w-2xl space-y-5">
@@ -124,6 +218,12 @@ export default function Metas() {
         <p className="text-cobeb-text font-semibold text-sm">Metas dos Gráficos</p>
       </div>
       <MetaViagens />
+
+      <div className="flex items-center gap-2 mt-6 mb-1">
+        <RotateCcw size={15} className="text-purple-600" />
+        <p className="text-cobeb-text font-semibold text-sm">Blitz de Puxada</p>
+      </div>
+      <MotivosBlitz />
     </div>
   )
 }
