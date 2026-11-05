@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { RotateCcw, Package, RefreshCw } from 'lucide-react'
-import AdminLayout from '../components/AdminLayout'
+import { RotateCcw, Package, RefreshCw, LogOut, LayoutGrid } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -16,7 +16,8 @@ function formatTs(iso) {
 }
 
 export default function Retrabalho() {
-  const { profile } = useAuth()
+  const { profile, signOut, modoVisao, setModoVisao } = useAuth()
+  const navigate = useNavigate()
   const [itens,   setItens]   = useState([])
   const [loading, setLoading] = useState(true)
   const [filtro,  setFiltro]  = useState('7dias')
@@ -54,39 +55,57 @@ export default function Retrabalho() {
   }
 
   return (
-    <AdminLayout title="Retrabalho">
-      <div className="max-w-2xl mx-auto px-4 py-5 space-y-4">
+    <div className="min-h-screen bg-[#EBF5FF]">
 
-        {/* Cabeçalho */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div className="flex items-center gap-2">
-            <RotateCcw size={16} className="text-purple-600" />
-            <p className="text-cobeb-text font-semibold text-sm">
-              Paletes para Retrabalho
-              {!loading && <span className="text-slate-500 font-normal ml-2">({itens.length})</span>}
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-xl border border-cobeb-border overflow-hidden text-xs font-semibold">
-              {[
-                { value: 'hoje',  label: 'Hoje' },
-                { value: '7dias', label: '7 dias' },
-                { value: 'tudo',  label: 'Tudo' },
-              ].map(({ value, label }) => (
-                <button key={value} onClick={() => setFiltro(value)}
-                  className={`px-3 py-1.5 transition-colors ${
-                    filtro === value
-                      ? 'bg-cobeb-navy text-white'
-                      : 'bg-white text-slate-500 hover:bg-[#EBF5FF]'
-                  }`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-            <button onClick={load}
-              className="p-1.5 text-slate-400 hover:text-cobeb-navy border border-cobeb-border rounded-xl transition-colors bg-white">
-              <RefreshCw size={14} />
+      {/* Header */}
+      <header className="sticky top-0 z-40 bg-cobeb-navy border-b border-blue-800 px-3 py-2 sm:px-5 sm:py-3.5 flex items-center justify-between shadow-md shadow-cobeb-navy/20">
+        <div className="flex items-center gap-2 min-w-0">
+          <RotateCcw size={16} className="text-purple-400 shrink-0" />
+          <p className="text-white text-sm font-semibold truncate">Retrabalho</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={load}
+            className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10">
+            <RefreshCw size={16} />
+          </button>
+          {modoVisao && (
+            <button onClick={() => { setModoVisao(null); navigate('/selecionar-modulo') }}
+              className="text-cobeb-yellow hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
+              title="Trocar Módulo">
+              <LayoutGrid size={16} />
             </button>
+          )}
+          <button onClick={signOut}
+            className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10">
+            <LogOut size={16} />
+          </button>
+        </div>
+      </header>
+
+      {/* Body */}
+      <main className="max-w-lg mx-auto px-4 pt-4 pb-8 space-y-4">
+
+        {/* Filtro de período */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <p className="text-cobeb-text font-semibold text-sm">
+            Paletes para Retrabalho
+            {!loading && <span className="text-slate-500 font-normal ml-2">({itens.length})</span>}
+          </p>
+          <div className="flex rounded-xl border border-cobeb-border overflow-hidden text-xs font-semibold bg-white">
+            {[
+              { value: 'hoje',  label: 'Hoje' },
+              { value: '7dias', label: '7 dias' },
+              { value: 'tudo',  label: 'Tudo' },
+            ].map(({ value, label }) => (
+              <button key={value} onClick={() => setFiltro(value)}
+                className={`px-3 py-1.5 transition-colors ${
+                  filtro === value
+                    ? 'bg-cobeb-navy text-white'
+                    : 'text-slate-500 hover:bg-[#EBF5FF]'
+                }`}>
+                {label}
+              </button>
+            ))}
           </div>
         </div>
 
@@ -152,7 +171,7 @@ export default function Retrabalho() {
             ))}
           </div>
         )}
-      </div>
-    </AdminLayout>
+      </main>
+    </div>
   )
 }
