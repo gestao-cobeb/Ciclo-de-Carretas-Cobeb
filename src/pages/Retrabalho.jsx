@@ -20,6 +20,17 @@ function formatTs(iso) {
   return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
+function formatDuracao(inicio, fim) {
+  if (!inicio || !fim) return null
+  const ms = new Date(fim) - new Date(inicio)
+  if (ms <= 0) return null
+  const totalMin = Math.floor(ms / 60000)
+  const h = Math.floor(totalMin / 60)
+  const m = totalMin % 60
+  if (h === 0) return `${m}min`
+  return `${h}h ${m}min`
+}
+
 export default function Retrabalho() {
   const { profile, signOut, modoVisao, setModoVisao } = useAuth()
   const navigate = useNavigate()
@@ -500,9 +511,16 @@ export default function Retrabalho() {
 
                       {/* 5. Concluído */}
                       {concluido && (
-                        <span className="flex items-center gap-1.5 text-[10px] font-semibold text-green-600">
-                          <CheckCircle size={11} /> Retrabalho concluído
-                        </span>
+                        <div>
+                          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-green-600">
+                            <CheckCircle size={11} /> Retrabalho concluído
+                          </span>
+                          {formatDuracao(item.inicio_retrabalho, item.fim_retrabalho) && (
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              Tempo de retrabalho: <span className="font-semibold text-cobeb-text">{formatDuracao(item.inicio_retrabalho, item.fim_retrabalho)}</span>
+                            </p>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
