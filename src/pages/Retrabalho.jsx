@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import {
   RotateCcw, Package, RefreshCw, LogOut, LayoutGrid,
   CheckCircle, Clock, Undo2, Trash2, Play, StopCircle,
-  Camera, AlertTriangle, X, AlertCircle, Plus,
+  Camera, AlertTriangle, X, AlertCircle, Plus, Search,
+  FilePlus, CalendarDays,
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -34,6 +35,7 @@ export default function Retrabalho() {
   const [iniciando,      setIniciando]      = useState(null)
   const [finalizando,    setFinalizando]    = useState(null)
   const [apontamentoItem, setApontamentoItem] = useState(null)
+  const [criarModal,      setCriarModal]      = useState(false)
 
   const podeConfirmarEnvio = profile?.perfil === 'empilheira' || profile?.acesso_total
   const podeDesfazer       = profile?.acesso_total
@@ -58,7 +60,7 @@ export default function Retrabalho() {
         enviado_retrabalho, enviado_em, enviado_por_nome,
         inicio_retrabalho, inicio_por_nome,
         fim_retrabalho, fim_por_nome,
-        retrabalho_concluido, created_at
+        retrabalho_concluido, criado_manualmente, data_chegada, numero_nri_ref, created_at
       `)
       .eq('retrabalho_concluido', statusFiltro === 'concluidos')
       .order('created_at', { ascending: false })
@@ -113,18 +115,26 @@ export default function Retrabalho() {
   // ── Exclusão da blitz ───────────────────────────────────────────────────────
 
   async function excluirBlitz(item) {
-    if (!window.confirm(
-      `Excluir todos os apontamentos da blitz da NF ${item.numero_nf ?? item.tarefa_id}?\n\nA tarefa voltará como "Blitz Puxada" pendente no módulo de conferência.`
-    )) return
-    setExcluindo(item.tarefa_id)
-    const [r1, r2, r3] = await Promise.all([
-      supabase.from('tarefas_retrabalho').delete().eq('tarefa_id', item.tarefa_id),
-      supabase.from('blitz_apontamentos').delete().eq('tarefa_id', item.tarefa_id),
-      supabase.from('tarefas').update({ blitz_concluida: false }).eq('id', item.tarefa_id),
-    ])
-    const err = r1.error || r2.error || r3.error
-    if (err) { alert('Erro ao excluir: ' + err.message); setExcluindo(null); return }
-    setItens(prev => prev.filter(i => i.tarefa_id !== item.tarefa_id))
+    const label = item.criado_manualmente
+      ? `Excluir este retrabalho manual (${item.descricao_produto ?? item.cod_produto})?`
+      : `Excluir todos os apontamentos da blitz da NF ${item.numero_nf ?? item.tarefa_id}?\n\nA tarefa voltará como "Blitz Puxada" pendente no módulo de conferência.`
+    if (!window.confirm(label)) return
+    setExcluindo(item.id)
+
+    if (item.criado_manualmente) {
+      const { error } = await supabase.from('tarefas_retrabalho').delete().eq('id', item.id)
+      if (error) { alert('Erro ao excluir: ' + error.message); setExcluindo(null); return }
+      setItens(prev => prev.filter(i => i.id !== item.id))
+    } else {
+      const [r1, r2, r3] = await Promise.all([
+        supabase.from('tarefas_retrabalho').delete().eq('tarefa_id', item.tarefa_id),
+        supabase.from('blitz_apontamentos').delete().eq('tarefa_id', item.tarefa_id),
+        supabase.from('tarefas').update({ blitz_concluida: false }).eq('id', item.tarefa_id),
+      ])
+      const err = r1.error || r2.error || r3.error
+      if (err) { alert('Erro ao excluir: ' + err.message); setExcluindo(null); return }
+      setItens(prev => prev.filter(i => i.tarefa_id !== item.tarefa_id))
+    }
     setExcluindo(null)
   }
 
@@ -178,6 +188,35 @@ export default function Retrabalho() {
     return true
   }
 
+  // ── Criação manual ─────────────────────────────────────────────────────────
+
+  async function criarRetrabalho(form) {
+    const motivo = motivos.find(m => m.id === form.motivoId)
+    const { data, error } = await supabase.from('tarefas_retrabalho').insert({
+      tarefa_id:            null,
+      conferencia_item_id:  null,
+      pedido_id:            null,
+      cod_produto:          form.codProduto,
+      descricao_produto:    form.descricaoProduto,
+      embalagem_produto:    form.embalagemproduto,
+      qtde_paletes:         Number(form.qtdePaletes),
+      qtde_unidades:        null,
+      motivo_id:            form.motivoId,
+      descricao_motivo:     motivo?.descricao ?? '',
+      data_chegada:         form.dataChegada,
+      numero_nri_ref:       form.numeroNri ? Number(form.numeroNri) : null,
+      unidade_id:           profile?.unidade_id ?? null,
+      criado_manualmente:   true,
+      numero_nf:            null,
+      motorista_nome:       null,
+      placa_carreta:        null,
+    }).select().single()
+    if (error) { alert('Erro ao criar: ' + error.message); return false }
+    setItens(prev => [data, ...prev])
+    setCriarModal(false)
+    return true
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
@@ -190,6 +229,13 @@ export default function Retrabalho() {
           <p className="text-white text-sm font-semibold truncate">Retrabalho</p>
         </div>
         <div className="flex items-center gap-1">
+          {profile?.acesso_total && (
+            <button onClick={() => setCriarModal(true)}
+              className="text-purple-300 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
+              title="Criar retrabalho manual">
+              <FilePlus size={16} />
+            </button>
+          )}
           <button onClick={load}
             className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10">
             <RefreshCw size={16} />
@@ -281,7 +327,7 @@ export default function Retrabalho() {
               const finalizado = !!item.fim_retrabalho
               const concluido  = !!item.retrabalho_concluido
               const carregando = confirmando === item.id
-              const removendo  = excluindo   === item.tarefa_id
+              const removendo  = excluindo   === item.id
               const emInicio   = iniciando   === item.id
               const emFim      = finalizando === item.id
 
@@ -336,9 +382,25 @@ export default function Retrabalho() {
                     )}
 
                     <div className="flex items-center gap-2 text-[10px] text-slate-400 flex-wrap">
-                      {item.numero_nf      && <span>NF {item.numero_nf}</span>}
-                      {item.motorista_nome && <span>· {item.motorista_nome}</span>}
-                      {item.placa_carreta  && <span>· {item.placa_carreta}</span>}
+                      {item.criado_manualmente
+                        ? <>
+                            <span className="inline-flex items-center gap-0.5 bg-purple-500/10 text-purple-600 border border-purple-500/20 px-1.5 py-0.5 rounded-full font-semibold">
+                              <FilePlus size={9} /> Manual
+                            </span>
+                            {item.data_chegada && (
+                              <span className="flex items-center gap-1">
+                                <CalendarDays size={9} className="text-purple-400" />
+                                Chegada: {formatData(item.data_chegada)}
+                              </span>
+                            )}
+                            {item.numero_nri_ref && <span>· NRI {item.numero_nri_ref}</span>}
+                          </>
+                        : <>
+                            {item.numero_nf      && <span>NF {item.numero_nf}</span>}
+                            {item.motorista_nome && <span>· {item.motorista_nome}</span>}
+                            {item.placa_carreta  && <span>· {item.placa_carreta}</span>}
+                          </>
+                      }
                       <span className="ml-auto">{formatTs(item.created_at)}</span>
                     </div>
 
@@ -451,6 +513,15 @@ export default function Retrabalho() {
         )}
       </main>
 
+      {/* Modal criação manual */}
+      {criarModal && (
+        <CriarRetrabalhoModal
+          motivos={motivos}
+          onClose={() => setCriarModal(false)}
+          onSave={criarRetrabalho}
+        />
+      )}
+
       {/* Modal de apontamento final */}
       {apontamentoItem && (
         <ApontamentoModal
@@ -461,6 +532,215 @@ export default function Retrabalho() {
           onSave={salvarApontamento}
         />
       )}
+    </div>
+  )
+}
+
+// ── Modal de criação manual ───────────────────────────────────────────────────
+
+function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
+  const [codProduto,       setCodProduto]       = useState('')
+  const [descricaoProduto, setDescricaoProduto] = useState(null)
+  const [embalagemproduto, setEmbalagemproduto] = useState(null)
+  const [buscandoProd,     setBuscandoProd]     = useState(false)
+  const [erroProd,         setErroProd]         = useState(null)
+
+  const [numeroNri,    setNumeroNri]    = useState('')
+  const [dataChegada,  setDataChegada]  = useState(null)
+  const [buscandoNri,  setBuscandoNri]  = useState(false)
+  const [erroNri,      setErroNri]      = useState(null)
+
+  const [qtdePaletes,  setQtdePaletes]  = useState('')
+  const [motivoId,     setMotivoId]     = useState('')
+  const [salvando,     setSalvando]     = useState(false)
+
+  const canSave = descricaoProduto && dataChegada && qtdePaletes && Number(qtdePaletes) > 0 && motivoId
+
+  async function buscarProduto() {
+    const cod = codProduto.trim()
+    if (!cod) return
+    setBuscandoProd(true)
+    setErroProd(null)
+    setDescricaoProduto(null)
+    setEmbalagemproduto(null)
+    const { data, error } = await supabase
+      .from('produtos_catalogo')
+      .select('descricao, embalagem')
+      .eq('codigo', cod)
+      .maybeSingle()
+    setBuscandoProd(false)
+    if (error || !data) { setErroProd('Código não encontrado no catálogo'); return }
+    setDescricaoProduto(data.descricao)
+    setEmbalagemproduto(data.embalagem ?? null)
+  }
+
+  async function buscarNri() {
+    const n = Number(numeroNri.trim())
+    if (!n) return
+    setBuscandoNri(true)
+    setErroNri(null)
+    setDataChegada(null)
+    const { data, error } = await supabase
+      .from('nri_emissoes')
+      .select('created_at')
+      .lte('primeiro_numero', n)
+      .gte('ultimo_numero', n)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    setBuscandoNri(false)
+    if (error || !data) { setErroNri('NRI não encontrado'); return }
+    setDataChegada(data.created_at.split('T')[0])
+  }
+
+  async function handleSave() {
+    setSalvando(true)
+    const ok = await onSave({
+      codProduto,
+      descricaoProduto,
+      embalagemproduto,
+      qtdePaletes,
+      motivoId,
+      dataChegada,
+      numeroNri: numeroNri.trim(),
+    })
+    if (!ok) setSalvando(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-white rounded-t-3xl border-t border-cobeb-border px-5 pt-4 pb-8 max-h-[92vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto mb-4" />
+
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-2">
+            <FilePlus size={16} className="text-purple-600" />
+            <p className="text-cobeb-text font-semibold text-sm">Retrabalho Manual</p>
+          </div>
+          <button onClick={onClose} className="text-slate-500 hover:text-cobeb-text p-1 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-5">
+
+          {/* Código do produto */}
+          <div>
+            <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-1.5">
+              Código do produto <span className="text-cobeb-yellow">*</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text" placeholder="Ex: 123456"
+                value={codProduto}
+                onChange={e => { setCodProduto(e.target.value); setDescricaoProduto(null); setErroProd(null) }}
+                onKeyDown={e => e.key === 'Enter' && buscarProduto()}
+                className="flex-1 bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-2.5 text-sm text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors font-mono"
+              />
+              <button onClick={buscarProduto} disabled={!codProduto.trim() || buscandoProd}
+                className="px-4 py-2.5 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-1.5">
+                {buscandoProd
+                  ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  : <Search size={14} />}
+              </button>
+            </div>
+            {erroProd && <p className="text-red-500 text-[11px] mt-1.5">{erroProd}</p>}
+            {descricaoProduto && (
+              <div className="mt-2 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2">
+                <p className="text-green-700 text-xs font-semibold">{descricaoProduto}</p>
+                {embalagemproduto && <p className="text-slate-500 text-[10px] mt-0.5">{embalagemproduto}</p>}
+              </div>
+            )}
+          </div>
+
+          {/* NRI */}
+          <div>
+            <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-1.5">
+              Número do NRI <span className="text-cobeb-yellow">*</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="number" placeholder="Ex: 10234"
+                value={numeroNri}
+                onChange={e => { setNumeroNri(e.target.value); setDataChegada(null); setErroNri(null) }}
+                onKeyDown={e => e.key === 'Enter' && buscarNri()}
+                className="flex-1 bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-2.5 text-sm text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors"
+              />
+              <button onClick={buscarNri} disabled={!numeroNri.trim() || buscandoNri}
+                className="px-4 py-2.5 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-1.5">
+                {buscandoNri
+                  ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  : <Search size={14} />}
+              </button>
+            </div>
+            {erroNri && <p className="text-red-500 text-[11px] mt-1.5">{erroNri}</p>}
+            {dataChegada && (
+              <div className="mt-2 bg-green-500/10 border border-green-500/20 rounded-xl px-3 py-2 flex items-center gap-2">
+                <CalendarDays size={13} className="text-green-600 shrink-0" />
+                <p className="text-green-700 text-xs font-semibold">
+                  Data de chegada: {new Date(dataChegada + 'T12:00:00').toLocaleDateString('pt-BR')}
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Quantidade */}
+          <div>
+            <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-1.5">
+              Quantidade de paletes enviados <span className="text-cobeb-yellow">*</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min="1" step="1" placeholder="0"
+                value={qtdePaletes}
+                onChange={e => setQtdePaletes(e.target.value)}
+                className="w-28 bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-2.5 text-sm text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors text-right"
+              />
+              <span className="text-slate-500 text-sm">paletes</span>
+            </div>
+          </div>
+
+          {/* Motivo */}
+          <div>
+            <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-2">
+              Motivo <span className="text-cobeb-yellow">*</span>
+            </label>
+            {motivos.length === 0 ? (
+              <p className="text-slate-400 text-xs bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-3">
+                Nenhum motivo cadastrado em Metas.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {motivos.map(m => (
+                  <button key={m.id} type="button"
+                    onClick={() => setMotivoId(m.id)}
+                    className={`px-3 py-2.5 rounded-xl border text-xs font-medium text-left transition-colors ${
+                      motivoId === m.id
+                        ? 'bg-orange-500/10 border-orange-500/50 text-orange-700'
+                        : 'bg-[#EBF5FF] border-cobeb-border text-slate-500 hover:border-orange-500/30'
+                    }`}>
+                    {m.descricao}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose}
+              className="flex-1 bg-[#EBF5FF] border border-cobeb-border text-slate-400 text-sm font-semibold py-3 rounded-2xl">
+              Cancelar
+            </button>
+            <button onClick={handleSave} disabled={!canSave || salvando}
+              className="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 rounded-2xl transition-colors flex items-center justify-center gap-2">
+              {salvando
+                ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                : 'Criar Retrabalho'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
