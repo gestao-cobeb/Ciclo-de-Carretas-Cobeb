@@ -20,11 +20,13 @@ export default function Retrabalho() {
   const [itens,   setItens]   = useState([])
   const [loading, setLoading] = useState(true)
   const [filtro,  setFiltro]  = useState('7dias')
+  const [erro,    setErro]    = useState(null)
 
   useEffect(() => { load() }, [filtro])
 
   async function load() {
     setLoading(true)
+    setErro(null)
     let q = supabase
       .from('tarefas_retrabalho')
       .select(`
@@ -45,7 +47,8 @@ export default function Retrabalho() {
       q = q.gte('created_at', corte.toISOString())
     }
 
-    const { data } = await q
+    const { data, error } = await q
+    if (error) setErro(error.message)
     setItens(data ?? [])
     setLoading(false)
   }
@@ -87,12 +90,19 @@ export default function Retrabalho() {
           </div>
         </div>
 
+        {/* Erro */}
+        {erro && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-4 py-3 text-red-400 text-xs">
+            {erro}
+          </div>
+        )}
+
         {/* Lista */}
         {loading ? (
           <div className="flex justify-center py-16">
             <div className="w-7 h-7 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : itens.length === 0 ? (
+        ) : !erro && itens.length === 0 ? (
           <div className="bg-white rounded-2xl border border-cobeb-border px-5 py-12 text-center">
             <div className="w-14 h-14 rounded-2xl bg-purple-600/10 border border-purple-600/20 flex items-center justify-center mx-auto mb-4">
               <RotateCcw size={22} className="text-purple-600" />
