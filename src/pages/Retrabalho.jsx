@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { RotateCcw, Package, RefreshCw } from 'lucide-react'
 import AdminLayout from '../components/AdminLayout'
 import { supabase } from '../lib/supabase'
+import { useAuth } from '../contexts/AuthContext'
 
 function formatData(iso) {
   if (!iso) return null
@@ -15,6 +16,7 @@ function formatTs(iso) {
 }
 
 export default function Retrabalho() {
+  const { profile } = useAuth()
   const [itens,   setItens]   = useState([])
   const [loading, setLoading] = useState(true)
   const [filtro,  setFiltro]  = useState('7dias')
@@ -32,11 +34,14 @@ export default function Retrabalho() {
       `)
       .order('created_at', { ascending: false })
 
+    if (profile?.unidade_id) {
+      q = q.eq('unidade_id', profile.unidade_id)
+    }
+
     if (filtro !== 'tudo') {
       const corte = new Date()
       corte.setHours(0, 0, 0, 0)
       if (filtro === '7dias') corte.setDate(corte.getDate() - 6)
-      if (filtro === 'hoje')  { /* já está hoje */ }
       q = q.gte('created_at', corte.toISOString())
     }
 
