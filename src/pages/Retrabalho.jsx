@@ -34,7 +34,7 @@ export default function Retrabalho() {
       `)
       .order('created_at', { ascending: false })
 
-    if (profile?.unidade_id) {
+    if (!profile?.acesso_total && profile?.unidade_id) {
       q = q.eq('unidade_id', profile.unidade_id)
     }
 
