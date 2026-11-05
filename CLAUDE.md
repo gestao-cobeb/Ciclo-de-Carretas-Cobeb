@@ -78,6 +78,61 @@ botão não funciona e para de usá-lo.
 - O `vercel.json` reescreve tudo para `/` — é uma SPA, e sem isso qualquer rota
   aberta direto devolve 404.
 
+## Sessão Android — o que aprendemos (05/11/2026)
+
+### Motorista voltando para a tela de login no meio da viagem
+
+**Causa:** o Supabase dispara um evento `SIGNED_OUT` quando a renovação do JWT
+falha por rede instável. No Android, isso acontece exatamente quando o motorista
+retoma o app do background e a conexão ainda não está pronta. O código tratava
+esse evento igual ao logout intencional e jogava o motorista para a tela de login
+— sem aviso, sem perder a viagem do banco, mas quebrando a tela.
+
+**Correção (`src/contexts/AuthContext.jsx`):** o flag `signOutIntentional`
+(padrão `false`) distingue o logout pelo botão "Sair" do SIGNED_OUT involuntário.
+O listener `onAuthStateChange` ignora o evento quando o flag está falso; só o
+`signOut()` explícito e o caso de conta desativada levantam o flag antes de
+chamar `supabase.auth.signOut()`.
+
+**Regra para o próximo:** qualquer `onAuthStateChange` que limpa o usuário deve
+checar o `_event`. `SIGNED_OUT` por falha de rede é diferente de `SIGNED_OUT`
+por `signOut()` — tratá-los igual desloga o motorista em viagem.
+
+---
+
+### Card "sem sinal" mesmo com internet funcionando
+
+**Causa raiz:** `sincronizar()` em `useRastreamento.js` só enviava
+`motorista_last_seen_at` se `posRef.current` não fosse nulo. `posRef` só era
+populado pelo callback do `BackgroundGeolocation`, que:
+- com `stale: false`, não entregava posição cacheada — esperava um fix GPS fresco
+- com `distanceFilter: 20`, não disparava se o motorista estava parado
+- era nulo se o app tinha reiniciado sem GPS disponível (galpão, área coberta)
+
+Resultado: motorista ativo e com 4G, mas `last_seen_at` parado há >30 min.
+
+**Correções (`src/hooks/useRastreamento.js`):**
+
+1. **`lastKnownPosRef` + `localStorage`** — a última posição GPS boa fica salva
+   no aparelho. Ao reiniciar o app, `sincronizar()` a usa imediatamente em vez de
+   esperar o próximo fix. A chave no storage é `cobeb_last_gps_pos`.
+
+2. **`stale: true` no `BackgroundGeolocation.addWatcher`** — o Android entrega a
+   última posição cacheada do sistema ao abrir o watcher, sem esperar satélite.
+   Reduz o tempo em que `posRef` fica nulo após abrir o app.
+
+3. **Fallback `getCurrentPosition(enableHighAccuracy: false)`** — chamado uma vez
+   na abertura se não há posição cacheada. Usa torres de celular e WiFi em vez de
+   GPS; funciona em galpões. Não bloqueia: dispara e esquece.
+
+**O que NÃO mudou:** o geofence de chegada/saída de fábrica continua exigindo
+posição fresca do `BackgroundGeolocation` — correto, porque disparar etapa de
+viagem por posição cacheada/desatualizada seria erro de negócio.
+
+**Regra para o próximo:** `sincronizar()` e geofence têm requisitos diferentes.
+`sincronizar()` quer saber "o motorista está ativo?" — última posição conhecida
+serve. Geofence quer saber "o motorista está AQUI agora?" — só posição fresca.
+
 ## O que este arquivo NÃO cobre (e eu não inventei)
 
 Não estudei as regras de negócio do sistema — NRI, o cálculo dos tempos, o
