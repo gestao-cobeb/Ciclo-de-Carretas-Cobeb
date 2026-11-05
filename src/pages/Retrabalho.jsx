@@ -603,38 +603,56 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
     if (!n) return
     setBuscandoNri(true)
     resetNri()
-    const { data, error } = await supabase
+
+    // 1. Busca o lote de NRI pelo range de números
+    const { data: emissao, error: e1 } = await supabase
       .from('nri_emissoes')
-      .select(`
-        created_at, numero_nf, primeiro_numero, itens,
-        tarefa:tarefas(
-          numero_nf,
-          viagem:viagens(
-            motorista:profiles(nome),
-            carreta:carretas(placa)
-          ),
-          conferencia_itens(
-            qtde_paletes,
-            pedido:pedidos(cod_produto, descricao, embalagem)
-          )
-        )
-      `)
+      .select('id, created_at, numero_nf, primeiro_numero, ultimo_numero, itens, tarefa_id')
       .lte('primeiro_numero', n)
       .gte('ultimo_numero', n)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
+
+    if (e1 || !emissao) { setBuscandoNri(false); setErroNri('NRI não encontrado'); return }
+
+    // 2. Busca dados da tarefa (NF + viagem)
+    let nf = emissao.numero_nf ?? null
+    let motorista = null
+    let placa = null
+    let citens = []
+
+    if (emissao.tarefa_id) {
+      const { data: tarefa } = await supabase
+        .from('tarefas')
+        .select('numero_nf, viagem:viagens(motorista:profiles(nome), carreta:carretas(placa))')
+        .eq('id', emissao.tarefa_id)
+        .maybeSingle()
+
+      if (tarefa) {
+        nf        = tarefa.numero_nf ?? nf
+        motorista = tarefa.viagem?.motorista?.nome ?? null
+        placa     = tarefa.viagem?.carreta?.placa  ?? null
+      }
+
+      // 3. Busca itens de conferência para identificar o produto
+      const { data: ci } = await supabase
+        .from('conferencia_itens')
+        .select('qtde_paletes, pedido:pedidos(cod_produto, descricao, embalagem)')
+        .eq('tarefa_id', emissao.tarefa_id)
+
+      citens = ci ?? []
+    }
+
+    const prod = identificarProduto({ ...emissao, tarefa: { conferencia_itens: citens } }, n)
+
     setBuscandoNri(false)
-    if (error || !data) { setErroNri('NRI não encontrado'); return }
-    const prod = identificarProduto(data, n)
     setNriInfo({
-      dataChegada: data.created_at.split('T')[0],
-      nf:          data.tarefa?.numero_nf ?? data.numero_nf ?? null,
-      motorista:   data.tarefa?.viagem?.motorista?.nome ?? null,
-      placa:       data.tarefa?.viagem?.carreta?.placa ?? null,
-      cod:         prod.cod,
-      desc:        prod.desc,
-      emb:         prod.emb,
+      dataChegada: emissao.created_at.split('T')[0],
+      nf, motorista, placa,
+      cod:  prod.cod,
+      desc: prod.desc,
+      emb:  prod.emb,
     })
   }
 
