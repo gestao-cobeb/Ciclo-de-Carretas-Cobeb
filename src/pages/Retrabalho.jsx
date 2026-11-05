@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RotateCcw, Package, RefreshCw, LogOut, LayoutGrid, CheckCircle, Clock, Undo2 } from 'lucide-react'
+import { RotateCcw, Package, RefreshCw, LogOut, LayoutGrid, CheckCircle, Clock, Undo2, Trash2 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -24,6 +24,7 @@ export default function Retrabalho() {
   const [filtro,       setFiltro]       = useState('7dias')
   const [erro,         setErro]         = useState(null)
   const [confirmando,  setConfirmando]  = useState(null)
+  const [excluindo,    setExcluindo]    = useState(null)
 
   const podeConfirmar = profile?.perfil === 'empilheira' || profile?.acesso_total
   const podeDesfazer  = profile?.acesso_total
@@ -36,7 +37,7 @@ export default function Retrabalho() {
     let q = supabase
       .from('tarefas_retrabalho')
       .select(`
-        id, qtde_unidades, qtde_paletes, data_validade, descricao_motivo,
+        id, tarefa_id, qtde_unidades, qtde_paletes, data_validade, descricao_motivo,
         cod_produto, descricao_produto, embalagem_produto,
         numero_nf, motorista_nome, placa_carreta,
         enviado_retrabalho, enviado_em, enviado_por_nome,
@@ -91,6 +92,22 @@ export default function Retrabalho() {
       : i
     ))
     setConfirmando(null)
+  }
+
+  async function excluirBlitz(item) {
+    if (!window.confirm(
+      `Excluir todos os apontamentos da blitz da NF ${item.numero_nf ?? item.tarefa_id}?\n\nA tarefa voltará como "Blitz Puxada" pendente no módulo de conferência.`
+    )) return
+    setExcluindo(item.tarefa_id)
+    const [r1, r2, r3] = await Promise.all([
+      supabase.from('tarefas_retrabalho').delete().eq('tarefa_id', item.tarefa_id),
+      supabase.from('blitz_apontamentos').delete().eq('tarefa_id', item.tarefa_id),
+      supabase.from('tarefas').update({ blitz_concluida: false }).eq('id', item.tarefa_id),
+    ])
+    const err = r1.error || r2.error || r3.error
+    if (err) { alert('Erro ao excluir: ' + err.message); setExcluindo(null); return }
+    setItens(prev => prev.filter(i => i.tarefa_id !== item.tarefa_id))
+    setExcluindo(null)
   }
 
   return (
@@ -171,21 +188,33 @@ export default function Retrabalho() {
         ) : (
           <div className="space-y-3">
             {itens.map(item => {
-              const enviado  = !!item.enviado_retrabalho
+              const enviado    = !!item.enviado_retrabalho
               const carregando = confirmando === item.id
+              const removendo  = excluindo === item.tarefa_id
               return (
                 <div key={item.id} className={`bg-white rounded-2xl border overflow-hidden ${
                   enviado ? 'border-green-500/30' : 'border-purple-500/20'
                 }`}>
                   {/* Produto */}
-                  <div className="px-4 pt-3 pb-2.5 border-b border-cobeb-border/50">
-                    <p className="text-cobeb-text text-xs font-medium leading-snug">
-                      {item.descricao_produto ?? 'Produto'}
-                    </p>
-                    <p className="text-slate-500 text-[10px] font-mono mt-0.5">
-                      {item.cod_produto}
-                      {item.embalagem_produto ? ` · ${item.embalagem_produto}` : ''}
-                    </p>
+                  <div className="px-4 pt-3 pb-2.5 border-b border-cobeb-border/50 flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-cobeb-text text-xs font-medium leading-snug">
+                        {item.descricao_produto ?? 'Produto'}
+                      </p>
+                      <p className="text-slate-500 text-[10px] font-mono mt-0.5">
+                        {item.cod_produto}
+                        {item.embalagem_produto ? ` · ${item.embalagem_produto}` : ''}
+                      </p>
+                    </div>
+                    {podeDesfazer && !enviado && (
+                      <button onClick={() => excluirBlitz(item)} disabled={removendo}
+                        className="text-slate-300 hover:text-red-400 transition-colors p-1 shrink-0 disabled:opacity-40"
+                        title="Excluir blitz e voltar para conferência">
+                        {removendo
+                          ? <div className="w-3.5 h-3.5 border-2 border-red-400/40 border-t-red-400 rounded-full animate-spin" />
+                          : <Trash2 size={14} />}
+                      </button>
+                    )}
                   </div>
 
                   {/* Detalhes */}
