@@ -638,10 +638,18 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
       // 3. Busca itens de conferência para identificar o produto
       const { data: ci } = await supabase
         .from('conferencia_itens')
-        .select('qtde_paletes, pedido:pedidos(cod_produto, descricao, embalagem)')
+        .select('pedido_id, qtde_paletes')
         .eq('tarefa_id', emissao.tarefa_id)
 
-      citens = ci ?? []
+      if (ci?.length > 0) {
+        const pedidoIds = [...new Set(ci.map(c => c.pedido_id).filter(Boolean))]
+        const { data: peds } = pedidoIds.length > 0
+          ? await supabase.from('pedidos').select('id, cod_produto, descricao, embalagem').in('id', pedidoIds)
+          : { data: [] }
+        const pedMap = {}
+        ;(peds ?? []).forEach(p => { pedMap[p.id] = p })
+        citens = ci.map(c => ({ ...c, pedido: pedMap[c.pedido_id] ?? null }))
+      }
     }
 
     const prod = identificarProduto({ ...emissao, tarefa: { conferencia_itens: citens } }, n)
