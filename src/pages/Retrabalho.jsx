@@ -588,14 +588,17 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
   const [nriInfo,         setNriInfo]         = useState(null)   // { dataChegada, nf, motorista, placa, cod, desc, emb }
   const [buscandoNri,     setBuscandoNri]     = useState(false)
   const [erroNri,         setErroNri]         = useState(null)
+  const [produtoSel,      setProdutoSel]      = useState(null) // { cod, desc, emb }
   const [motivoId,        setMotivoId]        = useState('')
   const [salvando,        setSalvando]        = useState(false)
 
-  const canSave = nriInfo && motivoId
+  const prodFinal = nriInfo?.opcoesProduto ? produtoSel : nriInfo
+  const canSave   = nriInfo && motivoId && (!nriInfo.opcoesProduto || produtoSel)
 
   function resetNri() {
     setNriInfo(null)
     setErroNri(null)
+    setProdutoSel(null)
   }
 
   async function buscarNri() {
@@ -663,17 +666,7 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
             if (uniq.length === 1) {
               prod = { cod: uniq[0].cod_produto, desc: uniq[0].descricao, emb: uniq[0].embalagem }
             } else if (uniq.length > 1) {
-              const { data: ci } = await supabase
-                .from('conferencia_itens').select('pedido_id, qtde_paletes').eq('tarefa_id', emissao.tarefa_id)
-              if (ci?.length > 0) {
-                const pedidoIds = [...new Set(ci.map(c => c.pedido_id).filter(Boolean))]
-                const { data: pedsFull } = await supabase
-                  .from('pedidos').select('id, cod_produto, descricao, embalagem').in('id', pedidoIds)
-                const pedMap = {}
-                ;(pedsFull ?? []).forEach(p => { pedMap[p.id] = p })
-                const citens = ci.map(c => ({ ...c, pedido: pedMap[c.pedido_id] ?? null }))
-                prod = identificarProduto({ ...emissao, tarefa: { conferencia_itens: citens } }, n)
-              }
+              prod = { cod: null, desc: null, emb: null, opcoesProduto: uniq.map(p => ({ cod: p.cod_produto, desc: p.descricao, emb: p.embalagem })) }
             }
           }
         }
@@ -682,19 +675,20 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
 
     setBuscandoNri(false)
     setNriInfo({
-      dataChegada: emissao.created_at.split('T')[0],
+      dataChegada:    emissao.created_at.split('T')[0],
       nf, motorista, placa,
-      cod:  prod.cod,
-      desc: prod.desc,
-      emb:  prod.emb,
+      cod:            prod.cod,
+      desc:           prod.desc,
+      emb:            prod.emb,
+      opcoesProduto:  prod.opcoesProduto ?? null,
     })
   }
 
   async function handleSave() {
     setSalvando(true)
     const ok = await onSave({
-      codProduto:       nriInfo.cod,
-      descricaoProduto: nriInfo.desc,
+      codProduto:       prodFinal?.cod  ?? nriInfo.cod,
+      descricaoProduto: prodFinal?.desc ?? nriInfo.desc,
       embalagemproduto: nriInfo.emb,
       motivoId,
       dataChegada:  nriInfo.dataChegada,
@@ -775,6 +769,29 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
               </div>
             )}
           </div>
+
+          {/* Seletor de produto — aparece quando há múltiplos na viagem */}
+          {nriInfo?.opcoesProduto && (
+            <div>
+              <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-2">
+                Qual produto? <span className="text-cobeb-yellow">*</span>
+              </label>
+              <div className="space-y-2">
+                {nriInfo.opcoesProduto.map((op, i) => (
+                  <button key={i} type="button"
+                    onClick={() => setProdutoSel(op)}
+                    className={`w-full px-3 py-2.5 rounded-xl border text-left transition-colors ${
+                      produtoSel?.cod === op.cod
+                        ? 'bg-cobeb-navy/10 border-cobeb-navy/50 text-cobeb-navy'
+                        : 'bg-[#EBF5FF] border-cobeb-border text-slate-600 hover:border-cobeb-blue/40'
+                    }`}>
+                    <p className="text-xs font-semibold">{op.desc ?? op.cod}</p>
+                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">{op.cod}{op.emb ? ` · ${op.emb}` : ''}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Motivo — só aparece após lookup com sucesso */}
           {nriInfo && (
