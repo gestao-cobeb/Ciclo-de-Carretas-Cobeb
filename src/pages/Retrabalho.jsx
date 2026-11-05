@@ -616,16 +616,16 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
 
     if (e1 || !emissao) { setBuscandoNri(false); setErroNri('NRI não encontrado'); return }
 
-    // 2. Busca dados da tarefa (NF + viagem)
+    // 2. Busca dados da tarefa (NF + viagem + viagem_id)
     let nf = emissao.numero_nf ?? null
     let motorista = null
     let placa = null
-    let citens = []
+    let prod = { cod: null, desc: null, emb: null }
 
     if (emissao.tarefa_id) {
       const { data: tarefa } = await supabase
         .from('tarefas')
-        .select('numero_nf, viagem:viagens(motorista:profiles(nome), carreta:carretas(placa))')
+        .select('numero_nf, viagem_id, viagem:viagens(motorista:profiles(nome), carreta:carretas(placa))')
         .eq('id', emissao.tarefa_id)
         .maybeSingle()
 
@@ -633,26 +633,40 @@ function CriarRetrabalhoModal({ motivos, onClose, onSave }) {
         nf        = tarefa.numero_nf ?? nf
         motorista = tarefa.viagem?.motorista?.nome ?? null
         placa     = tarefa.viagem?.carreta?.placa  ?? null
-      }
 
-      // 3. Busca itens de conferência para identificar o produto
-      const { data: ci } = await supabase
-        .from('conferencia_itens')
-        .select('pedido_id, qtde_paletes')
-        .eq('tarefa_id', emissao.tarefa_id)
+        // 3a. Marketplace: itens JSON na própria emissão
+        if (emissao.itens?.length > 0) {
+          prod = identificarProduto(emissao, n)
+        }
 
-      if (ci?.length > 0) {
-        const pedidoIds = [...new Set(ci.map(c => c.pedido_id).filter(Boolean))]
-        const { data: peds } = pedidoIds.length > 0
-          ? await supabase.from('pedidos').select('id, cod_produto, descricao, embalagem').in('id', pedidoIds)
-          : { data: [] }
-        const pedMap = {}
-        ;(peds ?? []).forEach(p => { pedMap[p.id] = p })
-        citens = ci.map(c => ({ ...c, pedido: pedMap[c.pedido_id] ?? null }))
+        // 3b. Pedidos via viagem_id (rota mais confiável para tarefas normais)
+        if (!prod.cod && tarefa.viagem_id) {
+          const { data: peds } = await supabase
+            .from('pedidos')
+            .select('cod_produto, descricao, embalagem')
+            .eq('viagem_id', tarefa.viagem_id)
+          const uniq = [...new Map((peds ?? []).map(p => [p.cod_produto, p])).values()]
+          if (uniq.length === 1) {
+            prod = { cod: uniq[0].cod_produto, desc: uniq[0].descricao, emb: uniq[0].embalagem }
+          } else if (uniq.length > 1) {
+            // Tenta offset via conferencia_itens
+            const { data: ci } = await supabase
+              .from('conferencia_itens')
+              .select('pedido_id, qtde_paletes')
+              .eq('tarefa_id', emissao.tarefa_id)
+            if (ci?.length > 0) {
+              const pedidoIds = [...new Set(ci.map(c => c.pedido_id).filter(Boolean))]
+              const { data: pedsFull } = await supabase
+                .from('pedidos').select('id, cod_produto, descricao, embalagem').in('id', pedidoIds)
+              const pedMap = {}
+              ;(pedsFull ?? []).forEach(p => { pedMap[p.id] = p })
+              const citens = ci.map(c => ({ ...c, pedido: pedMap[c.pedido_id] ?? null }))
+              prod = identificarProduto({ ...emissao, tarefa: { conferencia_itens: citens } }, n)
+            }
+          }
+        }
       }
     }
-
-    const prod = identificarProduto({ ...emissao, tarefa: { conferencia_itens: citens } }, n)
 
     setBuscandoNri(false)
     setNriInfo({
