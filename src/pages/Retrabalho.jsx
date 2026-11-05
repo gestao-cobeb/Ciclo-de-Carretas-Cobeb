@@ -32,8 +32,8 @@ export default function Retrabalho() {
       .from('tarefas_retrabalho')
       .select(`
         id, qtde_unidades, qtde_paletes, data_validade, descricao_motivo,
-        cod_produto, descricao_produto, embalagem_produto, created_at,
-        tarefa:tarefas(numero_nf, viagem:viagens(motorista:profiles(nome), carreta:carretas(placa)))
+        cod_produto, descricao_produto, embalagem_produto,
+        numero_nf, motorista_nome, placa_carreta, created_at
       `)
       .order('created_at', { ascending: false })
 
@@ -161,9 +161,9 @@ export default function Retrabalho() {
                     </span>
                   )}
                   <div className="flex items-center gap-2 text-[10px] text-slate-400 pt-0.5 flex-wrap">
-                    {item.tarefa?.numero_nf && <span>NF {item.tarefa.numero_nf}</span>}
-                    {item.tarefa?.viagem?.motorista?.nome && <span>· {item.tarefa.viagem.motorista.nome}</span>}
-                    {item.tarefa?.viagem?.carreta?.placa  && <span>· {item.tarefa.viagem.carreta.placa}</span>}
+                    {item.numero_nf      && <span>NF {item.numero_nf}</span>}
+                    {item.motorista_nome && <span>· {item.motorista_nome}</span>}
+                    {item.placa_carreta  && <span>· {item.placa_carreta}</span>}
                     <span className="ml-auto">{formatTs(item.created_at)}</span>
                   </div>
                 </div>

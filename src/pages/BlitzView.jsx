@@ -139,6 +139,9 @@ export default function BlitzView({ tarefa, onVoltar }) {
           cod_produto:         pedido?.cod_produto ?? null,
           descricao_produto:   pedido?.descricao ?? null,
           embalagem_produto:   pedido?.embalagem ?? null,
+          numero_nf:           tarefa.numero_nf ?? null,
+          motorista_nome:      tarefa.viagem?.motorista?.nome ?? null,
+          placa_carreta:       tarefa.viagem?.carreta?.placa ?? null,
         }
       })
       const { error: retErr } = await supabase.from('tarefas_retrabalho').insert(retrabalhos)
