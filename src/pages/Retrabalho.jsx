@@ -30,8 +30,8 @@ export default function Retrabalho() {
     let q = supabase
       .from('tarefas_retrabalho')
       .select(`
-        id, qtde_unidades, qtde_paletes, data_validade, descricao_motivo, created_at,
-        pedido:pedidos(cod_produto, descricao, embalagem),
+        id, qtde_unidades, qtde_paletes, data_validade, descricao_motivo,
+        cod_produto, descricao_produto, embalagem_produto, created_at,
         tarefa:tarefas(numero_nf, viagem:viagens(motorista:profiles(nome), carreta:carretas(placa)))
       `)
       .order('created_at', { ascending: false })
@@ -116,11 +116,11 @@ export default function Retrabalho() {
               <div key={item.id} className="bg-white rounded-2xl border border-purple-500/20 overflow-hidden">
                 <div className="px-4 pt-3 pb-2.5 border-b border-cobeb-border/50">
                   <p className="text-cobeb-text text-xs font-medium leading-snug">
-                    {item.pedido?.descricao ?? 'Produto'}
+                    {item.descricao_produto ?? 'Produto'}
                   </p>
                   <p className="text-slate-500 text-[10px] font-mono mt-0.5">
-                    {item.pedido?.cod_produto}
-                    {item.pedido?.embalagem ? ` · ${item.pedido.embalagem}` : ''}
+                    {item.cod_produto}
+                    {item.embalagem_produto ? ` · ${item.embalagem_produto}` : ''}
                   </p>
                 </div>
                 <div className="px-4 py-3 space-y-1.5">

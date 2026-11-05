@@ -124,17 +124,23 @@ export default function BlitzView({ tarefa, onVoltar }) {
 
     const comAnomalia = itens.filter(i => !blitzState[i.id].sem_anomalia)
     if (comAnomalia.length > 0) {
-      const retrabalhos = comAnomalia.map(item => ({
-        tarefa_id:           tarefa.id,
-        conferencia_item_id: item.id,
-        pedido_id:           item.pedido_id,
-        motivo_id:           blitzState[item.id].motivo_id ?? null,
-        descricao_motivo:    motivoMap[blitzState[item.id].motivo_id] ?? '',
-        qtde_unidades:       blitzState[item.id].qtde_unidades,
-        qtde_paletes:        blitzState[item.id].qtde_paletes_retrabalho,
-        data_validade:       item.data_validade ?? null,
-        unidade_id:          tarefa.unidade_id,
-      }))
+      const retrabalhos = comAnomalia.map(item => {
+        const pedido = pedidoMap[item.pedido_id]
+        return {
+          tarefa_id:           tarefa.id,
+          conferencia_item_id: item.id,
+          pedido_id:           item.pedido_id,
+          motivo_id:           blitzState[item.id].motivo_id ?? null,
+          descricao_motivo:    motivoMap[blitzState[item.id].motivo_id] ?? '',
+          qtde_unidades:       blitzState[item.id].qtde_unidades,
+          qtde_paletes:        blitzState[item.id].qtde_paletes_retrabalho,
+          data_validade:       item.data_validade ?? null,
+          unidade_id:          tarefa.unidade_id,
+          cod_produto:         pedido?.cod_produto ?? null,
+          descricao_produto:   pedido?.descricao ?? null,
+          embalagem_produto:   pedido?.embalagem ?? null,
+        }
+      })
       const { error: retErr } = await supabase.from('tarefas_retrabalho').insert(retrabalhos)
       if (retErr) { alert('Erro ao criar retrabalho: ' + retErr.message); setSalvando(false); return }
     }
