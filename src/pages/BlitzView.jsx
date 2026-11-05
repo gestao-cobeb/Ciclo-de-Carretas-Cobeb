@@ -412,7 +412,7 @@ function AnomaliaModal({ modal, motivos, onChange, onConfirm, onClose }) {
               Quantidade afetada <span className="text-cobeb-yellow">*</span>
             </label>
             <p className="text-orange-500/80 text-[10px] font-semibold mb-2">
-              ⚠ Informe em <strong>unidades</strong> (caixas, barris, etc.) — não em paletes.
+              ⚠ Informe a quantidade <strong>unitária</strong> — número individual de itens (ex: 24 unidades, não 1 caixa).
             </p>
             <div className="flex items-center gap-2">
               <input
