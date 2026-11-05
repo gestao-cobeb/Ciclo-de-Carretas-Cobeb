@@ -279,7 +279,7 @@ export default function DashboardComercial() {
     load()
   }, [dataInicio, dataFim, unidades, fabricas])
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = todayStr()
 
   const temTabela = tabelaPreco === 'Diferença'
     ? Object.keys(precosMap['Pratic'] ?? {}).length > 0 && Object.keys(precosMap['Cheia'] ?? {}).length > 0
@@ -302,7 +302,9 @@ export default function DashboardComercial() {
       if (hl <= 0) return
 
       // Valor — mesmo cálculo do GraficoValorFabrica
-      const caixas = p.qtde_skus || 0
+      // qtde_skus pode vir 0 do BASE; fallback: paletes × caixas_pallet do catálogo
+      const cxFallback = Math.round((p.qtde_pallets || 0) * (cat.caixas_pallet || 0))
+      const caixas = p.qtde_skus || cxFallback
       const fator  = /^01[78]/.test(p.embalagem ?? '') ? 2 : 1
       let valor = 0
       if (caixas > 0) {
@@ -340,7 +342,7 @@ export default function DashboardComercial() {
         valor,
         hl,
         paletes: p.qtde_pallets || 0,
-        cx:      p.qtde_skus    || 0,
+        cx:      caixas,
         tags: {
           cerveja:  isCerv,
           nab:      !isCerv,
