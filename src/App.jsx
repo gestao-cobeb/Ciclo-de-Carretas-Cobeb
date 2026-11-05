@@ -133,7 +133,7 @@ function AppRoutes() {
         element={<ProtectedRoute allowedRoles={['admin']}><OperadoresPage /></ProtectedRoute>}
       />
       <Route path="/retrabalho"
-        element={<ProtectedRoute allowedRoles={['admin', 'empilheira']}><Retrabalho /></ProtectedRoute>}
+        element={<ProtectedRoute allowedRoles={['admin', 'empilheira', 'ajudante']}><Retrabalho /></ProtectedRoute>}
       />
 
       <Route path="/"  element={<Navigate to={home} replace />} />

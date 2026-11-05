@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react'
-import { RotateCcw, Package, RefreshCw, LogOut, LayoutGrid, CheckCircle, Clock, Undo2, Trash2 } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import {
+  RotateCcw, Package, RefreshCw, LogOut, LayoutGrid,
+  CheckCircle, Clock, Undo2, Trash2, Play, StopCircle,
+  Camera, AlertTriangle, X, AlertCircle, Plus,
+} from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -19,17 +23,28 @@ export default function Retrabalho() {
   const { profile, signOut, modoVisao, setModoVisao } = useAuth()
   const navigate = useNavigate()
 
-  const [itens,        setItens]        = useState([])
-  const [loading,      setLoading]      = useState(true)
-  const [filtro,       setFiltro]       = useState('7dias')
-  const [erro,         setErro]         = useState(null)
-  const [confirmando,  setConfirmando]  = useState(null)
-  const [excluindo,    setExcluindo]    = useState(null)
+  const [itens,          setItens]          = useState([])
+  const [motivos,        setMotivos]        = useState([])
+  const [loading,        setLoading]        = useState(true)
+  const [filtro,         setFiltro]         = useState('7dias')
+  const [statusFiltro,   setStatusFiltro]   = useState('ativos')
+  const [erro,           setErro]           = useState(null)
+  const [confirmando,    setConfirmando]    = useState(null)
+  const [excluindo,      setExcluindo]      = useState(null)
+  const [iniciando,      setIniciando]      = useState(null)
+  const [finalizando,    setFinalizando]    = useState(null)
+  const [apontamentoItem, setApontamentoItem] = useState(null)
 
-  const podeConfirmar = profile?.perfil === 'empilheira' || profile?.acesso_total
-  const podeDesfazer  = profile?.acesso_total
+  const podeConfirmarEnvio = profile?.perfil === 'empilheira' || profile?.acesso_total
+  const podeDesfazer       = profile?.acesso_total
+  const podeIniciar        = profile?.perfil !== 'empilheira'
 
-  useEffect(() => { load() }, [filtro])
+  useEffect(() => {
+    supabase.from('motivos_blitz').select('id, descricao').eq('ativo', true).order('descricao')
+      .then(({ data }) => setMotivos(data ?? []))
+  }, [])
+
+  useEffect(() => { load() }, [filtro, statusFiltro])
 
   async function load() {
     setLoading(true)
@@ -41,8 +56,11 @@ export default function Retrabalho() {
         cod_produto, descricao_produto, embalagem_produto,
         numero_nf, motorista_nome, placa_carreta,
         enviado_retrabalho, enviado_em, enviado_por_nome,
-        created_at
+        inicio_retrabalho, inicio_por_nome,
+        fim_retrabalho, fim_por_nome,
+        retrabalho_concluido, created_at
       `)
+      .eq('retrabalho_concluido', statusFiltro === 'concluidos')
       .order('created_at', { ascending: false })
 
     if (!profile?.acesso_total && profile?.unidade_id) {
@@ -62,16 +80,15 @@ export default function Retrabalho() {
     setLoading(false)
   }
 
+  // ── Envio empilheira ────────────────────────────────────────────────────────
+
   async function confirmarEnvio(item) {
     setConfirmando(item.id)
-    const { error } = await supabase
-      .from('tarefas_retrabalho')
-      .update({
-        enviado_retrabalho: true,
-        enviado_em:         new Date().toISOString(),
-        enviado_por_nome:   profile.nome ?? '',
-      })
-      .eq('id', item.id)
+    const { error } = await supabase.from('tarefas_retrabalho').update({
+      enviado_retrabalho: true,
+      enviado_em:         new Date().toISOString(),
+      enviado_por_nome:   profile.nome ?? '',
+    }).eq('id', item.id)
     if (error) { alert('Erro: ' + error.message); setConfirmando(null); return }
     setItens(prev => prev.map(i => i.id === item.id
       ? { ...i, enviado_retrabalho: true, enviado_em: new Date().toISOString(), enviado_por_nome: profile.nome }
@@ -82,10 +99,9 @@ export default function Retrabalho() {
 
   async function desfazerEnvio(item) {
     setConfirmando(item.id)
-    const { error } = await supabase
-      .from('tarefas_retrabalho')
-      .update({ enviado_retrabalho: false, enviado_em: null, enviado_por_nome: null })
-      .eq('id', item.id)
+    const { error } = await supabase.from('tarefas_retrabalho').update({
+      enviado_retrabalho: false, enviado_em: null, enviado_por_nome: null,
+    }).eq('id', item.id)
     if (error) { alert('Erro: ' + error.message); setConfirmando(null); return }
     setItens(prev => prev.map(i => i.id === item.id
       ? { ...i, enviado_retrabalho: false, enviado_em: null, enviado_por_nome: null }
@@ -93,6 +109,8 @@ export default function Retrabalho() {
     ))
     setConfirmando(null)
   }
+
+  // ── Exclusão da blitz ───────────────────────────────────────────────────────
 
   async function excluirBlitz(item) {
     if (!window.confirm(
@@ -109,6 +127,58 @@ export default function Retrabalho() {
     setItens(prev => prev.filter(i => i.tarefa_id !== item.tarefa_id))
     setExcluindo(null)
   }
+
+  // ── Workflow de retrabalho ──────────────────────────────────────────────────
+
+  async function iniciarRetrabalho(item) {
+    if (!window.confirm('Confirmar início do retrabalho deste palete?')) return
+    setIniciando(item.id)
+    const { error } = await supabase.from('tarefas_retrabalho').update({
+      inicio_retrabalho: new Date().toISOString(),
+      inicio_por_nome:   profile.nome ?? '',
+    }).eq('id', item.id)
+    if (error) { alert('Erro: ' + error.message); setIniciando(null); return }
+    setItens(prev => prev.map(i => i.id === item.id
+      ? { ...i, inicio_retrabalho: new Date().toISOString(), inicio_por_nome: profile.nome }
+      : i
+    ))
+    setIniciando(null)
+  }
+
+  async function finalizarRetrabalho(item) {
+    if (!window.confirm('Confirmar fim do retrabalho deste palete?')) return
+    setFinalizando(item.id)
+    const { error } = await supabase.from('tarefas_retrabalho').update({
+      fim_retrabalho: new Date().toISOString(),
+      fim_por_nome:   profile.nome ?? '',
+    }).eq('id', item.id)
+    if (error) { alert('Erro: ' + error.message); setFinalizando(null); return }
+    const updated = { ...item, fim_retrabalho: new Date().toISOString(), fim_por_nome: profile.nome }
+    setItens(prev => prev.map(i => i.id === item.id ? updated : i))
+    setFinalizando(null)
+    setApontamentoItem(updated)
+  }
+
+  async function salvarApontamento(item, form) {
+    const { error: apoErr } = await supabase.from('retrabalho_apontamentos').insert({
+      tarefas_retrabalho_id: item.id,
+      sem_anomalia:          form.semAnomalia,
+      motivo_id:             form.semAnomalia ? null : (form.motivoId || null),
+      descricao_motivo:      form.semAnomalia ? null : (motivos.find(m => m.id === form.motivoId)?.descricao ?? null),
+      qtde_avariada:         form.semAnomalia ? null : (form.qtdeAvariada ? Number(form.qtdeAvariada) : null),
+      fotos:                 form.fotosUrls.filter(Boolean),
+      apontado_por_nome:     profile.nome ?? '',
+    })
+    if (apoErr) { alert('Erro ao salvar: ' + apoErr.message); return false }
+    const { error: updErr } = await supabase.from('tarefas_retrabalho')
+      .update({ retrabalho_concluido: true }).eq('id', item.id)
+    if (updErr) { alert('Erro ao concluir: ' + updErr.message); return false }
+    setItens(prev => prev.filter(i => i.id !== item.id))
+    setApontamentoItem(null)
+    return true
+  }
+
+  // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-[#EBF5FF]">
@@ -139,13 +209,29 @@ export default function Retrabalho() {
       </header>
 
       {/* Body */}
-      <main className="max-w-lg mx-auto px-4 pt-4 pb-8 space-y-4">
+      <main className="max-w-lg mx-auto px-4 pt-4 pb-8 space-y-3">
 
-        {/* Filtro de período */}
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <p className="text-cobeb-text font-semibold text-sm">
-            Paletes para Retrabalho
-            {!loading && <span className="text-slate-500 font-normal ml-2">({itens.length})</span>}
+        {/* Toggle Ativos / Concluídos */}
+        <div className="flex rounded-2xl border border-cobeb-border overflow-hidden text-xs font-semibold bg-white">
+          {[
+            { value: 'ativos',    label: 'Ativos' },
+            { value: 'concluidos', label: 'Concluídos' },
+          ].map(({ value, label }) => (
+            <button key={value} onClick={() => setStatusFiltro(value)}
+              className={`flex-1 py-2.5 transition-colors ${
+                statusFiltro === value
+                  ? 'bg-cobeb-navy text-white'
+                  : 'text-slate-500 hover:bg-[#EBF5FF]'
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Filtro período + count */}
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-cobeb-text text-sm font-semibold">
+            {!loading && <span className="text-slate-500 font-normal">{itens.length} palete(s)</span>}
           </p>
           <div className="flex rounded-xl border border-cobeb-border overflow-hidden text-xs font-semibold bg-white">
             {[
@@ -155,9 +241,7 @@ export default function Retrabalho() {
             ].map(({ value, label }) => (
               <button key={value} onClick={() => setFiltro(value)}
                 className={`px-3 py-1.5 transition-colors ${
-                  filtro === value
-                    ? 'bg-cobeb-navy text-white'
-                    : 'text-slate-500 hover:bg-[#EBF5FF]'
+                  filtro === value ? 'bg-cobeb-navy text-white' : 'text-slate-500 hover:bg-[#EBF5FF]'
                 }`}>
                 {label}
               </button>
@@ -182,19 +266,34 @@ export default function Retrabalho() {
             <div className="w-14 h-14 rounded-2xl bg-purple-600/10 border border-purple-600/20 flex items-center justify-center mx-auto mb-4">
               <RotateCcw size={22} className="text-purple-600" />
             </div>
-            <p className="text-cobeb-text font-semibold text-sm">Nenhum palete no período</p>
-            <p className="text-slate-500 text-xs mt-1">Paletes com anomalia na blitz de puxada aparecem aqui</p>
+            <p className="text-cobeb-text font-semibold text-sm">
+              {statusFiltro === 'concluidos' ? 'Nenhum retrabalho concluído no período' : 'Nenhum palete no período'}
+            </p>
+            <p className="text-slate-500 text-xs mt-1">
+              {statusFiltro === 'ativos' && 'Paletes com anomalia na blitz de puxada aparecem aqui'}
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
             {itens.map(item => {
               const enviado    = !!item.enviado_retrabalho
+              const iniciado   = !!item.inicio_retrabalho
+              const finalizado = !!item.fim_retrabalho
+              const concluido  = !!item.retrabalho_concluido
               const carregando = confirmando === item.id
-              const removendo  = excluindo === item.tarefa_id
+              const removendo  = excluindo   === item.tarefa_id
+              const emInicio   = iniciando   === item.id
+              const emFim      = finalizando === item.id
+
               return (
                 <div key={item.id} className={`bg-white rounded-2xl border overflow-hidden ${
-                  enviado ? 'border-green-500/30' : 'border-purple-500/20'
+                  concluido  ? 'border-green-500/30'  :
+                  finalizado ? 'border-purple-500/40' :
+                  iniciado   ? 'border-yellow-500/40' :
+                  enviado    ? 'border-blue-500/30'   :
+                  'border-purple-500/20'
                 }`}>
+
                   {/* Produto */}
                   <div className="px-4 pt-3 pb-2.5 border-b border-cobeb-border/50 flex items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -206,10 +305,10 @@ export default function Retrabalho() {
                         {item.embalagem_produto ? ` · ${item.embalagem_produto}` : ''}
                       </p>
                     </div>
-                    {podeDesfazer && !enviado && (
+                    {podeDesfazer && !enviado && !concluido && (
                       <button onClick={() => excluirBlitz(item)} disabled={removendo}
                         className="text-slate-300 hover:text-red-400 transition-colors p-1 shrink-0 disabled:opacity-40"
-                        title="Excluir blitz e voltar para conferência">
+                        title="Excluir blitz">
                         {removendo
                           ? <div className="w-3.5 h-3.5 border-2 border-red-400/40 border-t-red-400 rounded-full animate-spin" />
                           : <Trash2 size={14} />}
@@ -244,32 +343,15 @@ export default function Retrabalho() {
                     </div>
 
                     {/* Status de envio */}
-                    <div className="pt-1 border-t border-cobeb-border/50">
-                      {enviado ? (
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <span className="flex items-center gap-1.5 text-xs font-semibold text-green-600">
-                              <CheckCircle size={13} /> Enviado para área de retrabalho
-                            </span>
-                            {item.enviado_por_nome && (
-                              <p className="text-[10px] text-slate-400 mt-0.5">
-                                por {item.enviado_por_nome} · {formatTs(item.enviado_em)}
-                              </p>
-                            )}
-                          </div>
-                          {podeDesfazer && (
-                            <button onClick={() => desfazerEnvio(item)} disabled={carregando}
-                              className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-cobeb-navy underline transition-colors shrink-0 disabled:opacity-40">
-                              <Undo2 size={11} /> Desfazer
-                            </button>
-                          )}
-                        </div>
-                      ) : (
+                    <div className="pt-1 border-t border-cobeb-border/50 space-y-2">
+
+                      {/* 1. Envio empilheira */}
+                      {!enviado ? (
                         <div className="space-y-2">
                           <span className="flex items-center gap-1.5 text-[10px] font-semibold text-orange-500">
                             <Clock size={11} /> Pendente envio para área de retrabalho
                           </span>
-                          {podeConfirmar && (
+                          {podeConfirmarEnvio && (
                             <button onClick={() => confirmarEnvio(item)} disabled={carregando}
                               className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
                               {carregando
@@ -278,6 +360,87 @@ export default function Retrabalho() {
                             </button>
                           )}
                         </div>
+                      ) : (
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <span className="flex items-center gap-1.5 text-[10px] font-semibold text-green-600">
+                              <CheckCircle size={11} /> Enviado para área de retrabalho
+                            </span>
+                            {item.enviado_por_nome && (
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                por {item.enviado_por_nome} · {formatTs(item.enviado_em)}
+                              </p>
+                            )}
+                          </div>
+                          {podeDesfazer && !iniciado && (
+                            <button onClick={() => desfazerEnvio(item)} disabled={carregando}
+                              className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-cobeb-navy underline transition-colors shrink-0 disabled:opacity-40">
+                              <Undo2 size={11} /> Desfazer
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 2. Iniciar retrabalho */}
+                      {enviado && !iniciado && !concluido && (
+                        podeIniciar ? (
+                          <button onClick={() => iniciarRetrabalho(item)} disabled={emInicio}
+                            className="w-full bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                            {emInicio
+                              ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                              : <><Play size={13} /> Iniciar Retrabalho</>}
+                          </button>
+                        ) : (
+                          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-blue-500">
+                            <Clock size={11} /> Aguardando início do retrabalho
+                          </span>
+                        )
+                      )}
+
+                      {/* 3. Em andamento / Finalizar */}
+                      {iniciado && !finalizado && !concluido && (
+                        <div className="space-y-2">
+                          <div>
+                            <span className="flex items-center gap-1.5 text-[10px] font-semibold text-yellow-600">
+                              <RotateCcw size={11} className="animate-spin" /> Em andamento
+                            </span>
+                            {item.inicio_por_nome && (
+                              <p className="text-[10px] text-slate-400 mt-0.5">
+                                Iniciado por {item.inicio_por_nome} · {formatTs(item.inicio_retrabalho)}
+                              </p>
+                            )}
+                          </div>
+                          {podeIniciar && (
+                            <button onClick={() => finalizarRetrabalho(item)} disabled={emFim}
+                              className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-40 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                              {emFim
+                                ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                : <><StopCircle size={13} /> Finalizar Retrabalho</>}
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 4. Aguardando apontamento (fim salvo mas modal fechado sem salvar) */}
+                      {finalizado && !concluido && (
+                        <div className="space-y-2">
+                          <span className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-600">
+                            <AlertTriangle size={11} /> Aguardando apontamento final
+                          </span>
+                          {podeIniciar && (
+                            <button onClick={() => setApontamentoItem(item)}
+                              className="w-full bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5">
+                              <AlertTriangle size={13} /> Registrar Apontamento
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* 5. Concluído */}
+                      {concluido && (
+                        <span className="flex items-center gap-1.5 text-[10px] font-semibold text-green-600">
+                          <CheckCircle size={11} /> Retrabalho concluído
+                        </span>
                       )}
                     </div>
                   </div>
@@ -287,6 +450,242 @@ export default function Retrabalho() {
           </div>
         )}
       </main>
+
+      {/* Modal de apontamento final */}
+      {apontamentoItem && (
+        <ApontamentoModal
+          item={apontamentoItem}
+          motivos={motivos}
+          profileNome={profile?.nome ?? ''}
+          onClose={() => setApontamentoItem(null)}
+          onSave={salvarApontamento}
+        />
+      )}
+    </div>
+  )
+}
+
+// ── Modal de apontamento final ────────────────────────────────────────────────
+
+function ApontamentoModal({ item, motivos, profileNome, onClose, onSave }) {
+  const [semAnomalia,  setSemAnomalia]  = useState(true)
+  const [motivoId,     setMotivoId]     = useState('')
+  const [qtdeAvariada, setQtdeAvariada] = useState('')
+  const [fotos,        setFotos]        = useState([]) // { preview, path, uploading, erro }
+  const [salvando,     setSalvando]     = useState(false)
+  const inputRef = useRef()
+
+  const MAX_FOTOS = 5
+  const temFotoOk = fotos.some(f => f.path && !f.uploading)
+  const uploading = fotos.some(f => f.uploading)
+
+  const canSave = semAnomalia
+    ? true
+    : (motivoId && qtdeAvariada && Number(qtdeAvariada) > 0 && temFotoOk && !uploading)
+
+  async function handleFoto(file) {
+    if (!file || fotos.length >= MAX_FOTOS) return
+    const preview = URL.createObjectURL(file)
+    const idx = fotos.length
+    setFotos(prev => [...prev, { preview, path: null, uploading: true, erro: null }])
+
+    const ext  = (file.name.split('.').pop() || 'jpg').toLowerCase()
+    const path = `retrabalho/${item.id}/${Date.now()}_${idx}.${ext}`
+    const { error } = await supabase.storage.from('anomalias-fotos').upload(path, file, { upsert: true })
+
+    setFotos(prev => prev.map((f, i) => i === idx
+      ? error
+        ? { ...f, uploading: false, erro: 'Falha no envio' }
+        : { ...f, uploading: false, path }
+      : f
+    ))
+  }
+
+  function removerFoto(idx) {
+    setFotos(prev => prev.filter((_, i) => i !== idx))
+  }
+
+  async function handleSave() {
+    setSalvando(true)
+    const ok = await onSave(item, {
+      semAnomalia,
+      motivoId,
+      qtdeAvariada,
+      fotosUrls: fotos.map(f => f.path),
+    })
+    if (!ok) setSalvando(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+      <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+      <div className="relative bg-white rounded-t-3xl border-t border-cobeb-border px-5 pt-4 pb-8 max-h-[92vh] overflow-y-auto">
+        <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto mb-4" />
+
+        <div className="flex items-center justify-between mb-5">
+          <p className="text-cobeb-text font-semibold text-sm">Apontamento Final</p>
+          <button onClick={onClose} className="text-slate-500 hover:text-cobeb-text p-1 transition-colors">
+            <X size={18} />
+          </button>
+        </div>
+
+        {/* Info do produto */}
+        <div className="bg-[#EBF5FF] rounded-xl px-3 py-2.5 border border-cobeb-border mb-5">
+          <p className="text-cobeb-text text-xs font-medium">{item.descricao_produto ?? 'Produto'}</p>
+          <p className="text-slate-500 text-[10px] font-mono mt-0.5">{item.cod_produto}</p>
+          <p className="text-slate-500 text-[10px] mt-0.5">
+            {Number(item.qtde_paletes).toLocaleString('pt-BR')} plt
+            {item.data_validade && ` · Val: ${formatData(item.data_validade)}`}
+          </p>
+        </div>
+
+        <div className="space-y-5">
+
+          {/* Tipo */}
+          <div>
+            <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-2">
+              Resultado do retrabalho <span className="text-cobeb-yellow">*</span>
+            </label>
+            <div className="flex gap-2">
+              {[
+                { val: true,  label: 'Sem anomalias encontradas' },
+                { val: false, label: 'Com anomalia' },
+              ].map(({ val, label }) => (
+                <button key={String(val)} type="button"
+                  onClick={() => setSemAnomalia(val)}
+                  className={`flex-1 py-2.5 rounded-xl text-xs font-semibold border transition-colors ${
+                    semAnomalia === val
+                      ? val ? 'bg-green-600 text-white border-green-600' : 'bg-orange-500 text-white border-orange-500'
+                      : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/50'
+                  }`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Com anomalia */}
+          {!semAnomalia && (
+            <>
+              {/* Motivo */}
+              <div>
+                <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-2">
+                  Motivo <span className="text-cobeb-yellow">*</span>
+                </label>
+                {motivos.length === 0 ? (
+                  <p className="text-slate-400 text-xs bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-3">
+                    Nenhum motivo cadastrado em Metas.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    {motivos.map(m => (
+                      <button key={m.id} type="button"
+                        onClick={() => setMotivoId(m.id)}
+                        className={`px-3 py-2.5 rounded-xl border text-xs font-medium text-left transition-colors ${
+                          motivoId === m.id
+                            ? 'bg-orange-500/10 border-orange-500/50 text-orange-700'
+                            : 'bg-[#EBF5FF] border-cobeb-border text-slate-500 hover:border-orange-500/30'
+                        }`}>
+                        {m.descricao}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Quantidade avariada */}
+              <div>
+                <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-1.5">
+                  Quantidade avariada <span className="text-cobeb-yellow">*</span>
+                </label>
+                <p className="text-orange-500/80 text-[10px] font-semibold mb-2">
+                  ⚠ Informe em unidades individuais de itens
+                </p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" min="1" step="1" placeholder="0"
+                    value={qtdeAvariada}
+                    onChange={e => setQtdeAvariada(e.target.value)}
+                    className="w-28 bg-[#EBF5FF] border border-cobeb-border rounded-xl px-3 py-2.5 text-sm text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors text-right"
+                  />
+                  <span className="text-slate-500 text-sm">unidades</span>
+                </div>
+              </div>
+
+              {/* Fotos */}
+              <div>
+                <label className="text-slate-500 text-[11px] font-semibold uppercase tracking-widest block mb-2">
+                  Fotos das unidades avariadas <span className="text-cobeb-yellow">*</span>
+                  <span className="normal-case tracking-normal font-normal text-slate-400 ml-1">
+                    mín. 1 · máx. {MAX_FOTOS}
+                  </span>
+                </label>
+                <input
+                  type="file" accept="image/*" capture="environment"
+                  ref={inputRef} className="hidden"
+                  onChange={e => e.target.files[0] && handleFoto(e.target.files[0])}
+                />
+                <div className="flex flex-wrap gap-2">
+                  {fotos.map((f, idx) => (
+                    <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden border border-cobeb-border shrink-0">
+                      <img src={f.preview} alt="" className="w-full h-full object-cover" />
+                      {f.uploading && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                          <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        </div>
+                      )}
+                      {f.erro && (
+                        <div className="absolute inset-0 bg-red-500/60 flex items-center justify-center">
+                          <AlertCircle size={16} className="text-white" />
+                        </div>
+                      )}
+                      {!f.uploading && !f.erro && (
+                        <button onClick={() => removerFoto(idx)}
+                          className="absolute top-0.5 right-0.5 w-5 h-5 bg-black/60 rounded-full flex items-center justify-center">
+                          <X size={10} className="text-white" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {fotos.length < MAX_FOTOS && (
+                    <button onClick={() => inputRef.current?.click()}
+                      className="w-20 h-20 rounded-xl border-2 border-dashed border-cobeb-border hover:border-cobeb-blue/50 flex flex-col items-center justify-center gap-1 text-slate-400 hover:text-cobeb-navy transition-colors shrink-0">
+                      <Camera size={18} />
+                      <span className="text-[9px] font-semibold">Foto</span>
+                    </button>
+                  )}
+                </div>
+                <p className="text-slate-400 text-[10px] mt-1">
+                  {fotos.filter(f => f.path).length} de {MAX_FOTOS} fotos enviadas
+                </p>
+              </div>
+            </>
+          )}
+
+          {/* Sem anomalia - confirmação */}
+          {semAnomalia && (
+            <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3">
+              <p className="text-green-700 text-xs font-semibold flex items-center gap-1.5">
+                <CheckCircle size={13} /> Nenhuma anomalia encontrada no retrabalho
+              </p>
+              <p className="text-slate-500 text-[10px] mt-1">Nenhuma foto obrigatória.</p>
+            </div>
+          )}
+
+          <div className="flex gap-3 pt-1">
+            <button onClick={onClose}
+              className="flex-1 bg-[#EBF5FF] border border-cobeb-border text-slate-400 text-sm font-semibold py-3 rounded-2xl">
+              Cancelar
+            </button>
+            <button onClick={handleSave} disabled={!canSave || salvando}
+              className="flex-1 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold py-3 rounded-2xl transition-colors flex items-center justify-center gap-2">
+              {salvando
+                ? <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                : 'Finalizar Retrabalho'}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
