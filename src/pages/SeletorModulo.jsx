@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, BarChart2, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet, Forklift } from 'lucide-react'
+import { LayoutDashboard, BarChart2, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet, Forklift, RotateCcw } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -114,6 +114,17 @@ export const MODULOS = [
     borda:  'border-amber-500/30',
     texto:  'text-amber-600',
     fundo:  'bg-amber-500/5 hover:bg-amber-500/10',
+  },
+  {
+    key:    'retrabalho',
+    rota:   '/retrabalho',
+    label:  'Retrabalho',
+    desc:   'Paletes encaminhados para retrabalho na blitz de puxada',
+    Icon:   RotateCcw,
+    cor:    'bg-purple-600',
+    borda:  'border-purple-600/30',
+    texto:  'text-purple-700',
+    fundo:  'bg-purple-600/5 hover:bg-purple-600/10',
   },
 ]
 
