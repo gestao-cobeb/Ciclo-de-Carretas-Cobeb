@@ -430,6 +430,139 @@ function MetaVolumePuxada() {
   )
 }
 
+function MetaVolumeUnidades() {
+  const now  = new Date()
+  const [year,     setYear]     = useState(now.getFullYear())
+  const [month,    setMonth]    = useState(now.getMonth())
+  const [unidades, setUnidades] = useState([])
+  const [pcts,     setPcts]     = useState({})
+  const [allConfig, setAllConfig] = useState({})
+  const [loading,  setLoading]  = useState(true)
+  const [salvando, setSalvando] = useState(false)
+  const [salvo,    setSalvo]    = useState(false)
+  const [erro,     setErro]     = useState('')
+
+  const mesRef = `${year}-${String(month + 1).padStart(2, '0')}`
+
+  function loadMes(unis, cfg, ref) {
+    const mesCfg = cfg[ref] ?? {}
+    const p = {}
+    unis.forEach(u => { p[u.id] = mesCfg[u.id] != null ? String(mesCfg[u.id]) : '' })
+    setPcts(p)
+  }
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
+      supabase.from('dashboard_configs').select('valor').eq('chave', 'meta_volume_unidades_pct').maybeSingle(),
+    ]).then(([{ data: unis }, { data: cfg }]) => {
+      const config = cfg?.valor ?? {}
+      setAllConfig(config)
+      setUnidades(unis ?? [])
+      loadMes(unis ?? [], config, `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
+      setLoading(false)
+    })
+  }, [])
+
+  function navMes(dir) {
+    let m = month + dir, y = year
+    if (m < 0)  { m = 11; y-- }
+    if (m > 11) { m = 0;  y++ }
+    setYear(y); setMonth(m)
+    loadMes(unidades, allConfig, `${y}-${String(m + 1).padStart(2, '0')}`)
+  }
+
+  const somaPct = unidades.reduce((s, u) => s + (parseFloat(pcts[u.id]) || 0), 0)
+  const pctOk   = somaPct === 0 || Math.abs(somaPct - 100) < 0.01
+
+  async function salvar() {
+    setErro('')
+    if (!pctOk) { setErro('A soma dos percentuais deve ser 0 (sem configuração) ou 100%.'); return }
+    setSalvando(true)
+    const cleanPcts = {}
+    unidades.forEach(u => { cleanPcts[u.id] = parseFloat(pcts[u.id]) || 0 })
+    const updated = { ...allConfig, [mesRef]: cleanPcts }
+    const { error } = await supabase.from('dashboard_configs')
+      .upsert({ chave: 'meta_volume_unidades_pct', valor: updated, atualizado_em: new Date().toISOString() })
+    setSalvando(false)
+    if (error) { setErro(error.message); return }
+    setAllConfig(updated)
+    setSalvo(true)
+    setTimeout(() => setSalvo(false), 2000)
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-5">
+      <div className="mb-4">
+        <p className="text-cobeb-text font-semibold text-sm">% Meta Volume por Unidade</p>
+        <p className="text-slate-500 text-xs mt-0.5">Fatia da meta mensal atribuída a cada unidade (CD), mês a mês</p>
+      </div>
+
+      {/* Seletor de mês */}
+      <div className="flex items-center gap-2 mb-4">
+        <button onClick={() => navMes(-1)} className="p-1.5 rounded-xl border border-cobeb-border text-slate-500 hover:text-cobeb-navy transition-colors">
+          <ChevronLeft size={15} />
+        </button>
+        <span className="text-cobeb-text font-semibold text-sm flex-1 text-center">
+          {MESES_VOL[month]} {year}
+        </span>
+        <button onClick={() => navMes(1)} className="p-1.5 rounded-xl border border-cobeb-border text-slate-500 hover:text-cobeb-navy transition-colors">
+          <ChevronRight size={15} />
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-6">
+          <div className="w-5 h-5 border-2 border-cobeb-navy border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : unidades.length === 0 ? (
+        <p className="text-slate-400 text-sm text-center py-4">Nenhuma unidade CD ativa cadastrada.</p>
+      ) : (
+        <>
+          <div className="space-y-2 mb-4">
+            {unidades.map(u => (
+              <div key={u.id} className="flex items-center gap-3">
+                <span className="text-sm text-cobeb-text flex-1 truncate">{u.nome}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    value={pcts[u.id] ?? ''}
+                    onChange={e => setPcts(m => ({ ...m, [u.id]: e.target.value }))}
+                    className="w-20 text-sm border border-cobeb-border rounded-xl px-3 py-1.5 text-right focus:outline-none focus:border-cobeb-blue [appearance:textfield]"
+                  />
+                  <span className="text-xs text-slate-400 w-4">%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <p className={`text-xs text-right mb-4 ${pctOk ? 'text-emerald-600' : 'text-red-500'}`}>
+            Soma: {somaPct.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%{' '}
+            {pctOk ? '✓' : '(deve ser 100% ou 0%)'}
+          </p>
+
+          {erro && (
+            <p className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm mb-3">{erro}</p>
+          )}
+
+          <button
+            onClick={salvar}
+            disabled={salvando || !pctOk}
+            className={`w-full py-2.5 rounded-xl text-sm font-semibold transition-colors disabled:opacity-60 ${
+              salvo ? 'bg-green-500 text-white' : 'bg-cobeb-navy hover:bg-cobeb-blue text-white'
+            }`}
+          >
+            {salvando ? 'Salvando...' : salvo ? 'Salvo ✓' : 'Salvar'}
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function Metas() {
   return (
     <div className="px-5 py-4 max-w-2xl space-y-5">
@@ -444,6 +577,7 @@ export default function Metas() {
         <p className="text-cobeb-text font-semibold text-sm">Volume de Puxada</p>
       </div>
       <MetaVolumePuxada />
+      <MetaVolumeUnidades />
 
       <div className="flex items-center gap-2 mt-6 mb-1">
         <RotateCcw size={15} className="text-purple-600" />

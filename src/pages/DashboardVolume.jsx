@@ -126,12 +126,15 @@ function DataRow({ label, meta, real, D1, diasUteis, diasPassados, showD0, padLe
 
 // ── Tabela principal ──────────────────────────────────────────────────────────
 
-function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
+function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0, unitFactor = 1 }) {
   const [col, setCol] = useState({})
   const toggle = key => setCol(c => ({ ...c, [key]: !c[key] }))
   const isc    = key => !!col[key]
 
   const cols = showD0 ? 6 : 5
+
+  // mf: lê uma meta e aplica o fator da unidade selecionada
+  const mf = k => (metas[k] || 0) * unitFactor
 
   // Extrai { real, D1 } para um segmento folha
   function s(name) {
@@ -144,30 +147,30 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
 
   const owC     = s('OW Core'); const owM = s('OW Match')
   const owHE    = s('OW High End'); const owZ = s('OW Zero Álcool')
-  const ow      = add(owC, owM, owHE, owZ); const owMeta  = metas['Cerveja OW']   || 0
-  const owCMeta  = metas['OW Core']             || 0
-  const owMMeta  = metas['OW Match']            || 0
-  const owHEMeta = metas['OW High End']         || 0
-  const owZMeta  = metas['OW Zero Álcool']      || 0
-  const gmMeta   = metas['Garrafa Meia']        || 0
-  const gmCMeta  = metas['Garrafa Meia Core']   || 0
-  const gmHMeta  = metas['Garrafa Meia HE']     || 0
-  const giMeta   = metas['Garrafa Inteira']     || 0
-  const giCMeta  = metas['Garrafa Inteira Core']|| 0
-  const giHMeta  = metas['Garrafa Inteira HE']  || 0
-  const g1Meta   = metas['Garrafa 1L']          || 0
-  const g1CMeta  = metas['Garrafa 1L Core']     || 0
-  const g1HMeta  = metas['Garrafa 1L HE']       || 0
+  const ow      = add(owC, owM, owHE, owZ); const owMeta   = mf('Cerveja OW')
+  const owCMeta  = mf('OW Core')
+  const owMMeta  = mf('OW Match')
+  const owHEMeta = mf('OW High End')
+  const owZMeta  = mf('OW Zero Álcool')
+  const gmMeta   = mf('Garrafa Meia')
+  const gmCMeta  = mf('Garrafa Meia Core')
+  const gmHMeta  = mf('Garrafa Meia HE')
+  const giMeta   = mf('Garrafa Inteira')
+  const giCMeta  = mf('Garrafa Inteira Core')
+  const giHMeta  = mf('Garrafa Inteira HE')
+  const g1Meta   = mf('Garrafa 1L')
+  const g1CMeta  = mf('Garrafa 1L Core')
+  const g1HMeta  = mf('Garrafa 1L HE')
   const gmC     = s('Garrafa Meia Core');    const gmH = s('Garrafa Meia HE')
   const giC     = s('Garrafa Inteira Core'); const giH = s('Garrafa Inteira HE')
   const g1C     = s('Garrafa 1L Core');      const g1H = s('Garrafa 1L HE')
   const gm      = add(gmC, gmH)
   const gi      = add(giC, giH)
   const g1      = add(g1C, g1H)
-  const rgb     = add(gm, gi, g1);  const rgbMeta = metas['RGB'] || 0
-  const tt      = add(ow, rgb);     const ttMeta  = owMeta + rgbMeta
-  const nab     = s('NAB');         const nabMeta  = metas['NAB']      || 0
-  const nabZ    = s('NAB Zero');    const nabZMeta = metas['NAB Zero'] || 0
+  const rgb     = add(gm, gi, g1);  const rgbMeta  = mf('RGB')
+  const tt      = add(ow, rgb);     const ttMeta   = owMeta + rgbMeta
+  const nab     = s('NAB');         const nabMeta  = mf('NAB')
+  const nabZ    = s('NAB Zero');    const nabZMeta = mf('NAB Zero')
   const nabTT   = add(nab, nabZ);   const nabTTMeta = nabMeta + nabZMeta
   const total   = add(tt, nabTT);   const totalMeta = ttMeta + nabTTMeta
 
@@ -445,13 +448,18 @@ export default function DashboardVolume() {
   const [year,  setYear]  = useState(() => new Date().getFullYear())
   const [month, setMonth] = useState(() => new Date().getMonth())
 
-  const [loading,     setLoading]     = useState(true)
-  const [metaConfig,  setMetaConfig]  = useState(null)
-  const [hlData,      setHlData]      = useState({})
-  const [hlPerPallet, setHlPerPallet] = useState(1.44)
+  const [loading,      setLoading]      = useState(true)
+  const [metaConfig,   setMetaConfig]   = useState(null)
+  const [hlData,       setHlData]       = useState({})
+  const [hlPerPallet,  setHlPerPallet]  = useState(1.44)
+  const [filtroUnidade, setFiltroUnidade] = useState(null)
+  const [unidadesList,  setUnidadesList]  = useState([])
+  const [unitPctConfig, setUnitPctConfig] = useState({})
 
   // Dados estáticos de classificação — carregados uma vez
-  const staticRef      = useRef({ zeroCervSet: new Set(), zeroNabSet: new Set(), highEndSet: new Set(), cobebSet: new Set() })
+  const staticRef   = useRef({ zeroCervSet: new Set(), zeroNabSet: new Set(), highEndSet: new Set(), cobebSet: new Set() })
+  const pedsRealRef = useRef([])
+  const catMapRef   = useRef({})
   const [staticLoaded, setStaticLoaded] = useState(false)
 
   useEffect(() => {
@@ -459,7 +467,8 @@ export default function DashboardVolume() {
       supabase.from('depara_zero').select('cod_promax, tipo'),
       supabase.from('demanda').select('cod_promax, segmento'),
       supabase.from('unidades').select('codigo_ambev, tipo').not('codigo_ambev', 'is', null),
-    ]).then(([{ data: dpz }, { data: dem }, { data: unis }]) => {
+      supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
+    ]).then(([{ data: dpz }, { data: dem }, { data: unis }, { data: revs }]) => {
       const czs = new Set(), nzs = new Set(), hes = new Set(), cob = new Set()
       ;(dpz ?? []).forEach(d => {
         if (d.tipo === 'CERVEJA ZERO') czs.add(d.cod_promax)
@@ -468,11 +477,11 @@ export default function DashboardVolume() {
       ;(dem ?? []).forEach(d => {
         if (d.segmento?.toUpperCase().includes('HIGH END')) hes.add(d.cod_promax)
       })
-      // Unidades COBEB (revendas/CDs) — puxadas com esses códigos são transferências internas
       ;(unis ?? []).forEach(u => {
         if (u.tipo !== 'fabrica' && u.codigo_ambev) cob.add(u.codigo_ambev)
       })
       staticRef.current = { zeroCervSet: czs, zeroNabSet: nzs, highEndSet: hes, cobebSet: cob }
+      setUnidadesList(revs ?? [])
       setStaticLoaded(true)
     })
   }, [])
@@ -499,15 +508,12 @@ export default function DashboardVolume() {
       yesterday.setDate(yesterday.getDate() - 1)
       const yesterdayStr = yesterday.toISOString().slice(0, 10)
 
-      const [{ data: cfgData }, { data: pedsData }] = await Promise.all([
-        supabase
-          .from('dashboard_configs')
-          .select('valor')
-          .eq('chave', 'meta_volume_puxada')
-          .maybeSingle(),
+      const [{ data: cfgData }, { data: unitPctData }, { data: pedsData }] = await Promise.all([
+        supabase.from('dashboard_configs').select('valor').eq('chave', 'meta_volume_puxada').maybeSingle(),
+        supabase.from('dashboard_configs').select('valor').eq('chave', 'meta_volume_unidades_pct').maybeSingle(),
         supabase
           .from('pedidos')
-          .select('cod_produto, qtde_pallets, data_puxada, status, viagem_id, codigo_fabrica')
+          .select('cod_produto, qtde_pallets, data_puxada, status, viagem_id, codigo_fabrica, unidade_id')
           .gte('data_puxada', monthStart)
           .lte('data_puxada', monthEnd)
           .not('qtde_pallets', 'is', null)
@@ -517,9 +523,9 @@ export default function DashboardVolume() {
       ])
 
       setMetaConfig(cfgData?.valor?.[mesRef] ?? null)
+      setUnitPctConfig(unitPctData?.valor ?? {})
 
       const { zeroCervSet, zeroNabSet, highEndSet, cobebSet } = staticRef.current
-      // Exclui puxadas COBEB→COBEB (transferências internas entre CDs)
       const pedsAll = (pedsData ?? []).filter(p => !cobebSet.has(p.codigo_fabrica))
       const skus    = [...new Set(pedsAll.map(p => p.cod_produto).filter(Boolean))]
 
@@ -532,7 +538,6 @@ export default function DashboardVolume() {
         ;(catData ?? []).forEach(c => { catMap[c.codigo] = c })
       }
 
-      // Ratio HL/pallet a partir de pedidos não-cancelados do mês
       let totalPlt = 0, totalHLR = 0
       pedsAll.filter(p => p.status !== 'cancelado').forEach(p => {
         const cat = catMap[p.cod_produto]
@@ -542,40 +547,45 @@ export default function DashboardVolume() {
       })
       if (totalPlt > 0 && totalHLR > 0) setHlPerPallet(totalHLR / totalPlt)
 
-      // Real = pedidos vinculados a viagem OU marcados como realizado
-      const pedsReal = pedsAll.filter(p => p.viagem_id != null || p.status === 'realizado')
-
-      const result = {}
-      SEGMENTOS_FOLHA.forEach(seg => { result[seg] = { total: 0, D1: 0, porDia: {} } })
-
-      pedsReal.forEach(p => {
-        const cat = catMap[p.cod_produto]
-        if (!cat) return
-        const seg = classifySegmento(
-          p.cod_produto,
-          cat.tipo_marca ?? '',
-          cat.embalagem  ?? '',
-          zeroCervSet, zeroNabSet, highEndSet
-        )
-        if (!SEGMENTOS_FOLHA.includes(seg)) return
-        const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
-        if (hl <= 0) return
-        const ds = p.data_puxada?.slice(0, 10)
-        if (!ds) return
-
-        // Acumula apenas até D-1 (inclusive)
-        if (ds <= yesterdayStr) {
-          result[seg].total += hl
-          result[seg].porDia[ds] = (result[seg].porDia[ds] || 0) + hl
-          if (ds === yesterdayStr) result[seg].D1 += hl
-        }
-      })
-
-      setHlData(result)
+      pedsRealRef.current = pedsAll.filter(p => p.viagem_id != null || p.status === 'realizado')
+      catMapRef.current   = catMap
+      computeHl(filtroUnidade)
       setLoading(false)
     }
     load()
   }, [mesRef, staticLoaded])
+
+  // Recomputa HL quando o filtro de unidade muda (sem re-fetch)
+  useEffect(() => {
+    if (!pedsRealRef.current.length) return
+    computeHl(filtroUnidade)
+  }, [filtroUnidade])
+
+  function computeHl(unitId) {
+    const { zeroCervSet, zeroNabSet, highEndSet } = staticRef.current
+    const yesterday    = new Date(); yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = yesterday.toISOString().slice(0, 10)
+    const peds = unitId
+      ? pedsRealRef.current.filter(p => p.unidade_id === unitId)
+      : pedsRealRef.current
+    const cMap = catMapRef.current
+    const result = {}
+    SEGMENTOS_FOLHA.forEach(seg => { result[seg] = { total: 0, D1: 0, porDia: {} } })
+    peds.forEach(p => {
+      const cat = cMap[p.cod_produto]
+      if (!cat) return
+      const seg = classifySegmento(p.cod_produto, cat.tipo_marca ?? '', cat.embalagem ?? '', zeroCervSet, zeroNabSet, highEndSet)
+      if (!SEGMENTOS_FOLHA.includes(seg)) return
+      const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
+      if (hl <= 0) return
+      const ds = p.data_puxada?.slice(0, 10)
+      if (!ds || ds > yesterdayStr) return
+      result[seg].total += hl
+      result[seg].porDia[ds] = (result[seg].porDia[ds] || 0) + hl
+      if (ds === yesterdayStr) result[seg].D1 += hl
+    })
+    setHlData(result)
+  }
 
   const today          = new Date()
   const yesterday      = new Date(today); yesterday.setDate(today.getDate() - 1)
@@ -595,7 +605,13 @@ export default function DashboardVolume() {
 
   const metas        = metaConfig?.metas   ?? {}
   const semanas      = metaConfig?.semanas ?? { s1: 30, s2: 30, s3: 20, s4: 20 }
-  const metaTotalHL  = META_KEYS.reduce((s, k) => s + (metas[k] || 0), 0)
+
+  // Factor da unidade selecionada: null=todas(1), pct configurado=pct/100, sem config=0
+  const unitPctRaw  = filtroUnidade != null ? (unitPctConfig?.[mesRef]?.[filtroUnidade] ?? null) : null
+  const unitFactor  = filtroUnidade == null ? 1 : (unitPctRaw != null ? unitPctRaw / 100 : 0)
+  const unitSemPct  = filtroUnidade != null && unitPctRaw == null
+
+  const metaTotalHL  = META_KEYS.reduce((s, k) => s + (metas[k] || 0), 0) * unitFactor
   const realTotalHL  = SEGMENTOS_FOLHA.reduce((s, seg) => s + (hlData[seg]?.total || 0), 0)
   const saldoTotalHL = Math.max(metaTotalHL - realTotalHL, 0)
 
@@ -608,14 +624,14 @@ export default function DashboardVolume() {
     <DashboardLayout>
       <div className="px-4 pt-5 pb-8 space-y-5">
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={() => navMes(-1)}
             className="p-1.5 rounded-xl bg-white border border-cobeb-border text-slate-500 hover:text-cobeb-navy hover:border-cobeb-blue/40 transition-colors"
           >
             <ChevronLeft size={16} />
           </button>
-          <span className="text-cobeb-text font-semibold text-sm flex-1 text-center">
+          <span className="text-cobeb-text font-semibold text-sm flex-1 text-center min-w-[120px]">
             {MESES[month]} {year}
           </span>
           <button
@@ -624,6 +640,18 @@ export default function DashboardVolume() {
           >
             <ChevronRight size={16} />
           </button>
+          {unidadesList.length > 0 && (
+            <select
+              value={filtroUnidade ?? ''}
+              onChange={e => setFiltroUnidade(e.target.value || null)}
+              className="text-xs border border-cobeb-border rounded-xl px-3 py-1.5 bg-white text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors"
+            >
+              <option value="">Todas as unidades</option>
+              {unidadesList.map(u => (
+                <option key={u.id} value={u.id}>{u.nome}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {loading ? (
@@ -638,6 +666,12 @@ export default function DashboardVolume() {
                 Meta não configurada para {MESES[month]} {year}. Acesse Cadastros → Metas para cadastrar.
               </div>
             )}
+            {unitSemPct && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-center gap-2 text-amber-700 text-sm">
+                <AlertTriangle size={14} className="shrink-0" />
+                % desta unidade não configurado para {MESES[month]} {year}. Acesse Cadastros → Metas → % Volume por Unidade.
+              </div>
+            )}
 
             <TabelaVolume
               metas={metas}
@@ -645,6 +679,7 @@ export default function DashboardVolume() {
               diasUteis={diasUteis}
               diasPassados={diasPassados}
               showD0={showD0}
+              unitFactor={unitFactor}
             />
 
             <CardSemanas
