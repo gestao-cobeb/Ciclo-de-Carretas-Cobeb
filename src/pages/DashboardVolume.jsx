@@ -5,7 +5,7 @@ import { supabase } from '../lib/supabase'
 
 // ── Segmentos folha (onde o HL cai depois da classificação) ───────────────────
 const SEGMENTOS_FOLHA = [
-  'Cerveja OW',
+  'OW Core', 'OW Match', 'OW High End', 'OW Zero Álcool',
   'Garrafa Meia Core', 'Garrafa Meia HE',
   'Garrafa Inteira Core', 'Garrafa Inteira HE',
   'Garrafa 1L Core', 'Garrafa 1L HE',
@@ -55,18 +55,19 @@ function fmtPct(v) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + '%'
 }
 
-// Hierarquia: zeroCerv → OW · zeroNAB → NABZero · RGB por embalagem (High End dentro)
-// Match e High End OW → Cerveja OW (agregado)
+// Hierarquia: zeroNAB → NABZero · zeroCerv → OW Zero · RGB por embalagem · OW restante
 function classifySegmento(cod, tm, emb, zeroCervSet, zeroNabSet, highEndSet) {
-  if (zeroCervSet.has(cod)) return 'Cerveja OW'
   if (zeroNabSet.has(cod))  return 'NAB Zero'
   const isCerv = tm === '001 - CERVEJA' || tm === '028 - BEBIDAS QUENTES'
   if (!isCerv) return 'NAB'
+  if (zeroCervSet.has(cod)) return 'OW Zero Álcool'
   const isHE = highEndSet.has(cod)
   if (emb.startsWith('017')) return isHE ? 'Garrafa Meia HE'    : 'Garrafa Meia Core'
   if (emb.startsWith('018')) return isHE ? 'Garrafa Inteira HE' : 'Garrafa Inteira Core'
   if (emb.startsWith('085')) return isHE ? 'Garrafa 1L HE'      : 'Garrafa 1L Core'
-  return 'Cerveja OW'
+  if (tm === '028 - BEBIDAS QUENTES') return 'OW Match'
+  if (isHE) return 'OW High End'
+  return 'OW Core'
 }
 
 // ── Helpers de UI ─────────────────────────────────────────────────────────────
@@ -160,7 +161,9 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
     return items.reduce((acc, x) => ({ real: acc.real + x.real, D1: acc.D1 + x.D1 }), { real: 0, D1: 0 })
   }
 
-  const ow      = s('Cerveja OW');  const owMeta  = metas['Cerveja OW'] || 0
+  const owC     = s('OW Core'); const owM = s('OW Match')
+  const owHE    = s('OW High End'); const owZ = s('OW Zero Álcool')
+  const ow      = add(owC, owM, owHE, owZ); const owMeta = metas['Cerveja OW'] || 0
   const gmC     = s('Garrafa Meia Core');    const gmH = s('Garrafa Meia HE')
   const giC     = s('Garrafa Inteira Core'); const giH = s('Garrafa Inteira HE')
   const g1C     = s('Garrafa 1L Core');      const g1H = s('Garrafa 1L HE')
@@ -206,7 +209,16 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
               onToggle={() => toggle('tt')} isCollapsed={isc('tt')} />
 
             {!isc('tt') && <>
-              <DataRow {...dp} label="Cerveja OW" meta={owMeta} {...ow} padLeft="pl-6" />
+              <GrupoHeader label="Cerveja OW" cols={cols} depth={1}
+                onToggle={() => toggle('ow')} isCollapsed={isc('ow')} />
+              {!isc('ow') && <>
+                <DataRow {...dp} label="Core"        meta={0} {...owC}  padLeft="pl-9" />
+                <DataRow {...dp} label="Match"       meta={0} {...owM}  padLeft="pl-9" />
+                <DataRow {...dp} label="High End"    meta={0} {...owHE} padLeft="pl-9" />
+                <DataRow {...dp} label="Zero Álcool" meta={0} {...owZ}  padLeft="pl-9" />
+              </>}
+              <DataRow {...dp} label="↳ Total Cerveja OW" meta={owMeta} {...ow}
+                padLeft="pl-6" bold rowClass="bg-cobeb-sky/40" />
 
               <GrupoHeader label="RGB" cols={cols} depth={1}
                 onToggle={() => toggle('rgb')} isCollapsed={isc('rgb')} />
