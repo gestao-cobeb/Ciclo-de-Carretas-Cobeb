@@ -4,8 +4,8 @@ import DashboardLayout from '../components/DashboardLayout'
 import { supabase } from '../lib/supabase'
 
 const GRUPOS = [
-  { label: 'Cerveja', segmentos: ['Cerveja', 'RGB Cerveja', 'High End', 'Match', 'Garrafa Meia', 'Zero Álcool'] },
-  { label: 'NAB',     segmentos: ['NAB', 'NAB Zero'] },
+  { label: 'Cerveja TT', segmentos: ['Cerveja OW', 'RGB Cerveja', 'High End', 'Match', 'Garrafa Meia', 'Zero Álcool'] },
+  { label: 'NAB',        segmentos: ['NAB', 'NAB Zero'] },
 ]
 
 const SEGMENTOS = GRUPOS.flatMap(g => g.segmentos)
