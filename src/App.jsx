@@ -5,6 +5,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import DashboardComercial from './pages/DashboardComercial'
+import DashboardVolume from './pages/DashboardVolume'
 import Cadastros from './pages/Cadastros'
 import Pedidos from './pages/Pedidos'
 import Viagem from './pages/Viagem'
@@ -89,6 +90,9 @@ function AppRoutes() {
       />
       <Route path="/dashboard-comercial"
         element={<ProtectedRoute allowedRoles={['admin']}><DashboardComercial /></ProtectedRoute>}
+      />
+      <Route path="/dashboard-volume"
+        element={<ProtectedRoute allowedRoles={['admin']}><DashboardVolume /></ProtectedRoute>}
       />
       <Route path="/pedidos"
         element={<ProtectedRoute allowedRoles={['admin']}><Pedidos /></ProtectedRoute>}

@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import {
   LogOut, LayoutGrid,
   ChevronLeft, ChevronRight, PanelLeftClose, PanelLeftOpen,
-  Warehouse, Truck, TrendingUp,
+  Warehouse, Truck, TrendingUp, BarChart3,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 
@@ -15,14 +15,16 @@ export default function DashboardLayout({ children }) {
   const [hidden,    setHidden]    = useState(false)
 
   const dashboardItems = [
-    { path: '/dashboard',            icon: Warehouse,   label: 'Armazém'   },
-    { path: '/dashboard-puxada',     icon: Truck,       label: 'Puxada'    },
-    { path: '/dashboard-comercial',  icon: TrendingUp,  label: 'Comercial' },
+    { path: '/dashboard',            icon: Warehouse,  label: 'Armazém'   },
+    { path: '/dashboard-puxada',     icon: Truck,      label: 'Puxada'    },
+    { path: '/dashboard-comercial',  icon: TrendingUp, label: 'Comercial' },
+    { path: '/dashboard-volume',     icon: BarChart3,  label: 'Volume'    },
   ]
 
   const pageTitle =
     location.pathname === '/dashboard-puxada'    ? 'Dashboard Puxada'    :
     location.pathname === '/dashboard-comercial' ? 'Dashboard Comercial' :
+    location.pathname === '/dashboard-volume'    ? 'Dashboard Volume'    :
     'Dashboard Armazém'
 
   const handleLogout = async () => {
