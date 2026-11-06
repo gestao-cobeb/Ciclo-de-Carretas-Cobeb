@@ -73,7 +73,7 @@ function classifySegmento(cod, tm, emb, zeroCervSet, zeroNabSet, highEndSet) {
 // ── Helpers de UI ─────────────────────────────────────────────────────────────
 
 
-function DataRow({ label, meta, real, D1, diasUteis, diasPassados, showD0, padLeft = 'pl-6', bold = false, rowClass = '', onToggle, isCollapsed }) {
+function DataRow({ label, meta, real, D1, D0 = 0, diasUteis, diasPassados, showD0, padLeft = 'pl-6', bold = false, rowClass = '', onToggle, isCollapsed }) {
   const md       = diasUteis > 0 && meta > 0 ? meta / diasUteis : 0
   const diff     = D1 - md
   const pct      = meta > 0 ? real / meta * 100 : null
@@ -101,6 +101,11 @@ function DataRow({ label, meta, real, D1, diasUteis, diasPassados, showD0, padLe
       <td className={`px-3 py-2.5 text-right text-xs text-cobeb-navy ${bold ? 'font-bold' : 'font-semibold'}`}>
         {fmtHL(real)}
       </td>
+      {showD0 && (
+        <td className={`px-3 py-2.5 text-right text-xs ${bold ? 'font-bold' : 'font-semibold'} text-cobeb-navy`}>
+          {D0 > 0 ? fmtHL(D0) : <span className="text-slate-300">—</span>}
+        </td>
+      )}
       <td className={`px-3 py-2.5 text-right text-xs ${bold ? 'font-bold' : 'font-semibold'} ${pctColor}`}>
         {pct == null ? <span className="text-slate-300">—</span> : fmtPct(pct)}
       </td>
@@ -131,18 +136,18 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0, unitFact
   const toggle = key => setCol(c => ({ ...c, [key]: !c[key] }))
   const isc    = key => !!col[key]
 
-  const cols = showD0 ? 6 : 5
+  const cols = showD0 ? 7 : 5
 
   // mf: lê uma meta e aplica o fator da unidade selecionada
   const mf = k => (metas[k] || 0) * unitFactor
 
-  // Extrai { real, D1 } para um segmento folha
+  // Extrai { real, D1, D0 } para um segmento folha
   function s(name) {
-    return { real: hlData[name]?.total || 0, D1: hlData[name]?.D1 || 0 }
+    return { real: hlData[name]?.total || 0, D1: hlData[name]?.D1 || 0, D0: hlData[name]?.D0 || 0 }
   }
-  // Soma dois objetos { real, D1 }
+  // Soma objetos { real, D1, D0 }
   function add(...items) {
-    return items.reduce((acc, x) => ({ real: acc.real + x.real, D1: acc.D1 + x.D1 }), { real: 0, D1: 0 })
+    return items.reduce((acc, x) => ({ real: acc.real + x.real, D1: acc.D1 + x.D1, D0: acc.D0 + x.D0 }), { real: 0, D1: 0, D0: 0 })
   }
 
   const owC     = s('OW Core'); const owM = s('OW Match')
@@ -194,8 +199,9 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0, unitFact
               <th className="px-4 py-2 text-left text-cobeb-navy font-semibold whitespace-nowrap">Segmento</th>
               <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Meta (HL)</th>
               <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Real (HL)</th>
+              {showD0 && <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">D0 (HL)</th>}
               <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">% Ating.</th>
-              {showD0 && <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Saldo D0</th>}
+              {showD0 && <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Dispersão Dia D-1</th>}
               <th className="px-3 py-2 text-left text-cobeb-navy font-semibold whitespace-nowrap">Tendência</th>
             </tr>
           </thead>
@@ -269,6 +275,11 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0, unitFact
                 {totalMeta > 0 ? fmtHL(totalMeta) : '—'}
               </td>
               <td className="px-3 py-2.5 text-right font-black text-cobeb-navy text-xs">{fmtHL(total.real)}</td>
+              {showD0 && (
+                <td className="px-3 py-2.5 text-right font-black text-cobeb-navy text-xs">
+                  {total.D0 > 0 ? fmtHL(total.D0) : <span className="text-slate-300">—</span>}
+                </td>
+              )}
               <td className="px-3 py-2.5 text-right font-black text-xs">
                 {totalPct != null ? (
                   <span className={totalPct >= 100 ? 'text-emerald-600' : totalPct >= 80 ? 'text-amber-600' : 'text-red-500'}>
@@ -563,14 +574,16 @@ export default function DashboardVolume() {
 
   function computeHl(unitId) {
     const { zeroCervSet, zeroNabSet, highEndSet } = staticRef.current
-    const yesterday    = new Date(); yesterday.setDate(yesterday.getDate() - 1)
+    const today        = new Date()
+    const todayStr     = today.toISOString().slice(0, 10)
+    const yesterday    = new Date(today); yesterday.setDate(today.getDate() - 1)
     const yesterdayStr = yesterday.toISOString().slice(0, 10)
     const peds = unitId
       ? pedsRealRef.current.filter(p => p.unidade_id === unitId)
       : pedsRealRef.current
     const cMap = catMapRef.current
     const result = {}
-    SEGMENTOS_FOLHA.forEach(seg => { result[seg] = { total: 0, D1: 0, porDia: {} } })
+    SEGMENTOS_FOLHA.forEach(seg => { result[seg] = { total: 0, D1: 0, D0: 0, porDia: {} } })
     peds.forEach(p => {
       const cat = cMap[p.cod_produto]
       if (!cat) return
@@ -579,10 +592,17 @@ export default function DashboardVolume() {
       const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
       if (hl <= 0) return
       const ds = p.data_puxada?.slice(0, 10)
-      if (!ds || ds > yesterdayStr) return
-      result[seg].total += hl
-      result[seg].porDia[ds] = (result[seg].porDia[ds] || 0) + hl
-      if (ds === yesterdayStr) result[seg].D1 += hl
+      if (!ds) return
+      // Acumulado até D-1
+      if (ds <= yesterdayStr) {
+        result[seg].total += hl
+        result[seg].porDia[ds] = (result[seg].porDia[ds] || 0) + hl
+        if (ds === yesterdayStr) result[seg].D1 += hl
+      }
+      // D0: hoje, apenas pedidos vinculados a viagem
+      if (ds === todayStr && p.viagem_id != null) {
+        result[seg].D0 += hl
+      }
     })
     setHlData(result)
   }
