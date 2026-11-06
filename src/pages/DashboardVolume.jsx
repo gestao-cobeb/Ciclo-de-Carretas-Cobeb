@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { ChevronLeft, ChevronRight, AlertTriangle, TrendingUp, TrendingDown, Truck } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, AlertTriangle, TrendingUp, TrendingDown, Truck } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import { supabase } from '../lib/supabase'
 
@@ -71,29 +71,28 @@ function classifySegmento(cod, tm, emb, zeroCervSet, zeroNabSet, highEndSet) {
 
 // ── Helpers de UI ─────────────────────────────────────────────────────────────
 
-function GrupoHeader({ label, cols, depth = 0 }) {
-  if (depth === 0) {
-    return (
-      <tr className="bg-cobeb-navy/5">
-        <td colSpan={cols} className="px-4 py-1.5 font-black text-cobeb-navy text-[11px] uppercase tracking-widest">
-          {label}
-        </td>
-      </tr>
-    )
-  }
-  if (depth === 1) {
-    return (
-      <tr className="bg-cobeb-sky/30 border-t border-cobeb-border/30">
-        <td colSpan={cols} className="pl-6 pr-3 py-1.5 font-bold text-cobeb-navy/80 text-[10px] uppercase tracking-wider">
-          {label}
-        </td>
-      </tr>
-    )
-  }
+function GrupoHeader({ label, cols, depth = 0, onToggle, isCollapsed }) {
+  const bgCls   = depth === 0 ? 'bg-cobeb-navy/5'
+    : depth === 1 ? 'bg-cobeb-sky/30 border-t border-cobeb-border/30'
+    : 'bg-cobeb-sky/15 border-t border-cobeb-border/20'
+  const padCls  = depth === 0 ? 'px-4' : depth === 1 ? 'pl-6 pr-3' : 'pl-9 pr-3'
+  const txtCls  = depth === 0 ? 'font-black text-cobeb-navy text-[11px] uppercase tracking-widest'
+    : depth === 1 ? 'font-bold text-cobeb-navy/80 text-[10px] uppercase tracking-wider'
+    : 'font-semibold text-cobeb-navy/70 text-[10px] uppercase tracking-wide'
+  const iconSz  = depth === 0 ? 12 : depth === 1 ? 11 : 10
+
   return (
-    <tr className="bg-cobeb-sky/15 border-t border-cobeb-border/20">
-      <td colSpan={cols} className="pl-9 pr-3 py-1 font-semibold text-cobeb-navy/70 text-[10px] uppercase tracking-wide">
-        {label}
+    <tr className={bgCls}>
+      <td colSpan={cols} className={`${padCls} py-1.5`}>
+        <button
+          onClick={onToggle}
+          className="flex items-center gap-1.5 w-full text-left select-none cursor-pointer"
+        >
+          {isCollapsed
+            ? <ChevronRight size={iconSz} className="shrink-0 opacity-50" />
+            : <ChevronDown  size={iconSz} className="shrink-0 opacity-50" />}
+          <span className={txtCls}>{label}</span>
+        </button>
       </td>
     </tr>
   )
@@ -146,6 +145,10 @@ function DataRow({ label, meta, real, D1, diasUteis, diasPassados, showD0, padLe
 // ── Tabela principal ──────────────────────────────────────────────────────────
 
 function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
+  const [col, setCol] = useState({})
+  const toggle = key => setCol(c => ({ ...c, [key]: !c[key] }))
+  const isc    = key => !!col[key]
+
   const cols = showD0 ? 6 : 5
 
   // Extrai { real, D1 } para um segmento folha
@@ -199,43 +202,63 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
           <tbody>
 
             {/* ── CERVEJA TT ── */}
-            <GrupoHeader label="Cerveja TT" cols={cols} depth={0} />
+            <GrupoHeader label="Cerveja TT" cols={cols} depth={0}
+              onToggle={() => toggle('tt')} isCollapsed={isc('tt')} />
 
-            <DataRow {...dp} label="Cerveja OW" meta={owMeta} {...ow} padLeft="pl-6" />
+            {!isc('tt') && <>
+              <DataRow {...dp} label="Cerveja OW" meta={owMeta} {...ow} padLeft="pl-6" />
 
-            <GrupoHeader label="RGB" cols={cols} depth={1} />
+              <GrupoHeader label="RGB" cols={cols} depth={1}
+                onToggle={() => toggle('rgb')} isCollapsed={isc('rgb')} />
 
-            {/* Garrafa Meia */}
-            <GrupoHeader label="Garrafa Meia" cols={cols} depth={2} />
-            <DataRow {...dp} label="Core"     meta={0} {...gmC} padLeft="pl-11" />
-            <DataRow {...dp} label="High End" meta={0} {...gmH} padLeft="pl-11" />
-            <DataRow {...dp} label="↳ Total Garrafa Meia" meta={0} {...gm}
-              padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
+              {!isc('rgb') && <>
+                {/* Garrafa Meia */}
+                <GrupoHeader label="Garrafa Meia" cols={cols} depth={2}
+                  onToggle={() => toggle('gm')} isCollapsed={isc('gm')} />
+                {!isc('gm') && <>
+                  <DataRow {...dp} label="Core"     meta={0} {...gmC} padLeft="pl-11" />
+                  <DataRow {...dp} label="High End" meta={0} {...gmH} padLeft="pl-11" />
+                </>}
+                <DataRow {...dp} label="↳ Total Garrafa Meia" meta={0} {...gm}
+                  padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
 
-            {/* Garrafa Inteira */}
-            <GrupoHeader label="Garrafa Inteira" cols={cols} depth={2} />
-            <DataRow {...dp} label="Core"     meta={0} {...giC} padLeft="pl-11" />
-            <DataRow {...dp} label="High End" meta={0} {...giH} padLeft="pl-11" />
-            <DataRow {...dp} label="↳ Total Garrafa Inteira" meta={0} {...gi}
-              padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
+                {/* Garrafa Inteira */}
+                <GrupoHeader label="Garrafa Inteira" cols={cols} depth={2}
+                  onToggle={() => toggle('gi')} isCollapsed={isc('gi')} />
+                {!isc('gi') && <>
+                  <DataRow {...dp} label="Core"     meta={0} {...giC} padLeft="pl-11" />
+                  <DataRow {...dp} label="High End" meta={0} {...giH} padLeft="pl-11" />
+                </>}
+                <DataRow {...dp} label="↳ Total Garrafa Inteira" meta={0} {...gi}
+                  padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
 
-            {/* Garrafa 1L */}
-            <GrupoHeader label="Garrafa 1L" cols={cols} depth={2} />
-            <DataRow {...dp} label="Core"     meta={0} {...g1C} padLeft="pl-11" />
-            <DataRow {...dp} label="High End" meta={0} {...g1H} padLeft="pl-11" />
-            <DataRow {...dp} label="↳ Total Garrafa 1L" meta={0} {...g1}
-              padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
+                {/* Garrafa 1L */}
+                <GrupoHeader label="Garrafa 1L" cols={cols} depth={2}
+                  onToggle={() => toggle('g1')} isCollapsed={isc('g1')} />
+                {!isc('g1') && <>
+                  <DataRow {...dp} label="Core"     meta={0} {...g1C} padLeft="pl-11" />
+                  <DataRow {...dp} label="High End" meta={0} {...g1H} padLeft="pl-11" />
+                </>}
+                <DataRow {...dp} label="↳ Total Garrafa 1L" meta={0} {...g1}
+                  padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
+              </>}
 
-            <DataRow {...dp} label="↳ Total RGB" meta={rgbMeta} {...rgb}
-              padLeft="pl-6" bold rowClass="bg-cobeb-sky/50" />
+              <DataRow {...dp} label="↳ Total RGB" meta={rgbMeta} {...rgb}
+                padLeft="pl-6" bold rowClass="bg-cobeb-sky/50" />
+            </>}
 
             <DataRow {...dp} label="↳ Total Cerveja TT" meta={ttMeta} {...tt}
               padLeft="pl-4" bold rowClass="bg-cobeb-navy/5" />
 
             {/* ── NAB ── */}
-            <GrupoHeader label="NAB" cols={cols} depth={0} />
-            <DataRow {...dp} label="NAB"      meta={nabMeta}  {...nab}  padLeft="pl-6" />
-            <DataRow {...dp} label="NAB Zero" meta={nabZMeta} {...nabZ} padLeft="pl-6" />
+            <GrupoHeader label="NAB" cols={cols} depth={0}
+              onToggle={() => toggle('nab')} isCollapsed={isc('nab')} />
+
+            {!isc('nab') && <>
+              <DataRow {...dp} label="NAB"      meta={nabMeta}  {...nab}  padLeft="pl-6" />
+              <DataRow {...dp} label="NAB Zero" meta={nabZMeta} {...nabZ} padLeft="pl-6" />
+            </>}
+
             <DataRow {...dp} label="↳ Total NAB" meta={nabTTMeta} {...nabTT}
               padLeft="pl-4" bold rowClass="bg-cobeb-sky/40" />
 
