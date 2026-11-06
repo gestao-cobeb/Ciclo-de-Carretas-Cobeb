@@ -451,15 +451,16 @@ export default function DashboardVolume() {
   const [hlPerPallet, setHlPerPallet] = useState(1.44)
 
   // Dados estáticos de classificação — carregados uma vez
-  const staticRef      = useRef({ zeroCervSet: new Set(), zeroNabSet: new Set(), highEndSet: new Set() })
+  const staticRef      = useRef({ zeroCervSet: new Set(), zeroNabSet: new Set(), highEndSet: new Set(), cobebSet: new Set() })
   const [staticLoaded, setStaticLoaded] = useState(false)
 
   useEffect(() => {
     Promise.all([
       supabase.from('depara_zero').select('cod_promax, tipo'),
       supabase.from('demanda').select('cod_promax, segmento'),
-    ]).then(([{ data: dpz }, { data: dem }]) => {
-      const czs = new Set(), nzs = new Set(), hes = new Set()
+      supabase.from('unidades').select('codigo_ambev, tipo').not('codigo_ambev', 'is', null),
+    ]).then(([{ data: dpz }, { data: dem }, { data: unis }]) => {
+      const czs = new Set(), nzs = new Set(), hes = new Set(), cob = new Set()
       ;(dpz ?? []).forEach(d => {
         if (d.tipo === 'CERVEJA ZERO') czs.add(d.cod_promax)
         if (d.tipo === 'NAB ZERO')     nzs.add(d.cod_promax)
@@ -467,7 +468,11 @@ export default function DashboardVolume() {
       ;(dem ?? []).forEach(d => {
         if (d.segmento?.toUpperCase().includes('HIGH END')) hes.add(d.cod_promax)
       })
-      staticRef.current = { zeroCervSet: czs, zeroNabSet: nzs, highEndSet: hes }
+      // Unidades COBEB (revendas/CDs) — puxadas com esses códigos são transferências internas
+      ;(unis ?? []).forEach(u => {
+        if (u.tipo !== 'fabrica' && u.codigo_ambev) cob.add(u.codigo_ambev)
+      })
+      staticRef.current = { zeroCervSet: czs, zeroNabSet: nzs, highEndSet: hes, cobebSet: cob }
       setStaticLoaded(true)
     })
   }, [])
@@ -513,7 +518,9 @@ export default function DashboardVolume() {
 
       setMetaConfig(cfgData?.valor?.[mesRef] ?? null)
 
-      const pedsAll = pedsData ?? []
+      const { zeroCervSet, zeroNabSet, highEndSet, cobebSet } = staticRef.current
+      // Exclui puxadas COBEB→COBEB (transferências internas entre CDs)
+      const pedsAll = (pedsData ?? []).filter(p => !cobebSet.has(p.codigo_fabrica))
       const skus    = [...new Set(pedsAll.map(p => p.cod_produto).filter(Boolean))]
 
       let catMap = {}
@@ -538,7 +545,6 @@ export default function DashboardVolume() {
       // Real = pedidos vinculados a viagem OU marcados como realizado
       const pedsReal = pedsAll.filter(p => p.viagem_id != null || p.status === 'realizado')
 
-      const { zeroCervSet, zeroNabSet, highEndSet } = staticRef.current
       const result = {}
       SEGMENTOS_FOLHA.forEach(seg => { result[seg] = { total: 0, D1: 0, porDia: {} } })
 
