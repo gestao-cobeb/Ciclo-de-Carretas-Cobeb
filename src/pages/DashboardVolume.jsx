@@ -3,10 +3,12 @@ import { ChevronLeft, ChevronRight, AlertTriangle, TrendingUp, TrendingDown, Tru
 import DashboardLayout from '../components/DashboardLayout'
 import { supabase } from '../lib/supabase'
 
-const SEGMENTOS = [
-  'Cerveja', 'NAB', 'RGB Cerveja', 'Zero Álcool',
-  'NAB Zero', 'High End', 'Match', 'Garrafa Meia',
+const GRUPOS = [
+  { label: 'Cerveja', segmentos: ['Cerveja', 'RGB Cerveja', 'High End', 'Match', 'Garrafa Meia', 'Zero Álcool'] },
+  { label: 'NAB',     segmentos: ['NAB', 'NAB Zero'] },
 ]
+
+const SEGMENTOS = GRUPOS.flatMap(g => g.segmentos)
 
 const MESES = [
   'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -50,12 +52,49 @@ function fmtPct(v) {
 
 // ── Sub-componentes ───────────────────────────────────────────────────────────
 
+function LinhaSubtotal({ label, meta, real, hoje, diasUteis, diasPassados, showD0 }) {
+  const metaDiaria = diasUteis > 0 && meta > 0 ? meta / diasUteis : 0
+  const diff0      = hoje - metaDiaria
+  const pct        = meta > 0 ? real / meta * 100 : null
+  const proj       = diasPassados > 0 && diasUteis > 0 && meta > 0 ? (real / diasPassados) * diasUteis : null
+  const pctColor   = pct == null ? '' : pct >= 100 ? 'text-emerald-600' : pct >= 80 ? 'text-amber-600' : 'text-red-500'
+  const Icon       = proj == null ? null : proj >= meta ? TrendingUp : TrendingDown
+  const projColor  = proj == null ? '' : proj >= meta ? 'text-emerald-600' : proj >= meta * 0.9 ? 'text-amber-600' : 'text-red-500'
+
+  return (
+    <tr className="bg-cobeb-sky/40 border-t border-cobeb-navy/15">
+      <td className="pl-4 pr-3 py-2 font-bold text-cobeb-navy text-[11px] uppercase tracking-wide whitespace-nowrap">
+        ↳ Total {label}
+      </td>
+      <td className="px-3 py-2 text-right font-bold text-cobeb-navy text-[11px]">
+        {meta > 0 ? fmtHL(meta) : '—'}
+      </td>
+      <td className="px-3 py-2 text-right font-bold text-cobeb-navy text-[11px]">{fmtHL(real)}</td>
+      <td className={`px-3 py-2 text-right font-bold text-[11px] ${pctColor}`}>
+        {pct == null ? '—' : fmtPct(pct)}
+      </td>
+      {showD0 && (
+        <td className={`px-3 py-2 text-right font-bold text-[11px] ${meta === 0 ? '' : diff0 >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+          {meta === 0 ? '—' : `${diff0 >= 0 ? '+' : ''}${fmtHL(diff0)}`}
+        </td>
+      )}
+      <td className={`px-3 py-2 font-bold text-[11px] ${projColor}`}>
+        {proj == null ? <span className="text-slate-300">—</span> : (
+          <span className="flex items-center gap-1">
+            {Icon && <Icon size={11} />}{fmtHL(proj)} HL
+          </span>
+        )}
+      </td>
+    </tr>
+  )
+}
+
 function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
-  const totalMeta  = SEGMENTOS.reduce((s, g) => s + (metas[g] || 0), 0)
-  const totalReal  = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.total || 0), 0)
-  const totalHoje  = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.hoje || 0), 0)
+  const totalMeta       = SEGMENTOS.reduce((s, g) => s + (metas[g] || 0), 0)
+  const totalReal       = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.total || 0), 0)
+  const totalHoje       = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.hoje || 0), 0)
   const metaDiariaTotal = diasUteis > 0 ? totalMeta / diasUteis : 0
-  const diff0Total = totalHoje - metaDiariaTotal
+  const diff0Total      = totalHoje - metaDiariaTotal
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
@@ -75,60 +114,90 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
               <th className="px-3 py-2 text-left text-cobeb-navy font-semibold whitespace-nowrap">Tendência</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-cobeb-border/40">
-            {SEGMENTOS.map(seg => {
-              const meta       = metas[seg] || 0
-              const real       = hlData[seg]?.total || 0
-              const hoje       = hlData[seg]?.hoje || 0
-              const metaDiaria = diasUteis > 0 && meta > 0 ? meta / diasUteis : 0
-              const diff0      = hoje - metaDiaria
-              const pct        = meta > 0 ? real / meta * 100 : null
-              const proj       = diasPassados > 0 && diasUteis > 0 ? (real / diasPassados) * diasUteis : null
-
-              const pctColor  = pct  == null ? '' : pct  >= 100 ? 'text-emerald-600' : pct  >= 80 ? 'text-amber-600' : 'text-red-500'
-              const d0Color   = meta === 0 ? '' : diff0 >= 0 ? 'text-emerald-600' : 'text-red-500'
-              const projColor = proj == null || meta === 0 ? '' : proj >= meta ? 'text-emerald-600' : proj >= meta * 0.9 ? 'text-amber-600' : 'text-red-500'
-              const ProjIcon  = proj == null || meta === 0 ? null : proj >= meta ? TrendingUp : TrendingDown
+          <tbody>
+            {GRUPOS.map((grupo, gi) => {
+              const grupoMeta = grupo.segmentos.reduce((s, seg) => s + (metas[seg] || 0), 0)
+              const grupoReal = grupo.segmentos.reduce((s, seg) => s + (hlData[seg]?.total || 0), 0)
+              const grupoHoje = grupo.segmentos.reduce((s, seg) => s + (hlData[seg]?.hoje || 0), 0)
+              const cols      = showD0 ? 6 : 5
 
               return (
-                <tr key={seg} className="hover:bg-cobeb-sky/30 transition-colors">
-                  <td className="px-4 py-2.5 font-medium text-cobeb-text whitespace-nowrap">{seg}</td>
-                  <td className="px-3 py-2.5 text-right text-slate-600">
-                    {meta > 0 ? fmtHL(meta) : <span className="text-slate-300">—</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-right font-semibold text-cobeb-navy">{fmtHL(real)}</td>
-                  <td className={`px-3 py-2.5 text-right font-semibold ${pctColor}`}>
-                    {pct == null ? <span className="text-slate-300">—</span> : fmtPct(pct)}
-                  </td>
-                  {showD0 && (
-                    <td className={`px-3 py-2.5 text-right font-semibold ${d0Color}`}>
-                      {meta === 0
-                        ? <span className="text-slate-300">—</span>
-                        : `${diff0 >= 0 ? '+' : ''}${fmtHL(diff0)}`}
+                <>
+                  {/* Cabeçalho do grupo */}
+                  <tr key={`h-${grupo.label}`} className={`${gi > 0 ? 'border-t-2 border-cobeb-border' : ''} bg-cobeb-navy/5`}>
+                    <td colSpan={cols} className="px-4 py-1.5 font-black text-cobeb-navy text-[11px] uppercase tracking-widest">
+                      {grupo.label}
                     </td>
-                  )}
-                  <td className={`px-3 py-2.5 font-semibold ${projColor}`}>
-                    {proj == null || meta === 0 ? (
-                      <span className="text-slate-300">—</span>
-                    ) : (
-                      <span className="flex items-center gap-1">
-                        {ProjIcon && <ProjIcon size={12} />}
-                        {fmtHL(proj)} HL
-                      </span>
-                    )}
-                  </td>
-                </tr>
+                  </tr>
+
+                  {/* Sub-segmentos */}
+                  {grupo.segmentos.map(seg => {
+                    const meta       = metas[seg] || 0
+                    const real       = hlData[seg]?.total || 0
+                    const hoje       = hlData[seg]?.hoje || 0
+                    const metaDiaria = diasUteis > 0 && meta > 0 ? meta / diasUteis : 0
+                    const diff0      = hoje - metaDiaria
+                    const pct        = meta > 0 ? real / meta * 100 : null
+                    const proj       = diasPassados > 0 && diasUteis > 0 ? (real / diasPassados) * diasUteis : null
+                    const pctColor   = pct  == null ? '' : pct  >= 100 ? 'text-emerald-600' : pct  >= 80 ? 'text-amber-600' : 'text-red-500'
+                    const d0Color    = meta === 0 ? '' : diff0 >= 0 ? 'text-emerald-600' : 'text-red-500'
+                    const projColor  = proj == null || meta === 0 ? '' : proj >= meta ? 'text-emerald-600' : proj >= meta * 0.9 ? 'text-amber-600' : 'text-red-500'
+                    const ProjIcon   = proj == null || meta === 0 ? null : proj >= meta ? TrendingUp : TrendingDown
+
+                    return (
+                      <tr key={seg} className="border-t border-cobeb-border/40 hover:bg-cobeb-sky/30 transition-colors">
+                        <td className="pl-6 pr-3 py-2.5 text-cobeb-text whitespace-nowrap">{seg}</td>
+                        <td className="px-3 py-2.5 text-right text-slate-600">
+                          {meta > 0 ? fmtHL(meta) : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-semibold text-cobeb-navy">{fmtHL(real)}</td>
+                        <td className={`px-3 py-2.5 text-right font-semibold ${pctColor}`}>
+                          {pct == null ? <span className="text-slate-300">—</span> : fmtPct(pct)}
+                        </td>
+                        {showD0 && (
+                          <td className={`px-3 py-2.5 text-right font-semibold ${d0Color}`}>
+                            {meta === 0
+                              ? <span className="text-slate-300">—</span>
+                              : `${diff0 >= 0 ? '+' : ''}${fmtHL(diff0)}`}
+                          </td>
+                        )}
+                        <td className={`px-3 py-2.5 font-semibold ${projColor}`}>
+                          {proj == null || meta === 0 ? (
+                            <span className="text-slate-300">—</span>
+                          ) : (
+                            <span className="flex items-center gap-1">
+                              {ProjIcon && <ProjIcon size={12} />}
+                              {fmtHL(proj)} HL
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    )
+                  })}
+
+                  {/* Subtotal do grupo */}
+                  <LinhaSubtotal
+                    key={`sub-${grupo.label}`}
+                    label={grupo.label}
+                    meta={grupoMeta}
+                    real={grupoReal}
+                    hoje={grupoHoje}
+                    diasUteis={diasUteis}
+                    diasPassados={diasPassados}
+                    showD0={showD0}
+                  />
+                </>
               )
             })}
           </tbody>
           <tfoot>
-            <tr className="bg-[#EBF5FF]/60 border-t-2 border-cobeb-navy/20">
-              <td className="px-4 py-2.5 font-bold text-cobeb-navy">Total</td>
-              <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy">
+            <tr className="bg-[#EBF5FF]/80 border-t-2 border-cobeb-navy/30">
+              <td className="px-4 py-2.5 font-black text-cobeb-navy">Total Geral</td>
+              <td className="px-3 py-2.5 text-right font-black text-cobeb-navy">
                 {totalMeta > 0 ? fmtHL(totalMeta) : '—'}
               </td>
-              <td className="px-3 py-2.5 text-right font-bold text-cobeb-navy">{fmtHL(totalReal)}</td>
-              <td className="px-3 py-2.5 text-right font-bold">
+              <td className="px-3 py-2.5 text-right font-black text-cobeb-navy">{fmtHL(totalReal)}</td>
+              <td className="px-3 py-2.5 text-right font-black">
                 {totalMeta > 0 ? (
                   <span className={totalReal / totalMeta >= 1 ? 'text-emerald-600' : totalReal / totalMeta >= 0.8 ? 'text-amber-600' : 'text-red-500'}>
                     {fmtPct(totalReal / totalMeta * 100)}
@@ -136,13 +205,13 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
                 ) : '—'}
               </td>
               {showD0 && (
-                <td className={`px-3 py-2.5 text-right font-bold ${diff0Total >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                <td className={`px-3 py-2.5 text-right font-black ${diff0Total >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
                   {totalMeta > 0 ? `${diff0Total >= 0 ? '+' : ''}${fmtHL(diff0Total)}` : '—'}
                 </td>
               )}
-              <td className="px-3 py-2.5 font-bold">
+              <td className="px-3 py-2.5 font-black">
                 {diasPassados > 0 && totalMeta > 0 && diasUteis > 0 ? (() => {
-                  const proj = totalReal / diasPassados * diasUteis
+                  const proj  = totalReal / diasPassados * diasUteis
                   const color = proj >= totalMeta ? 'text-emerald-600' : proj >= totalMeta * 0.9 ? 'text-amber-600' : 'text-red-500'
                   const Icon  = proj >= totalMeta ? TrendingUp : TrendingDown
                   return (

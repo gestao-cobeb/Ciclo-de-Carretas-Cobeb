@@ -4,10 +4,12 @@ import { supabase } from '../../lib/supabase'
 
 const CHAVE_VIAGENS = 'planejado_viagens'
 
-const SEGMENTOS_VOL = [
-  'Cerveja', 'NAB', 'RGB Cerveja', 'Zero Álcool',
-  'NAB Zero', 'High End', 'Match', 'Garrafa Meia',
+const GRUPOS_VOL = [
+  { label: 'Cerveja', segmentos: ['Cerveja', 'RGB Cerveja', 'High End', 'Match', 'Garrafa Meia', 'Zero Álcool'] },
+  { label: 'NAB',     segmentos: ['NAB', 'NAB Zero'] },
 ]
+
+const SEGMENTOS_VOL = GRUPOS_VOL.flatMap(g => g.segmentos)
 
 const MESES_VOL = [
   'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -318,29 +320,44 @@ function MetaVolumePuxada() {
         </div>
       ) : (
         <>
-          {/* Metas por segmento */}
+          {/* Metas por segmento — agrupadas */}
           <p className="text-[11px] font-semibold text-cobeb-navy mb-2 uppercase tracking-wide">Meta por segmento (HL/mês)</p>
-          <div className="space-y-2 mb-4">
-            {SEGMENTOS_VOL.map(seg => (
-              <div key={seg} className="flex items-center gap-3">
-                <span className="text-sm text-cobeb-text flex-1 truncate">{seg}</span>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.1"
-                    value={metas[seg] ?? ''}
-                    onChange={e => setMetas(m => ({ ...m, [seg]: e.target.value }))}
-                    className="w-24 text-sm border border-cobeb-border rounded-xl px-3 py-1.5 text-right focus:outline-none focus:border-cobeb-blue [appearance:textfield]"
-                  />
-                  <span className="text-xs text-slate-400 w-5">HL</span>
+          <div className="mb-4 space-y-3">
+            {GRUPOS_VOL.map(grupo => {
+              const somaGrupo = grupo.segmentos.reduce((s, seg) => s + (parseFloat(metas[seg]) || 0), 0)
+              return (
+                <div key={grupo.label} className="rounded-xl border border-cobeb-border overflow-hidden">
+                  <div className="flex items-center justify-between bg-cobeb-sky/60 px-3 py-1.5">
+                    <span className="text-[11px] font-black text-cobeb-navy uppercase tracking-widest">{grupo.label}</span>
+                    <span className="text-[10px] font-semibold text-cobeb-navy">
+                      {somaGrupo > 0 ? somaGrupo.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' HL' : '—'}
+                    </span>
+                  </div>
+                  <div className="divide-y divide-cobeb-border/40">
+                    {grupo.segmentos.map(seg => (
+                      <div key={seg} className="flex items-center gap-3 px-3 py-2">
+                        <span className="text-sm text-cobeb-text flex-1 truncate">{seg}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.1"
+                            value={metas[seg] ?? ''}
+                            onChange={e => setMetas(m => ({ ...m, [seg]: e.target.value }))}
+                            className="w-24 text-sm border border-cobeb-border rounded-xl px-3 py-1.5 text-right focus:outline-none focus:border-cobeb-blue [appearance:textfield]"
+                          />
+                          <span className="text-xs text-slate-400 w-5">HL</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
 
           <div className="flex items-baseline justify-between pb-4 border-b border-cobeb-border mb-4">
-            <span className="text-xs text-slate-400">Total mês</span>
+            <span className="text-xs text-slate-400">Total mês (Cerveja + NAB)</span>
             <span className="text-sm font-bold text-cobeb-navy">
               {somaHL.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} HL
             </span>
