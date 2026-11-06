@@ -3,12 +3,17 @@ import { ChevronLeft, ChevronRight, AlertTriangle, TrendingUp, TrendingDown, Tru
 import DashboardLayout from '../components/DashboardLayout'
 import { supabase } from '../lib/supabase'
 
-const GRUPOS = [
-  { label: 'Cerveja TT', segmentos: ['Cerveja OW', 'RGB Cerveja', 'High End', 'Match', 'Garrafa Meia', 'Zero Álcool'] },
-  { label: 'NAB',        segmentos: ['NAB', 'NAB Zero'] },
+// ── Segmentos folha (onde o HL cai depois da classificação) ───────────────────
+const SEGMENTOS_FOLHA = [
+  'Cerveja OW',
+  'Garrafa Meia Core', 'Garrafa Meia HE',
+  'Garrafa Inteira Core', 'Garrafa Inteira HE',
+  'Garrafa 1L Core', 'Garrafa 1L HE',
+  'NAB', 'NAB Zero',
 ]
 
-const SEGMENTOS = GRUPOS.flatMap(g => g.segmentos)
+// Chaves que possuem meta configurada (nível 2)
+const META_KEYS = ['Cerveja OW', 'RGB', 'NAB', 'NAB Zero']
 
 const MESES = [
   'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -34,7 +39,7 @@ function semanaLimites(sem, year, month) {
 }
 
 function semanaDoDia(day) {
-  if (day <= 7) return 1
+  if (day <= 7)  return 1
   if (day <= 14) return 2
   if (day <= 21) return 3
   return 4
@@ -50,51 +55,87 @@ function fmtPct(v) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + '%'
 }
 
-// Prioridade: Zero Álcool > NAB Zero > High End > Match > Garrafa Meia > RGB Cerveja > Cerveja OW > NAB
+// Hierarquia: zeroCerv → OW · zeroNAB → NABZero · RGB por embalagem (High End dentro)
+// Match e High End OW → Cerveja OW (agregado)
 function classifySegmento(cod, tm, emb, zeroCervSet, zeroNabSet, highEndSet) {
-  if (zeroCervSet.has(cod)) return 'Zero Álcool'
+  if (zeroCervSet.has(cod)) return 'Cerveja OW'
   if (zeroNabSet.has(cod))  return 'NAB Zero'
-  if (highEndSet.has(cod))  return 'High End'
   const isCerv = tm === '001 - CERVEJA' || tm === '028 - BEBIDAS QUENTES'
-  if (tm === '028 - BEBIDAS QUENTES') return 'Match'
-  if (isCerv && emb.startsWith('017')) return 'Garrafa Meia'
-  if (isCerv && (emb.startsWith('018') || emb.startsWith('085'))) return 'RGB Cerveja'
-  if (isCerv) return 'Cerveja OW'
-  return 'NAB'
+  if (!isCerv) return 'NAB'
+  const isHE = highEndSet.has(cod)
+  if (emb.startsWith('017')) return isHE ? 'Garrafa Meia HE'    : 'Garrafa Meia Core'
+  if (emb.startsWith('018')) return isHE ? 'Garrafa Inteira HE' : 'Garrafa Inteira Core'
+  if (emb.startsWith('085')) return isHE ? 'Garrafa 1L HE'      : 'Garrafa 1L Core'
+  return 'Cerveja OW'
 }
 
-// ── Sub-componentes ───────────────────────────────────────────────────────────
+// ── Helpers de UI ─────────────────────────────────────────────────────────────
 
-function LinhaSubtotal({ label, meta, real, D1, diasUteis, diasPassados, showD0 }) {
-  const metaDiaria = diasUteis > 0 && meta > 0 ? meta / diasUteis : 0
-  const diff0      = D1 - metaDiaria
-  const pct        = meta > 0 ? real / meta * 100 : null
-  const proj       = diasPassados > 0 && diasUteis > 0 && meta > 0 ? (real / diasPassados) * diasUteis : null
-  const pctColor   = pct == null ? '' : pct >= 100 ? 'text-emerald-600' : pct >= 80 ? 'text-amber-600' : 'text-red-500'
-  const Icon       = proj == null ? null : proj >= meta ? TrendingUp : TrendingDown
-  const projColor  = proj == null ? '' : proj >= meta ? 'text-emerald-600' : proj >= meta * 0.9 ? 'text-amber-600' : 'text-red-500'
+function GrupoHeader({ label, cols, depth = 0 }) {
+  if (depth === 0) {
+    return (
+      <tr className="bg-cobeb-navy/5">
+        <td colSpan={cols} className="px-4 py-1.5 font-black text-cobeb-navy text-[11px] uppercase tracking-widest">
+          {label}
+        </td>
+      </tr>
+    )
+  }
+  if (depth === 1) {
+    return (
+      <tr className="bg-cobeb-sky/30 border-t border-cobeb-border/30">
+        <td colSpan={cols} className="pl-6 pr-3 py-1.5 font-bold text-cobeb-navy/80 text-[10px] uppercase tracking-wider">
+          {label}
+        </td>
+      </tr>
+    )
+  }
+  return (
+    <tr className="bg-cobeb-sky/15 border-t border-cobeb-border/20">
+      <td colSpan={cols} className="pl-9 pr-3 py-1 font-semibold text-cobeb-navy/70 text-[10px] uppercase tracking-wide">
+        {label}
+      </td>
+    </tr>
+  )
+}
+
+function DataRow({ label, meta, real, D1, diasUteis, diasPassados, showD0, padLeft = 'pl-6', bold = false, rowClass = '' }) {
+  const md       = diasUteis > 0 && meta > 0 ? meta / diasUteis : 0
+  const diff     = D1 - md
+  const pct      = meta > 0 ? real / meta * 100 : null
+  const prj      = diasPassados > 0 && diasUteis > 0 && meta > 0 ? (real / diasPassados) * diasUteis : null
+  const pctColor = pct  == null ? '' : pct  >= 100 ? 'text-emerald-600' : pct  >= 80 ? 'text-amber-600' : 'text-red-500'
+  const d0Color  = diff >= 0 ? 'text-emerald-600' : 'text-red-500'
+  const prjColor = prj  == null ? '' : prj >= meta ? 'text-emerald-600' : prj >= meta * 0.9 ? 'text-amber-600' : 'text-red-500'
+  const PrjIcon  = prj  == null ? null : prj >= meta ? TrendingUp : TrendingDown
 
   return (
-    <tr className="bg-cobeb-sky/40 border-t border-cobeb-navy/15">
-      <td className="pl-4 pr-3 py-2 font-bold text-cobeb-navy text-[11px] uppercase tracking-wide whitespace-nowrap">
-        ↳ Total {label}
+    <tr className={`border-t border-cobeb-border/40 hover:bg-cobeb-sky/30 transition-colors ${rowClass}`}>
+      <td className={`${padLeft} pr-3 py-2.5 text-xs whitespace-nowrap ${bold ? 'font-bold text-cobeb-navy' : 'text-cobeb-text'}`}>
+        {label}
       </td>
-      <td className="px-3 py-2 text-right font-bold text-cobeb-navy text-[11px]">
-        {meta > 0 ? fmtHL(meta) : '—'}
+      <td className="px-3 py-2.5 text-right text-xs text-slate-600">
+        {meta > 0 ? fmtHL(meta) : <span className="text-slate-300">—</span>}
       </td>
-      <td className="px-3 py-2 text-right font-bold text-cobeb-navy text-[11px]">{fmtHL(real)}</td>
-      <td className={`px-3 py-2 text-right font-bold text-[11px] ${pctColor}`}>
-        {pct == null ? '—' : fmtPct(pct)}
+      <td className={`px-3 py-2.5 text-right text-xs text-cobeb-navy ${bold ? 'font-bold' : 'font-semibold'}`}>
+        {fmtHL(real)}
+      </td>
+      <td className={`px-3 py-2.5 text-right text-xs ${bold ? 'font-bold' : 'font-semibold'} ${pctColor}`}>
+        {pct == null ? <span className="text-slate-300">—</span> : fmtPct(pct)}
       </td>
       {showD0 && (
-        <td className={`px-3 py-2 text-right font-bold text-[11px] ${meta === 0 ? '' : diff0 >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-          {meta === 0 ? '—' : `${diff0 >= 0 ? '+' : ''}${fmtHL(diff0)}`}
+        <td className={`px-3 py-2.5 text-right text-xs ${bold ? 'font-bold' : 'font-semibold'} ${meta > 0 ? d0Color : ''}`}>
+          {meta > 0
+            ? `${diff >= 0 ? '+' : ''}${fmtHL(diff)}`
+            : <span className="text-slate-300">—</span>}
         </td>
       )}
-      <td className={`px-3 py-2 font-bold text-[11px] ${projColor}`}>
-        {proj == null ? <span className="text-slate-300">—</span> : (
+      <td className={`px-3 py-2.5 text-xs ${bold ? 'font-bold' : 'font-semibold'} ${prjColor}`}>
+        {prj == null ? (
+          <span className="text-slate-300">—</span>
+        ) : (
           <span className="flex items-center gap-1">
-            {Icon && <Icon size={11} />}{fmtHL(proj)} HL
+            {PrjIcon && <PrjIcon size={11} />}{fmtHL(prj)} HL
           </span>
         )}
       </td>
@@ -102,18 +143,46 @@ function LinhaSubtotal({ label, meta, real, D1, diasUteis, diasPassados, showD0 
   )
 }
 
+// ── Tabela principal ──────────────────────────────────────────────────────────
+
 function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
-  const totalMeta       = SEGMENTOS.reduce((s, g) => s + (metas[g] || 0), 0)
-  const totalReal       = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.total || 0), 0)
-  const totalD1         = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.D1 || 0), 0)
-  const metaDiariaTotal = diasUteis > 0 ? totalMeta / diasUteis : 0
-  const diff0Total      = totalD1 - metaDiariaTotal
+  const cols = showD0 ? 6 : 5
+
+  // Extrai { real, D1 } para um segmento folha
+  function s(name) {
+    return { real: hlData[name]?.total || 0, D1: hlData[name]?.D1 || 0 }
+  }
+  // Soma dois objetos { real, D1 }
+  function add(...items) {
+    return items.reduce((acc, x) => ({ real: acc.real + x.real, D1: acc.D1 + x.D1 }), { real: 0, D1: 0 })
+  }
+
+  const ow      = s('Cerveja OW');  const owMeta  = metas['Cerveja OW'] || 0
+  const gmC     = s('Garrafa Meia Core');    const gmH = s('Garrafa Meia HE')
+  const giC     = s('Garrafa Inteira Core'); const giH = s('Garrafa Inteira HE')
+  const g1C     = s('Garrafa 1L Core');      const g1H = s('Garrafa 1L HE')
+  const gm      = add(gmC, gmH)
+  const gi      = add(giC, giH)
+  const g1      = add(g1C, g1H)
+  const rgb     = add(gm, gi, g1);  const rgbMeta = metas['RGB'] || 0
+  const tt      = add(ow, rgb);     const ttMeta  = owMeta + rgbMeta
+  const nab     = s('NAB');         const nabMeta  = metas['NAB']      || 0
+  const nabZ    = s('NAB Zero');    const nabZMeta = metas['NAB Zero'] || 0
+  const nabTT   = add(nab, nabZ);   const nabTTMeta = nabMeta + nabZMeta
+  const total   = add(tt, nabTT);   const totalMeta = ttMeta + nabTTMeta
+
+  const totalPct  = totalMeta > 0 ? total.real / totalMeta * 100 : null
+  const totalPrj  = diasPassados > 0 && diasUteis > 0 && totalMeta > 0
+    ? (total.real / diasPassados) * diasUteis : null
+  const totalDiff = total.D1 - (diasUteis > 0 && totalMeta > 0 ? totalMeta / diasUteis : 0)
+
+  const dp = { diasUteis, diasPassados, showD0 }
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
       <div className="px-4 pt-4 pb-3 border-b border-cobeb-border/50">
         <h2 className="text-cobeb-text font-semibold text-sm">Volume por Segmento</h2>
-        <p className="text-xs text-slate-400 mt-0.5">Meta de puxada mensal em HL por segmento de marca · Real acumulado até D-1</p>
+        <p className="text-xs text-slate-400 mt-0.5">Meta de puxada mensal em HL por segmento · Real acumulado até D-1</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
@@ -128,108 +197,75 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
             </tr>
           </thead>
           <tbody>
-            {GRUPOS.map((grupo, gi) => {
-              const grupoMeta = grupo.segmentos.reduce((s, seg) => s + (metas[seg] || 0), 0)
-              const grupoReal = grupo.segmentos.reduce((s, seg) => s + (hlData[seg]?.total || 0), 0)
-              const grupoD1   = grupo.segmentos.reduce((s, seg) => s + (hlData[seg]?.D1 || 0), 0)
-              const cols      = showD0 ? 6 : 5
 
-              return (
-                <>
-                  {/* Cabeçalho do grupo */}
-                  <tr key={`h-${grupo.label}`} className={`${gi > 0 ? 'border-t-2 border-cobeb-border' : ''} bg-cobeb-navy/5`}>
-                    <td colSpan={cols} className="px-4 py-1.5 font-black text-cobeb-navy text-[11px] uppercase tracking-widest">
-                      {grupo.label}
-                    </td>
-                  </tr>
+            {/* ── CERVEJA TT ── */}
+            <GrupoHeader label="Cerveja TT" cols={cols} depth={0} />
 
-                  {/* Sub-segmentos */}
-                  {grupo.segmentos.map(seg => {
-                    const meta       = metas[seg] || 0
-                    const real       = hlData[seg]?.total || 0
-                    const D1         = hlData[seg]?.D1 || 0
-                    const metaDiaria = diasUteis > 0 && meta > 0 ? meta / diasUteis : 0
-                    const diff0      = D1 - metaDiaria
-                    const pct        = meta > 0 ? real / meta * 100 : null
-                    const proj       = diasPassados > 0 && diasUteis > 0 ? (real / diasPassados) * diasUteis : null
-                    const pctColor   = pct  == null ? '' : pct  >= 100 ? 'text-emerald-600' : pct  >= 80 ? 'text-amber-600' : 'text-red-500'
-                    const d0Color    = meta === 0 ? '' : diff0 >= 0 ? 'text-emerald-600' : 'text-red-500'
-                    const projColor  = proj == null || meta === 0 ? '' : proj >= meta ? 'text-emerald-600' : proj >= meta * 0.9 ? 'text-amber-600' : 'text-red-500'
-                    const ProjIcon   = proj == null || meta === 0 ? null : proj >= meta ? TrendingUp : TrendingDown
+            <DataRow {...dp} label="Cerveja OW" meta={owMeta} {...ow} padLeft="pl-6" />
 
-                    return (
-                      <tr key={seg} className="border-t border-cobeb-border/40 hover:bg-cobeb-sky/30 transition-colors">
-                        <td className="pl-6 pr-3 py-2.5 text-cobeb-text whitespace-nowrap">{seg}</td>
-                        <td className="px-3 py-2.5 text-right text-slate-600">
-                          {meta > 0 ? fmtHL(meta) : <span className="text-slate-300">—</span>}
-                        </td>
-                        <td className="px-3 py-2.5 text-right font-semibold text-cobeb-navy">{fmtHL(real)}</td>
-                        <td className={`px-3 py-2.5 text-right font-semibold ${pctColor}`}>
-                          {pct == null ? <span className="text-slate-300">—</span> : fmtPct(pct)}
-                        </td>
-                        {showD0 && (
-                          <td className={`px-3 py-2.5 text-right font-semibold ${d0Color}`}>
-                            {meta === 0
-                              ? <span className="text-slate-300">—</span>
-                              : `${diff0 >= 0 ? '+' : ''}${fmtHL(diff0)}`}
-                          </td>
-                        )}
-                        <td className={`px-3 py-2.5 font-semibold ${projColor}`}>
-                          {proj == null || meta === 0 ? (
-                            <span className="text-slate-300">—</span>
-                          ) : (
-                            <span className="flex items-center gap-1">
-                              {ProjIcon && <ProjIcon size={12} />}
-                              {fmtHL(proj)} HL
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
+            <GrupoHeader label="RGB" cols={cols} depth={1} />
 
-                  {/* Subtotal do grupo */}
-                  <LinhaSubtotal
-                    key={`sub-${grupo.label}`}
-                    label={grupo.label}
-                    meta={grupoMeta}
-                    real={grupoReal}
-                    D1={grupoD1}
-                    diasUteis={diasUteis}
-                    diasPassados={diasPassados}
-                    showD0={showD0}
-                  />
-                </>
-              )
-            })}
+            {/* Garrafa Meia */}
+            <GrupoHeader label="Garrafa Meia" cols={cols} depth={2} />
+            <DataRow {...dp} label="Core"     meta={0} {...gmC} padLeft="pl-11" />
+            <DataRow {...dp} label="High End" meta={0} {...gmH} padLeft="pl-11" />
+            <DataRow {...dp} label="↳ Total Garrafa Meia" meta={0} {...gm}
+              padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
+
+            {/* Garrafa Inteira */}
+            <GrupoHeader label="Garrafa Inteira" cols={cols} depth={2} />
+            <DataRow {...dp} label="Core"     meta={0} {...giC} padLeft="pl-11" />
+            <DataRow {...dp} label="High End" meta={0} {...giH} padLeft="pl-11" />
+            <DataRow {...dp} label="↳ Total Garrafa Inteira" meta={0} {...gi}
+              padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
+
+            {/* Garrafa 1L */}
+            <GrupoHeader label="Garrafa 1L" cols={cols} depth={2} />
+            <DataRow {...dp} label="Core"     meta={0} {...g1C} padLeft="pl-11" />
+            <DataRow {...dp} label="High End" meta={0} {...g1H} padLeft="pl-11" />
+            <DataRow {...dp} label="↳ Total Garrafa 1L" meta={0} {...g1}
+              padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
+
+            <DataRow {...dp} label="↳ Total RGB" meta={rgbMeta} {...rgb}
+              padLeft="pl-6" bold rowClass="bg-cobeb-sky/50" />
+
+            <DataRow {...dp} label="↳ Total Cerveja TT" meta={ttMeta} {...tt}
+              padLeft="pl-4" bold rowClass="bg-cobeb-navy/5" />
+
+            {/* ── NAB ── */}
+            <GrupoHeader label="NAB" cols={cols} depth={0} />
+            <DataRow {...dp} label="NAB"      meta={nabMeta}  {...nab}  padLeft="pl-6" />
+            <DataRow {...dp} label="NAB Zero" meta={nabZMeta} {...nabZ} padLeft="pl-6" />
+            <DataRow {...dp} label="↳ Total NAB" meta={nabTTMeta} {...nabTT}
+              padLeft="pl-4" bold rowClass="bg-cobeb-sky/40" />
+
           </tbody>
           <tfoot>
             <tr className="bg-[#EBF5FF]/80 border-t-2 border-cobeb-navy/30">
-              <td className="px-4 py-2.5 font-black text-cobeb-navy">Total Geral</td>
-              <td className="px-3 py-2.5 text-right font-black text-cobeb-navy">
+              <td className="px-4 py-2.5 font-black text-cobeb-navy text-xs">Total Geral</td>
+              <td className="px-3 py-2.5 text-right font-black text-cobeb-navy text-xs">
                 {totalMeta > 0 ? fmtHL(totalMeta) : '—'}
               </td>
-              <td className="px-3 py-2.5 text-right font-black text-cobeb-navy">{fmtHL(totalReal)}</td>
-              <td className="px-3 py-2.5 text-right font-black">
-                {totalMeta > 0 ? (
-                  <span className={totalReal / totalMeta >= 1 ? 'text-emerald-600' : totalReal / totalMeta >= 0.8 ? 'text-amber-600' : 'text-red-500'}>
-                    {fmtPct(totalReal / totalMeta * 100)}
+              <td className="px-3 py-2.5 text-right font-black text-cobeb-navy text-xs">{fmtHL(total.real)}</td>
+              <td className="px-3 py-2.5 text-right font-black text-xs">
+                {totalPct != null ? (
+                  <span className={totalPct >= 100 ? 'text-emerald-600' : totalPct >= 80 ? 'text-amber-600' : 'text-red-500'}>
+                    {fmtPct(totalPct)}
                   </span>
                 ) : '—'}
               </td>
               {showD0 && (
-                <td className={`px-3 py-2.5 text-right font-black ${diff0Total >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                  {totalMeta > 0 ? `${diff0Total >= 0 ? '+' : ''}${fmtHL(diff0Total)}` : '—'}
+                <td className={`px-3 py-2.5 text-right font-black text-xs ${totalMeta > 0 ? (totalDiff >= 0 ? 'text-emerald-600' : 'text-red-500') : ''}`}>
+                  {totalMeta > 0 ? `${totalDiff >= 0 ? '+' : ''}${fmtHL(totalDiff)}` : '—'}
                 </td>
               )}
-              <td className="px-3 py-2.5 font-black">
-                {diasPassados > 0 && totalMeta > 0 && diasUteis > 0 ? (() => {
-                  const proj  = totalReal / diasPassados * diasUteis
-                  const color = proj >= totalMeta ? 'text-emerald-600' : proj >= totalMeta * 0.9 ? 'text-amber-600' : 'text-red-500'
-                  const Icon  = proj >= totalMeta ? TrendingUp : TrendingDown
+              <td className="px-3 py-2.5 font-black text-xs">
+                {totalPrj != null ? (() => {
+                  const color = totalPrj >= totalMeta ? 'text-emerald-600' : totalPrj >= totalMeta * 0.9 ? 'text-amber-600' : 'text-red-500'
+                  const Icon  = totalPrj >= totalMeta ? TrendingUp : TrendingDown
                   return (
                     <span className={`flex items-center gap-1 ${color}`}>
-                      <Icon size={12} />{fmtHL(proj)} HL
+                      <Icon size={12} />{fmtHL(totalPrj)} HL
                     </span>
                   )
                 })() : <span className="text-slate-300">—</span>}
@@ -242,14 +278,16 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
   )
 }
 
+// ── Card Semanas ──────────────────────────────────────────────────────────────
+
 function CardSemanas({ year, month, semanas, metaTotalHL, hlData }) {
-  const today         = new Date()
+  const today          = new Date()
   const isCurrentMonth = year === today.getFullYear() && month === today.getMonth()
-  const semanaAtual   = isCurrentMonth ? semanaDoDia(today.getDate()) : null
-  const mm            = String(month + 1).padStart(2, '0')
+  const semanaAtual    = isCurrentMonth ? semanaDoDia(today.getDate()) : null
+  const mm             = String(month + 1).padStart(2, '0')
 
   const hlPorDia = {}
-  SEGMENTOS.forEach(seg => {
+  SEGMENTOS_FOLHA.forEach(seg => {
     Object.entries(hlData[seg]?.porDia ?? {}).forEach(([ds, hl]) => {
       hlPorDia[ds] = (hlPorDia[ds] || 0) + hl
     })
@@ -263,19 +301,16 @@ function CardSemanas({ year, month, semanas, metaTotalHL, hlData }) {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[1, 2, 3, 4].map(sem => {
           const { ini, fim } = semanaLimites(sem, year, month)
-          const metaSem     = metaTotalHL * (pcts[sem - 1] / 100)
-
-          let realSem = 0
+          const metaSem = metaTotalHL * (pcts[sem - 1] / 100)
+          let realSem   = 0
           for (let d = ini; d <= fim; d++) {
             const ds = `${year}-${mm}-${String(d).padStart(2, '0')}`
             realSem += hlPorDia[ds] || 0
           }
-
           const pct      = metaSem > 0 ? realSem / metaSem * 100 : null
           const isActive = semanaAtual === sem
           const isPast   = isCurrentMonth && today.getDate() > fim
           const isFuture = isCurrentMonth && today.getDate() < ini
-
           const pctColor = pct == null ? '' : pct >= 100 ? 'text-emerald-600' : pct >= 80 ? 'text-amber-600' : 'text-red-500'
 
           return (
@@ -314,8 +349,10 @@ function CardSemanas({ year, month, semanas, metaTotalHL, hlData }) {
   )
 }
 
+// ── Card Carros por Dia ───────────────────────────────────────────────────────
+
 function CardCarrosPorDia({ saldoHL, diasRestantes, hlPerPallet }) {
-  const hlPorDia    = diasRestantes > 0 ? saldoHL / diasRestantes : 0
+  const hlPorDia     = diasRestantes > 0 ? saldoHL / diasRestantes : 0
   const paletsPorDia = hlPerPallet > 0 ? hlPorDia / hlPerPallet : 0
   const carrosPorDia = paletsPorDia / 26
 
@@ -394,8 +431,8 @@ export default function DashboardVolume() {
   const [hlData,      setHlData]      = useState({})
   const [hlPerPallet, setHlPerPallet] = useState(1.44)
 
-  // Dados estáticos de classificação de segmento — carregados uma vez
-  const staticRef    = useRef({ zeroCervSet: new Set(), zeroNabSet: new Set(), highEndSet: new Set() })
+  // Dados estáticos de classificação — carregados uma vez
+  const staticRef      = useRef({ zeroCervSet: new Set(), zeroNabSet: new Set(), highEndSet: new Set() })
   const [staticLoaded, setStaticLoaded] = useState(false)
 
   useEffect(() => {
@@ -469,7 +506,7 @@ export default function DashboardVolume() {
         ;(catData ?? []).forEach(c => { catMap[c.codigo] = c })
       }
 
-      // Ratio HL/pallet a partir dos pedidos não-cancelados do mês
+      // Ratio HL/pallet a partir de pedidos não-cancelados do mês
       let totalPlt = 0, totalHLR = 0
       pedsAll.filter(p => p.status !== 'cancelado').forEach(p => {
         const cat = catMap[p.cod_produto]
@@ -479,13 +516,12 @@ export default function DashboardVolume() {
       })
       if (totalPlt > 0 && totalHLR > 0) setHlPerPallet(totalHLR / totalPlt)
 
-      // Real = pedidos vinculados a viagem OU marcados manualmente como realizado
+      // Real = pedidos vinculados a viagem OU marcados como realizado
       const pedsReal = pedsAll.filter(p => p.viagem_id != null || p.status === 'realizado')
 
       const { zeroCervSet, zeroNabSet, highEndSet } = staticRef.current
-
       const result = {}
-      SEGMENTOS.forEach(seg => { result[seg] = { total: 0, D1: 0, porDia: {} } })
+      SEGMENTOS_FOLHA.forEach(seg => { result[seg] = { total: 0, D1: 0, porDia: {} } })
 
       pedsReal.forEach(p => {
         const cat = catMap[p.cod_produto]
@@ -496,13 +532,13 @@ export default function DashboardVolume() {
           cat.embalagem  ?? '',
           zeroCervSet, zeroNabSet, highEndSet
         )
-        if (!SEGMENTOS.includes(seg)) return
+        if (!SEGMENTOS_FOLHA.includes(seg)) return
         const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
         if (hl <= 0) return
         const ds = p.data_puxada?.slice(0, 10)
         if (!ds) return
 
-        // Acumula total e porDia apenas até D-1
+        // Acumula apenas até D-1 (inclusive)
         if (ds <= yesterdayStr) {
           result[seg].total += hl
           result[seg].porDia[ds] = (result[seg].porDia[ds] || 0) + hl
@@ -520,10 +556,8 @@ export default function DashboardVolume() {
   const yesterday      = new Date(today); yesterday.setDate(today.getDate() - 1)
   const isCurrentMonth = year === today.getFullYear() && month === today.getMonth()
 
-  // Saldo D0 só faz sentido no mês corrente E quando ontem ainda está no mesmo mês
   const yesterdayInMonth = isCurrentMonth &&
-    yesterday.getMonth() === month &&
-    yesterday.getFullYear() === year
+    yesterday.getMonth() === month && yesterday.getFullYear() === year
   const showD0 = yesterdayInMonth
 
   const diasUteis = useMemo(() => diasUteisMes(year, month), [year, month])
@@ -536,12 +570,11 @@ export default function DashboardVolume() {
 
   const metas        = metaConfig?.metas   ?? {}
   const semanas      = metaConfig?.semanas ?? { s1: 30, s2: 30, s3: 20, s4: 20 }
-  const metaTotalHL  = SEGMENTOS.reduce((s, g) => s + (metas[g] || 0), 0)
-  const realTotalHL  = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.total || 0), 0)
+  const metaTotalHL  = META_KEYS.reduce((s, k) => s + (metas[k] || 0), 0)
+  const realTotalHL  = SEGMENTOS_FOLHA.reduce((s, seg) => s + (hlData[seg]?.total || 0), 0)
   const saldoTotalHL = Math.max(metaTotalHL - realTotalHL, 0)
 
   const ultimoDia     = new Date(year, month + 1, 0).getDate()
-  // Dias restantes a partir de hoje (inclusive) — saldo já exclui o puxado até ontem
   const diasRestantes = isCurrentMonth
     ? diasUteisRange(year, month, today.getDate(), ultimoDia)
     : 0
@@ -550,7 +583,6 @@ export default function DashboardVolume() {
     <DashboardLayout>
       <div className="px-4 pt-5 pb-8 space-y-5">
 
-        {/* Seletor de mês */}
         <div className="flex items-center gap-3">
           <button
             onClick={() => navMes(-1)}

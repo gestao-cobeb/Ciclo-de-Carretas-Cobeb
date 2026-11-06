@@ -4,8 +4,9 @@ import { supabase } from '../../lib/supabase'
 
 const CHAVE_VIAGENS = 'planejado_viagens'
 
+// Meta configurada no nível 2: OW agregado, RGB agregado, NAB, NAB Zero
 const GRUPOS_VOL = [
-  { label: 'Cerveja TT', segmentos: ['Cerveja OW', 'RGB Cerveja', 'High End', 'Match', 'Garrafa Meia', 'Zero Álcool'] },
+  { label: 'Cerveja TT', segmentos: ['Cerveja OW', 'RGB'] },
   { label: 'NAB',        segmentos: ['NAB', 'NAB Zero'] },
 ]
 
