@@ -144,7 +144,20 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
 
   const owC     = s('OW Core'); const owM = s('OW Match')
   const owHE    = s('OW High End'); const owZ = s('OW Zero Álcool')
-  const ow      = add(owC, owM, owHE, owZ); const owMeta = metas['Cerveja OW'] || 0
+  const ow      = add(owC, owM, owHE, owZ); const owMeta  = metas['Cerveja OW']   || 0
+  const owCMeta  = metas['OW Core']             || 0
+  const owMMeta  = metas['OW Match']            || 0
+  const owHEMeta = metas['OW High End']         || 0
+  const owZMeta  = metas['OW Zero Álcool']      || 0
+  const gmMeta   = metas['Garrafa Meia']        || 0
+  const gmCMeta  = metas['Garrafa Meia Core']   || 0
+  const gmHMeta  = metas['Garrafa Meia HE']     || 0
+  const giMeta   = metas['Garrafa Inteira']     || 0
+  const giCMeta  = metas['Garrafa Inteira Core']|| 0
+  const giHMeta  = metas['Garrafa Inteira HE']  || 0
+  const g1Meta   = metas['Garrafa 1L']          || 0
+  const g1CMeta  = metas['Garrafa 1L Core']     || 0
+  const g1HMeta  = metas['Garrafa 1L HE']       || 0
   const gmC     = s('Garrafa Meia Core');    const gmH = s('Garrafa Meia HE')
   const giC     = s('Garrafa Inteira Core'); const giH = s('Garrafa Inteira HE')
   const g1C     = s('Garrafa 1L Core');      const g1H = s('Garrafa 1L HE')
@@ -196,10 +209,10 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
                 padLeft="pl-6" bold rowClass="bg-cobeb-sky/40"
                 onToggle={() => toggle('ow')} isCollapsed={isc('ow')} />
               {!isc('ow') && <>
-                <DataRow {...dp} label="Core"        meta={0} {...owC}  padLeft="pl-9" />
-                <DataRow {...dp} label="Match"       meta={0} {...owM}  padLeft="pl-9" />
-                <DataRow {...dp} label="High End"    meta={0} {...owHE} padLeft="pl-9" />
-                <DataRow {...dp} label="Zero Álcool" meta={0} {...owZ}  padLeft="pl-9" />
+                <DataRow {...dp} label="Core"        meta={owCMeta}  {...owC}  padLeft="pl-9" />
+                <DataRow {...dp} label="Match"       meta={owMMeta}  {...owM}  padLeft="pl-9" />
+                <DataRow {...dp} label="High End"    meta={owHEMeta} {...owHE} padLeft="pl-9" />
+                <DataRow {...dp} label="Zero Álcool" meta={owZMeta}  {...owZ}  padLeft="pl-9" />
               </>}
 
               {/* RGB — linha de total + toggle */}
@@ -208,30 +221,30 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
                 onToggle={() => toggle('rgb')} isCollapsed={isc('rgb')} />
               {!isc('rgb') && <>
                 {/* Garrafa Meia — linha de total + toggle */}
-                <DataRow {...dp} label="Garrafa Meia" meta={0} {...gm}
+                <DataRow {...dp} label="Garrafa Meia" meta={gmMeta} {...gm}
                   padLeft="pl-9" bold rowClass="bg-cobeb-sky/40"
                   onToggle={() => toggle('gm')} isCollapsed={isc('gm')} />
                 {!isc('gm') && <>
-                  <DataRow {...dp} label="High End" meta={0} {...gmH} padLeft="pl-12" />
-                  <DataRow {...dp} label="Core"     meta={0} {...gmC} padLeft="pl-12" />
+                  <DataRow {...dp} label="High End" meta={gmHMeta} {...gmH} padLeft="pl-12" />
+                  <DataRow {...dp} label="Core"     meta={gmCMeta} {...gmC} padLeft="pl-12" />
                 </>}
 
                 {/* Garrafa Inteira — linha de total + toggle */}
-                <DataRow {...dp} label="Garrafa Inteira" meta={0} {...gi}
+                <DataRow {...dp} label="Garrafa Inteira" meta={giMeta} {...gi}
                   padLeft="pl-9" bold rowClass="bg-cobeb-sky/40"
                   onToggle={() => toggle('gi')} isCollapsed={isc('gi')} />
                 {!isc('gi') && <>
-                  <DataRow {...dp} label="High End" meta={0} {...giH} padLeft="pl-12" />
-                  <DataRow {...dp} label="Core"     meta={0} {...giC} padLeft="pl-12" />
+                  <DataRow {...dp} label="High End" meta={giHMeta} {...giH} padLeft="pl-12" />
+                  <DataRow {...dp} label="Core"     meta={giCMeta} {...giC} padLeft="pl-12" />
                 </>}
 
                 {/* Garrafa 1L — linha de total + toggle */}
-                <DataRow {...dp} label="Garrafa 1L" meta={0} {...g1}
+                <DataRow {...dp} label="Garrafa 1L" meta={g1Meta} {...g1}
                   padLeft="pl-9" bold rowClass="bg-cobeb-sky/40"
                   onToggle={() => toggle('g1')} isCollapsed={isc('g1')} />
                 {!isc('g1') && <>
-                  <DataRow {...dp} label="High End" meta={0} {...g1H} padLeft="pl-12" />
-                  <DataRow {...dp} label="Core"     meta={0} {...g1C} padLeft="pl-12" />
+                  <DataRow {...dp} label="High End" meta={g1HMeta} {...g1H} padLeft="pl-12" />
+                  <DataRow {...dp} label="Core"     meta={g1CMeta} {...g1C} padLeft="pl-12" />
                 </>}
               </>}
             </>}

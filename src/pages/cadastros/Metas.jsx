@@ -4,13 +4,16 @@ import { supabase } from '../../lib/supabase'
 
 const CHAVE_VIAGENS = 'planejado_viagens'
 
-// Meta configurada no nível 2: OW agregado, RGB agregado, NAB, NAB Zero
-const GRUPOS_VOL = [
-  { label: 'Cerveja TT', segmentos: ['Cerveja OW', 'RGB'] },
-  { label: 'NAB',        segmentos: ['NAB', 'NAB Zero'] },
+const SEGMENTOS_VOL = [
+  'Cerveja OW',
+  'OW Core', 'OW Match', 'OW High End', 'OW Zero Álcool',
+  'RGB',
+  'Garrafa Meia', 'Garrafa Meia Core', 'Garrafa Meia HE',
+  'Garrafa Inteira', 'Garrafa Inteira Core', 'Garrafa Inteira HE',
+  'Garrafa 1L', 'Garrafa 1L Core', 'Garrafa 1L HE',
+  'NAB', 'NAB Zero',
 ]
-
-const SEGMENTOS_VOL = GRUPOS_VOL.flatMap(g => g.segmentos)
+const META_TOTAL_KEYS = ['Cerveja OW', 'RGB', 'NAB', 'NAB Zero']
 
 const MESES_VOL = [
   'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
@@ -223,6 +226,25 @@ function MotivosBlitz() {
   )
 }
 
+function MetaInput({ label, seg, metas, setMetas, indent, bgRow = '' }) {
+  return (
+    <div className={`flex items-center gap-3 ${indent} py-2 border-t border-cobeb-border/40 ${bgRow}`}>
+      <span className="text-sm text-cobeb-text flex-1 truncate">{label}</span>
+      <div className="flex items-center gap-1.5 shrink-0">
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          value={metas[seg] ?? ''}
+          onChange={e => setMetas(m => ({ ...m, [seg]: e.target.value }))}
+          className="w-24 text-sm border border-cobeb-border rounded-xl px-3 py-1.5 text-right focus:outline-none focus:border-cobeb-blue [appearance:textfield]"
+        />
+        <span className="text-xs text-slate-400 w-5">HL</span>
+      </div>
+    </div>
+  )
+}
+
 function MetaVolumePuxada() {
   const now = new Date()
   const [year,     setYear]     = useState(now.getFullYear())
@@ -293,7 +315,11 @@ function MetaVolumePuxada() {
     setTimeout(() => setSalvo(false), 2000)
   }
 
-  const somaHL = SEGMENTOS_VOL.reduce((s, seg) => s + (parseFloat(metas[seg]) || 0), 0)
+  const somaHL    = META_TOTAL_KEYS.reduce((s, k) => s + (parseFloat(metas[k]) || 0), 0)
+  const sumMetas  = (...keys) => {
+    const v = keys.reduce((s, k) => s + (parseFloat(metas[k]) || 0), 0)
+    return v > 0 ? v.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' HL' : '—'
+  }
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-5">
@@ -321,40 +347,36 @@ function MetaVolumePuxada() {
         </div>
       ) : (
         <>
-          {/* Metas por segmento — agrupadas */}
+          {/* Metas por segmento — hierarquia completa */}
           <p className="text-[11px] font-semibold text-cobeb-navy mb-2 uppercase tracking-wide">Meta por segmento (HL/mês)</p>
-          <div className="mb-4 space-y-3">
-            {GRUPOS_VOL.map(grupo => {
-              const somaGrupo = grupo.segmentos.reduce((s, seg) => s + (parseFloat(metas[seg]) || 0), 0)
-              return (
-                <div key={grupo.label} className="rounded-xl border border-cobeb-border overflow-hidden">
-                  <div className="flex items-center justify-between bg-cobeb-sky/60 px-3 py-1.5">
-                    <span className="text-[11px] font-black text-cobeb-navy uppercase tracking-widest">{grupo.label}</span>
-                    <span className="text-[10px] font-semibold text-cobeb-navy">
-                      {somaGrupo > 0 ? somaGrupo.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) + ' HL' : '—'}
-                    </span>
-                  </div>
-                  <div className="divide-y divide-cobeb-border/40">
-                    {grupo.segmentos.map(seg => (
-                      <div key={seg} className="flex items-center gap-3 px-3 py-2">
-                        <span className="text-sm text-cobeb-text flex-1 truncate">{seg}</span>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.1"
-                            value={metas[seg] ?? ''}
-                            onChange={e => setMetas(m => ({ ...m, [seg]: e.target.value }))}
-                            className="w-24 text-sm border border-cobeb-border rounded-xl px-3 py-1.5 text-right focus:outline-none focus:border-cobeb-blue [appearance:textfield]"
-                          />
-                          <span className="text-xs text-slate-400 w-5">HL</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )
-            })}
+          <div className="mb-4 rounded-xl border border-cobeb-border overflow-hidden">
+            {/* ── Cerveja TT ───────────────────────────────────────── */}
+            <div className="flex items-center justify-between bg-cobeb-sky/60 px-3 py-1.5">
+              <span className="text-[11px] font-black text-cobeb-navy uppercase tracking-widest">Cerveja TT</span>
+              <span className="text-[10px] font-semibold text-cobeb-navy">{sumMetas('Cerveja OW', 'RGB')}</span>
+            </div>
+            <MetaInput label="Cerveja OW"      seg="Cerveja OW"         metas={metas} setMetas={setMetas} indent="pl-5 pr-3"  bgRow="bg-cobeb-sky/30" />
+            <MetaInput label="Core"            seg="OW Core"            metas={metas} setMetas={setMetas} indent="pl-9 pr-3"  />
+            <MetaInput label="Match"           seg="OW Match"           metas={metas} setMetas={setMetas} indent="pl-9 pr-3"  />
+            <MetaInput label="High End"        seg="OW High End"        metas={metas} setMetas={setMetas} indent="pl-9 pr-3"  />
+            <MetaInput label="Zero Álcool"     seg="OW Zero Álcool"     metas={metas} setMetas={setMetas} indent="pl-9 pr-3"  />
+            <MetaInput label="RGB"             seg="RGB"                metas={metas} setMetas={setMetas} indent="pl-5 pr-3"  bgRow="bg-cobeb-sky/30" />
+            <MetaInput label="Garrafa Meia"    seg="Garrafa Meia"       metas={metas} setMetas={setMetas} indent="pl-9 pr-3"  bgRow="bg-cobeb-sky/10" />
+            <MetaInput label="High End"        seg="Garrafa Meia HE"    metas={metas} setMetas={setMetas} indent="pl-12 pr-3" />
+            <MetaInput label="Core"            seg="Garrafa Meia Core"  metas={metas} setMetas={setMetas} indent="pl-12 pr-3" />
+            <MetaInput label="Garrafa Inteira" seg="Garrafa Inteira"       metas={metas} setMetas={setMetas} indent="pl-9 pr-3"  bgRow="bg-cobeb-sky/10" />
+            <MetaInput label="High End"        seg="Garrafa Inteira HE"    metas={metas} setMetas={setMetas} indent="pl-12 pr-3" />
+            <MetaInput label="Core"            seg="Garrafa Inteira Core"  metas={metas} setMetas={setMetas} indent="pl-12 pr-3" />
+            <MetaInput label="Garrafa 1L"      seg="Garrafa 1L"          metas={metas} setMetas={setMetas} indent="pl-9 pr-3"  bgRow="bg-cobeb-sky/10" />
+            <MetaInput label="High End"        seg="Garrafa 1L HE"       metas={metas} setMetas={setMetas} indent="pl-12 pr-3" />
+            <MetaInput label="Core"            seg="Garrafa 1L Core"     metas={metas} setMetas={setMetas} indent="pl-12 pr-3" />
+            {/* ── NAB ──────────────────────────────────────────────── */}
+            <div className="flex items-center justify-between bg-cobeb-sky/60 px-3 py-1.5 border-t border-cobeb-border/40">
+              <span className="text-[11px] font-black text-cobeb-navy uppercase tracking-widest">NAB</span>
+              <span className="text-[10px] font-semibold text-cobeb-navy">{sumMetas('NAB', 'NAB Zero')}</span>
+            </div>
+            <MetaInput label="NAB"      seg="NAB"      metas={metas} setMetas={setMetas} indent="pl-5 pr-3" />
+            <MetaInput label="NAB Zero" seg="NAB Zero" metas={metas} setMetas={setMetas} indent="pl-5 pr-3" />
           </div>
 
           <div className="flex items-baseline justify-between pb-4 border-b border-cobeb-border mb-4">
