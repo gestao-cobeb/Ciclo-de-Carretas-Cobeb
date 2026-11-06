@@ -23,6 +23,10 @@ import Dados from './pages/Dados'
 import OperadoresPage from './pages/OperadoresPage'
 import Retrabalho from './pages/Retrabalho'
 
+// Perfis que têm acesso a qualquer guia do dashboard — adicione aqui para garantir
+// que novas guias fiquem acessíveis sem mudança adicional nas rotas.
+const ROLES_DASHBOARD = ['admin', 'ajudante']
+
 const PERFIL_ROTA = {
   admin:      '/dashboard',
   motorista:  '/viagem',
@@ -83,16 +87,16 @@ function AppRoutes() {
       <Route path="/selecionar-modulo" element={<SeletorModulo />} />
 
       <Route path="/dashboard"
-        element={<ProtectedRoute allowedRoles={['admin']}><Dashboard /></ProtectedRoute>}
+        element={<ProtectedRoute allowedRoles={ROLES_DASHBOARD}><Dashboard /></ProtectedRoute>}
       />
       <Route path="/dashboard-puxada"
-        element={<ProtectedRoute allowedRoles={['admin']}><Dashboard mode="puxada" /></ProtectedRoute>}
+        element={<ProtectedRoute allowedRoles={ROLES_DASHBOARD}><Dashboard mode="puxada" /></ProtectedRoute>}
       />
       <Route path="/dashboard-comercial"
-        element={<ProtectedRoute allowedRoles={['admin']}><DashboardComercial /></ProtectedRoute>}
+        element={<ProtectedRoute allowedRoles={ROLES_DASHBOARD}><DashboardComercial /></ProtectedRoute>}
       />
       <Route path="/dashboard-volume"
-        element={<ProtectedRoute allowedRoles={['admin']}><DashboardVolume /></ProtectedRoute>}
+        element={<ProtectedRoute allowedRoles={ROLES_DASHBOARD}><DashboardVolume /></ProtectedRoute>}
       />
       <Route path="/pedidos"
         element={<ProtectedRoute allowedRoles={['admin']}><Pedidos /></ProtectedRoute>}
