@@ -387,7 +387,7 @@ function CardSemanas({ year, month, semanas, metaTotalHL, hlData }) {
 function CardCarrosPorDia({ saldoHL, diasRestantes, hlPerPallet }) {
   const hlPorDia     = diasRestantes > 0 ? saldoHL / diasRestantes : 0
   const paletsPorDia = hlPerPallet > 0 ? hlPorDia / hlPerPallet : 0
-  const carrosPorDia = paletsPorDia / 26
+  const carrosPorDia = Math.ceil(paletsPorDia / 26)
 
   if (saldoHL <= 0) {
     return (
@@ -444,7 +444,7 @@ function CardCarrosPorDia({ saldoHL, diasRestantes, hlPerPallet }) {
         <div className="bg-cobeb-navy rounded-xl p-3 text-center">
           <p className="text-[10px] text-white/70 mb-1">Carros por Dia</p>
           <p className="text-xl font-black text-white">
-            {carrosPorDia.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+            {carrosPorDia}
           </p>
           <p className="text-[10px] text-white/60 mt-0.5">cap. 26 plt/carreta</p>
         </div>
