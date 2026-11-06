@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { ChevronLeft, ChevronRight, AlertTriangle, TrendingUp, TrendingDown, Truck } from 'lucide-react'
 import DashboardLayout from '../components/DashboardLayout'
 import { supabase } from '../lib/supabase'
@@ -50,11 +50,24 @@ function fmtPct(v) {
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 1 }) + '%'
 }
 
+// Prioridade: Zero Álcool > NAB Zero > High End > Match > Garrafa Meia > RGB Cerveja > Cerveja OW > NAB
+function classifySegmento(cod, tm, emb, zeroCervSet, zeroNabSet, highEndSet) {
+  if (zeroCervSet.has(cod)) return 'Zero Álcool'
+  if (zeroNabSet.has(cod))  return 'NAB Zero'
+  if (highEndSet.has(cod))  return 'High End'
+  const isCerv = tm === '001 - CERVEJA' || tm === '028 - BEBIDAS QUENTES'
+  if (tm === '028 - BEBIDAS QUENTES') return 'Match'
+  if (isCerv && emb.startsWith('017')) return 'Garrafa Meia'
+  if (isCerv && (emb.startsWith('018') || emb.startsWith('085'))) return 'RGB Cerveja'
+  if (isCerv) return 'Cerveja OW'
+  return 'NAB'
+}
+
 // ── Sub-componentes ───────────────────────────────────────────────────────────
 
-function LinhaSubtotal({ label, meta, real, hoje, diasUteis, diasPassados, showD0 }) {
+function LinhaSubtotal({ label, meta, real, D1, diasUteis, diasPassados, showD0 }) {
   const metaDiaria = diasUteis > 0 && meta > 0 ? meta / diasUteis : 0
-  const diff0      = hoje - metaDiaria
+  const diff0      = D1 - metaDiaria
   const pct        = meta > 0 ? real / meta * 100 : null
   const proj       = diasPassados > 0 && diasUteis > 0 && meta > 0 ? (real / diasPassados) * diasUteis : null
   const pctColor   = pct == null ? '' : pct >= 100 ? 'text-emerald-600' : pct >= 80 ? 'text-amber-600' : 'text-red-500'
@@ -92,15 +105,15 @@ function LinhaSubtotal({ label, meta, real, hoje, diasUteis, diasPassados, showD
 function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
   const totalMeta       = SEGMENTOS.reduce((s, g) => s + (metas[g] || 0), 0)
   const totalReal       = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.total || 0), 0)
-  const totalHoje       = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.hoje || 0), 0)
+  const totalD1         = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.D1 || 0), 0)
   const metaDiariaTotal = diasUteis > 0 ? totalMeta / diasUteis : 0
-  const diff0Total      = totalHoje - metaDiariaTotal
+  const diff0Total      = totalD1 - metaDiariaTotal
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
       <div className="px-4 pt-4 pb-3 border-b border-cobeb-border/50">
         <h2 className="text-cobeb-text font-semibold text-sm">Volume por Segmento</h2>
-        <p className="text-xs text-slate-400 mt-0.5">Meta de puxada mensal em HL por segmento de marca</p>
+        <p className="text-xs text-slate-400 mt-0.5">Meta de puxada mensal em HL por segmento de marca · Real acumulado até D-1</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
@@ -118,7 +131,7 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
             {GRUPOS.map((grupo, gi) => {
               const grupoMeta = grupo.segmentos.reduce((s, seg) => s + (metas[seg] || 0), 0)
               const grupoReal = grupo.segmentos.reduce((s, seg) => s + (hlData[seg]?.total || 0), 0)
-              const grupoHoje = grupo.segmentos.reduce((s, seg) => s + (hlData[seg]?.hoje || 0), 0)
+              const grupoD1   = grupo.segmentos.reduce((s, seg) => s + (hlData[seg]?.D1 || 0), 0)
               const cols      = showD0 ? 6 : 5
 
               return (
@@ -134,9 +147,9 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
                   {grupo.segmentos.map(seg => {
                     const meta       = metas[seg] || 0
                     const real       = hlData[seg]?.total || 0
-                    const hoje       = hlData[seg]?.hoje || 0
+                    const D1         = hlData[seg]?.D1 || 0
                     const metaDiaria = diasUteis > 0 && meta > 0 ? meta / diasUteis : 0
-                    const diff0      = hoje - metaDiaria
+                    const diff0      = D1 - metaDiaria
                     const pct        = meta > 0 ? real / meta * 100 : null
                     const proj       = diasPassados > 0 && diasUteis > 0 ? (real / diasPassados) * diasUteis : null
                     const pctColor   = pct  == null ? '' : pct  >= 100 ? 'text-emerald-600' : pct  >= 80 ? 'text-amber-600' : 'text-red-500'
@@ -181,7 +194,7 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
                     label={grupo.label}
                     meta={grupoMeta}
                     real={grupoReal}
-                    hoje={grupoHoje}
+                    D1={grupoD1}
                     diasUteis={diasUteis}
                     diasPassados={diasPassados}
                     showD0={showD0}
@@ -379,7 +392,29 @@ export default function DashboardVolume() {
   const [loading,     setLoading]     = useState(true)
   const [metaConfig,  setMetaConfig]  = useState(null)
   const [hlData,      setHlData]      = useState({})
-  const [hlPerPallet, setHlPerPallet] = useState(1.44) // HL/pallet ratio, computed from catalog
+  const [hlPerPallet, setHlPerPallet] = useState(1.44)
+
+  // Dados estáticos de classificação de segmento — carregados uma vez
+  const staticRef    = useRef({ zeroCervSet: new Set(), zeroNabSet: new Set(), highEndSet: new Set() })
+  const [staticLoaded, setStaticLoaded] = useState(false)
+
+  useEffect(() => {
+    Promise.all([
+      supabase.from('depara_zero').select('cod_promax, tipo'),
+      supabase.from('demanda').select('cod_promax, segmento'),
+    ]).then(([{ data: dpz }, { data: dem }]) => {
+      const czs = new Set(), nzs = new Set(), hes = new Set()
+      ;(dpz ?? []).forEach(d => {
+        if (d.tipo === 'CERVEJA ZERO') czs.add(d.cod_promax)
+        if (d.tipo === 'NAB ZERO')     nzs.add(d.cod_promax)
+      })
+      ;(dem ?? []).forEach(d => {
+        if (d.segmento?.toUpperCase().includes('HIGH END')) hes.add(d.cod_promax)
+      })
+      staticRef.current = { zeroCervSet: czs, zeroNabSet: nzs, highEndSet: hes }
+      setStaticLoaded(true)
+    })
+  }, [])
 
   const mesRef = `${year}-${String(month + 1).padStart(2, '0')}`
 
@@ -391,12 +426,17 @@ export default function DashboardVolume() {
   }
 
   useEffect(() => {
+    if (!staticLoaded) return
+
     async function load() {
       setLoading(true)
       const monthStart = `${mesRef}-01`
       const lastDay    = new Date(year, month + 1, 0).getDate()
       const monthEnd   = `${mesRef}-${String(lastDay).padStart(2, '0')}`
-      const todayStr   = new Date().toISOString().slice(0, 10)
+
+      const yesterday    = new Date()
+      yesterday.setDate(yesterday.getDate() - 1)
+      const yesterdayStr = yesterday.toISOString().slice(0, 10)
 
       const [{ data: cfgData }, { data: pedsData }] = await Promise.all([
         supabase
@@ -424,12 +464,12 @@ export default function DashboardVolume() {
       if (skus.length) {
         const { data: catData } = await supabase
           .from('produtos_catalogo')
-          .select('codigo, tipo_marca, caixas_pallet, nr_fator_conversao')
+          .select('codigo, tipo_marca, embalagem, caixas_pallet, nr_fator_conversao')
           .in('codigo', skus)
         ;(catData ?? []).forEach(c => { catMap[c.codigo] = c })
       }
 
-      // Compute HL/pallet ratio from non-cancelled pedidos
+      // Ratio HL/pallet a partir dos pedidos não-cancelados do mês
       let totalPlt = 0, totalHLR = 0
       pedsAll.filter(p => p.status !== 'cancelado').forEach(p => {
         const cat = catMap[p.cod_produto]
@@ -439,25 +479,34 @@ export default function DashboardVolume() {
       })
       if (totalPlt > 0 && totalHLR > 0) setHlPerPallet(totalHLR / totalPlt)
 
-      // Real = pedidos linked to a viagem OR manually marked realizado
+      // Real = pedidos vinculados a viagem OU marcados manualmente como realizado
       const pedsReal = pedsAll.filter(p => p.viagem_id != null || p.status === 'realizado')
 
-      // Aggregate by segment
+      const { zeroCervSet, zeroNabSet, highEndSet } = staticRef.current
+
       const result = {}
-      SEGMENTOS.forEach(seg => { result[seg] = { total: 0, hoje: 0, porDia: {} } })
+      SEGMENTOS.forEach(seg => { result[seg] = { total: 0, D1: 0, porDia: {} } })
 
       pedsReal.forEach(p => {
         const cat = catMap[p.cod_produto]
         if (!cat) return
-        const seg = cat.tipo_marca
+        const seg = classifySegmento(
+          p.cod_produto,
+          cat.tipo_marca ?? '',
+          cat.embalagem  ?? '',
+          zeroCervSet, zeroNabSet, highEndSet
+        )
         if (!SEGMENTOS.includes(seg)) return
         const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
         if (hl <= 0) return
-        result[seg].total += hl
         const ds = p.data_puxada?.slice(0, 10)
-        if (ds) {
+        if (!ds) return
+
+        // Acumula total e porDia apenas até D-1
+        if (ds <= yesterdayStr) {
+          result[seg].total += hl
           result[seg].porDia[ds] = (result[seg].porDia[ds] || 0) + hl
-          if (ds === todayStr) result[seg].hoje += hl
+          if (ds === yesterdayStr) result[seg].D1 += hl
         }
       })
 
@@ -465,29 +514,36 @@ export default function DashboardVolume() {
       setLoading(false)
     }
     load()
-  }, [mesRef])
+  }, [mesRef, staticLoaded])
 
-  const today         = new Date()
+  const today          = new Date()
+  const yesterday      = new Date(today); yesterday.setDate(today.getDate() - 1)
   const isCurrentMonth = year === today.getFullYear() && month === today.getMonth()
-  const isSunday      = today.getDay() === 0
-  const showD0        = isCurrentMonth && !isSunday
+
+  // Saldo D0 só faz sentido no mês corrente E quando ontem ainda está no mesmo mês
+  const yesterdayInMonth = isCurrentMonth &&
+    yesterday.getMonth() === month &&
+    yesterday.getFullYear() === year
+  const showD0 = yesterdayInMonth
 
   const diasUteis = useMemo(() => diasUteisMes(year, month), [year, month])
 
   const diasPassados = useMemo(() => {
-    if (!isCurrentMonth) return diasUteis
-    return diasUteisRange(year, month, 1, new Date().getDate())
-  }, [year, month, isCurrentMonth, diasUteis])
+    if (!isCurrentMonth)   return diasUteis
+    if (!yesterdayInMonth) return 0
+    return diasUteisRange(year, month, 1, yesterday.getDate())
+  }, [year, month, isCurrentMonth, yesterdayInMonth, diasUteis])
 
-  const metas      = metaConfig?.metas   ?? {}
-  const semanas    = metaConfig?.semanas ?? { s1: 30, s2: 30, s3: 20, s4: 20 }
-  const metaTotalHL = SEGMENTOS.reduce((s, g) => s + (metas[g] || 0), 0)
-  const realTotalHL = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.total || 0), 0)
+  const metas        = metaConfig?.metas   ?? {}
+  const semanas      = metaConfig?.semanas ?? { s1: 30, s2: 30, s3: 20, s4: 20 }
+  const metaTotalHL  = SEGMENTOS.reduce((s, g) => s + (metas[g] || 0), 0)
+  const realTotalHL  = SEGMENTOS.reduce((s, g) => s + (hlData[g]?.total || 0), 0)
   const saldoTotalHL = Math.max(metaTotalHL - realTotalHL, 0)
 
   const ultimoDia     = new Date(year, month + 1, 0).getDate()
+  // Dias restantes a partir de hoje (inclusive) — saldo já exclui o puxado até ontem
   const diasRestantes = isCurrentMonth
-    ? diasUteisRange(year, month, today.getDate() + 1, ultimoDia)
+    ? diasUteisRange(year, month, today.getDate(), ultimoDia)
     : 0
 
   return (
