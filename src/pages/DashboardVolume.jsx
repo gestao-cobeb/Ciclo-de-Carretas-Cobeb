@@ -99,7 +99,7 @@ function GrupoHeader({ label, cols, depth = 0, onToggle, isCollapsed }) {
   )
 }
 
-function DataRow({ label, meta, real, D1, diasUteis, diasPassados, showD0, padLeft = 'pl-6', bold = false, rowClass = '' }) {
+function DataRow({ label, meta, real, D1, diasUteis, diasPassados, showD0, padLeft = 'pl-6', bold = false, rowClass = '', onToggle, isCollapsed }) {
   const md       = diasUteis > 0 && meta > 0 ? meta / diasUteis : 0
   const diff     = D1 - md
   const pct      = meta > 0 ? real / meta * 100 : null
@@ -112,7 +112,14 @@ function DataRow({ label, meta, real, D1, diasUteis, diasPassados, showD0, padLe
   return (
     <tr className={`border-t border-cobeb-border/40 hover:bg-cobeb-sky/30 transition-colors ${rowClass}`}>
       <td className={`${padLeft} pr-3 py-2.5 text-xs whitespace-nowrap ${bold ? 'font-bold text-cobeb-navy' : 'text-cobeb-text'}`}>
-        {label}
+        {onToggle ? (
+          <button onClick={onToggle} className="flex items-center gap-1.5 w-full text-left select-none cursor-pointer">
+            {isCollapsed
+              ? <ChevronRight size={10} className="shrink-0 opacity-50" />
+              : <ChevronDown  size={10} className="shrink-0 opacity-50" />}
+            {label}
+          </button>
+        ) : label}
       </td>
       <td className="px-3 py-2.5 text-right text-xs text-slate-600">
         {meta > 0 ? fmtHL(meta) : <span className="text-slate-300">—</span>}
@@ -209,7 +216,9 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
               onToggle={() => toggle('tt')} isCollapsed={isc('tt')} />
 
             {!isc('tt') && <>
-              <GrupoHeader label="Cerveja OW" cols={cols} depth={1}
+              {/* Cerveja OW: linha de total é o próprio toggle */}
+              <DataRow {...dp} label="Cerveja OW" meta={owMeta} {...ow}
+                padLeft="pl-6" bold rowClass="bg-cobeb-sky/40"
                 onToggle={() => toggle('ow')} isCollapsed={isc('ow')} />
               {!isc('ow') && <>
                 <DataRow {...dp} label="Core"        meta={0} {...owC}  padLeft="pl-9" />
@@ -217,14 +226,13 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
                 <DataRow {...dp} label="High End"    meta={0} {...owHE} padLeft="pl-9" />
                 <DataRow {...dp} label="Zero Álcool" meta={0} {...owZ}  padLeft="pl-9" />
               </>}
-              <DataRow {...dp} label="↳ Total Cerveja OW" meta={owMeta} {...ow}
-                padLeft="pl-6" bold rowClass="bg-cobeb-sky/40" />
 
-              <GrupoHeader label="RGB" cols={cols} depth={1}
+              {/* RGB: linha de total é o próprio toggle */}
+              <DataRow {...dp} label="RGB" meta={rgbMeta} {...rgb}
+                padLeft="pl-6" bold rowClass="bg-cobeb-sky/50"
                 onToggle={() => toggle('rgb')} isCollapsed={isc('rgb')} />
 
               {!isc('rgb') && <>
-                {/* Garrafa Meia */}
                 <GrupoHeader label="Garrafa Meia" cols={cols} depth={2}
                   onToggle={() => toggle('gm')} isCollapsed={isc('gm')} />
                 {!isc('gm') && <>
@@ -234,7 +242,6 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
                 <DataRow {...dp} label="↳ Total Garrafa Meia" meta={0} {...gm}
                   padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
 
-                {/* Garrafa Inteira */}
                 <GrupoHeader label="Garrafa Inteira" cols={cols} depth={2}
                   onToggle={() => toggle('gi')} isCollapsed={isc('gi')} />
                 {!isc('gi') && <>
@@ -244,7 +251,6 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
                 <DataRow {...dp} label="↳ Total Garrafa Inteira" meta={0} {...gi}
                   padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
 
-                {/* Garrafa 1L */}
                 <GrupoHeader label="Garrafa 1L" cols={cols} depth={2}
                   onToggle={() => toggle('g1')} isCollapsed={isc('g1')} />
                 {!isc('g1') && <>
@@ -254,25 +260,19 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0 }) {
                 <DataRow {...dp} label="↳ Total Garrafa 1L" meta={0} {...g1}
                   padLeft="pl-9" bold rowClass="bg-cobeb-sky/40" />
               </>}
-
-              <DataRow {...dp} label="↳ Total RGB" meta={rgbMeta} {...rgb}
-                padLeft="pl-6" bold rowClass="bg-cobeb-sky/50" />
             </>}
 
             <DataRow {...dp} label="↳ Total Cerveja TT" meta={ttMeta} {...tt}
               padLeft="pl-4" bold rowClass="bg-cobeb-navy/5" />
 
-            {/* ── NAB ── */}
-            <GrupoHeader label="NAB" cols={cols} depth={0}
+            {/* NAB: linha de total é o próprio toggle */}
+            <DataRow {...dp} label="NAB" meta={nabTTMeta} {...nabTT}
+              padLeft="pl-4" bold rowClass="bg-cobeb-navy/5"
               onToggle={() => toggle('nab')} isCollapsed={isc('nab')} />
-
             {!isc('nab') && <>
               <DataRow {...dp} label="NAB"      meta={nabMeta}  {...nab}  padLeft="pl-6" />
               <DataRow {...dp} label="NAB Zero" meta={nabZMeta} {...nabZ} padLeft="pl-6" />
             </>}
-
-            <DataRow {...dp} label="↳ Total NAB" meta={nabTTMeta} {...nabTT}
-              padLeft="pl-4" bold rowClass="bg-cobeb-sky/40" />
 
           </tbody>
           <tfoot>
