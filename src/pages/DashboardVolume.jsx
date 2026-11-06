@@ -110,7 +110,7 @@ function DataRow({ label, meta, real, D1, D0 = 0, diasUteis, diasPassados, showD
         {pct == null ? <span className="text-slate-300">—</span> : fmtPct(pct)}
       </td>
       {showD0 && (
-        <td className={`px-3 py-2.5 text-right text-xs ${bold ? 'font-bold' : 'font-semibold'} ${meta > 0 ? d0Color : ''}`}>
+        <td className={`px-3 py-2.5 text-center text-xs ${bold ? 'font-bold' : 'font-semibold'} ${meta > 0 ? d0Color : ''}`}>
           {meta > 0
             ? `${diff >= 0 ? '+' : ''}${fmtHL(diff)}`
             : <span className="text-slate-300">—</span>}
@@ -201,7 +201,7 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0, unitFact
               <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Real (HL)</th>
               {showD0 && <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">D0 (HL)</th>}
               <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">% Ating.</th>
-              {showD0 && <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Dispersão Dia D-1</th>}
+              {showD0 && <th className="px-3 py-2 text-center text-cobeb-navy font-semibold whitespace-nowrap">Dispersão Dia D-1</th>}
               <th className="px-3 py-2 text-left text-cobeb-navy font-semibold whitespace-nowrap">Tendência</th>
             </tr>
           </thead>
@@ -288,7 +288,7 @@ function TabelaVolume({ metas, hlData, diasUteis, diasPassados, showD0, unitFact
                 ) : '—'}
               </td>
               {showD0 && (
-                <td className={`px-3 py-2.5 text-right font-black text-xs ${totalMeta > 0 ? (totalDiff >= 0 ? 'text-emerald-600' : 'text-red-500') : ''}`}>
+                <td className={`px-3 py-2.5 text-center font-black text-xs ${totalMeta > 0 ? (totalDiff >= 0 ? 'text-emerald-600' : 'text-red-500') : ''}`}>
                   {totalMeta > 0 ? `${totalDiff >= 0 ? '+' : ''}${fmtHL(totalDiff)}` : '—'}
                 </td>
               )}
@@ -599,8 +599,7 @@ export default function DashboardVolume() {
         result[seg].porDia[ds] = (result[seg].porDia[ds] || 0) + hl
         if (ds === yesterdayStr) result[seg].D1 += hl
       }
-      // D0: hoje, apenas pedidos vinculados a viagem
-      if (ds === todayStr && p.viagem_id != null) {
+      if (ds === todayStr) {
         result[seg].D0 += hl
       }
     })
