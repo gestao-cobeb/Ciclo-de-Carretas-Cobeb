@@ -240,13 +240,6 @@ export default function Retrabalho() {
           <p className="text-white text-sm font-semibold truncate">Retrabalho</p>
         </div>
         <div className="flex items-center gap-1">
-          {profile?.acesso_total && (
-            <button onClick={() => setCriarModal(true)}
-              className="text-purple-300 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10"
-              title="Criar retrabalho manual">
-              <FilePlus size={16} />
-            </button>
-          )}
           <button onClick={load}
             className="text-blue-300/70 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/10">
             <RefreshCw size={16} />
@@ -268,21 +261,28 @@ export default function Retrabalho() {
       {/* Body */}
       <main className="max-w-lg mx-auto px-4 pt-4 pb-8 space-y-3">
 
-        {/* Toggle Ativos / Concluídos */}
-        <div className="flex rounded-2xl border border-cobeb-border overflow-hidden text-xs font-semibold bg-white">
-          {[
-            { value: 'ativos',    label: 'Ativos' },
-            { value: 'concluidos', label: 'Concluídos' },
-          ].map(({ value, label }) => (
-            <button key={value} onClick={() => setStatusFiltro(value)}
-              className={`flex-1 py-2.5 transition-colors ${
-                statusFiltro === value
-                  ? 'bg-cobeb-navy text-white'
-                  : 'text-slate-500 hover:bg-[#EBF5FF]'
-              }`}>
-              {label}
-            </button>
-          ))}
+        {/* Toggle Ativos / Concluídos + botão retrabalho manual */}
+        <div className="flex items-center gap-2">
+          <div className="flex flex-1 rounded-2xl border border-cobeb-border overflow-hidden text-xs font-semibold bg-white">
+            {[
+              { value: 'ativos',     label: 'Ativos' },
+              { value: 'concluidos', label: 'Concluídos' },
+            ].map(({ value, label }) => (
+              <button key={value} onClick={() => setStatusFiltro(value)}
+                className={`flex-1 py-2.5 transition-colors ${
+                  statusFiltro === value
+                    ? 'bg-cobeb-navy text-white'
+                    : 'text-slate-500 hover:bg-[#EBF5FF]'
+                }`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <button onClick={() => setCriarModal(true)}
+            className="flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3 py-2.5 rounded-2xl transition-colors shrink-0">
+            <Plus size={13} />
+            Manual
+          </button>
         </div>
 
         {/* Filtro período + count */}
