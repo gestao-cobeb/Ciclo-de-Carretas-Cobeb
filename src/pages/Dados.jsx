@@ -4,21 +4,6 @@ import * as XLSX from 'xlsx'
 import AdminLayout from '../components/AdminLayout'
 import { supabase } from '../lib/supabase'
 
-function resolverTurno(dt, turnos) {
-  if (!dt || !turnos.length) return '—'
-  const d    = new Date(dt)
-  const hora = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  for (const t of turnos) {
-    const ini = t.hora_inicio.slice(0, 5)
-    const fim = t.hora_fim.slice(0, 5)
-    const match = ini < fim
-      ? hora >= ini && hora < fim          // turno normal
-      : hora >= ini || hora < fim          // cruza meia-noite
-    if (match) return `Turno ${t.nome}`
-  }
-  return '—'
-}
-
 function diffHHMM(start, end) {
   if (!start || !end) return '—'
   const ms = new Date(end) - new Date(start)
@@ -81,7 +66,6 @@ const METRIC_KEYS = new Set([
   'tma_fab', 'tma_rev', 'aguardo', 'tempo_descarga', 'tempo_conf', 'tmv',
 ])
 
-// Fonte de verdade dos itens sujeitos a dispersão — derivado de COLS × METRIC_KEYS
 const METRICS_DISPERSAO = COLS.filter(c => METRIC_KEYS.has(c.key))
 
 const TABLE_MIN_WIDTH = COLS.reduce((s, c) => s + c.min, 0)
@@ -89,44 +73,42 @@ const TABLE_MIN_WIDTH = COLS.reduce((s, c) => s + c.min, 0)
 // ── Valor de cada célula ──────────────────────────────────────────────────────
 
 function cellValue(row, key) {
-  const t = row._tarefa
-  const p = row._portaria
   if (row._tipo === 'marketplace') {
     if (key === 'dt_saida_revenda') return '—'
-    if (key === 'tma_rev')          return diffHHMM(p?.dt_entrada, p?.dt_saida)
+    if (key === 'tma_rev') return diffHHMM(row.dt_portaria_entrada, row.dt_portaria_saida)
   }
   switch (key) {
     case 'data_viagem':        return fmtDate(row.dt_saida_revenda)
-    case 'carreta':            return row.carreta?.placa  ?? '—'
-    case 'cavalo':             return row.cavalo?.placa   ?? '—'
-    case 'nf':                 return row._nf
-    case 'fabrica':            return row._fabricas
-    case 'revenda':            return row.unidade?.nome   ?? '—'
-    case 'turno':              return row._turno          ?? '—'
+    case 'carreta':            return row.placa_carreta           ?? '—'
+    case 'cavalo':             return row.placa_cavalo            ?? '—'
+    case 'nf':                 return row.numero_nf               ?? '—'
+    case 'fabrica':            return row.fabricas                ?? '—'
+    case 'revenda':            return row.unidade_nome            ?? '—'
+    case 'turno':              return row.turno                   ?? '—'
     case 'dt_saida_revenda':   return fmtTs(row.dt_saida_revenda)
     case 'dt_chegada_fabrica': return fmtTs(row.dt_chegada_fabrica)
     case 'dt_saida_fabrica':   return fmtTs(row.dt_saida_fabrica)
     case 'dt_chegada_revenda': return fmtTs(row.dt_chegada_revenda)
-    case 'dt_entrada':         return fmtTs(p?.dt_entrada)
-    case 'dt_descarga':        return fmtTs(row._operador?.descarga_at)
-    case 'dt_inicio_conf':     return fmtTs(t?.dt_inicio_conferencia)
-    case 'dt_fim_conf':        return fmtTs(t?.dt_fim_conferencia)
-    case 'dt_saida_portaria':  return fmtTs(p?.dt_saida)
+    case 'dt_entrada':         return fmtTs(row.dt_portaria_entrada)
+    case 'dt_descarga':        return fmtTs(row.descarga_at)
+    case 'dt_inicio_conf':     return fmtTs(row.dt_inicio_conf)
+    case 'dt_fim_conf':        return fmtTs(row.dt_fim_conf)
+    case 'dt_saida_portaria':  return fmtTs(row.dt_portaria_saida)
     case 'dt_saida_entrega':   return fmtTs(row.dt_saida_entrega)
     case 'trecho_rev_fab':     return diffHHMM(row.dt_saida_revenda,    row.dt_chegada_fabrica)
     case 'trecho_fab_rev':     return diffHHMM(row.dt_saida_fabrica,    row.dt_chegada_revenda)
     case 'tma_fab':            return diffHHMM(row.dt_chegada_fabrica,  row.dt_saida_fabrica)
-    case 'tma_rev':            return diffHHMM(row.dt_chegada_revenda,  p?.dt_saida)
-    case 'aguardo':            return diffHHMM(row.dt_chegada_revenda,   p?.dt_entrada)
-    case 'tempo_descarga':     return diffHHMM(p?.dt_entrada,            row._operador?.descarga_at)
-    case 'tempo_conf':         return diffHHMM(t?.dt_inicio_conferencia, t?.dt_fim_conferencia)
-    case 'tmv':                return diffHHMM(row.dt_saida_revenda,    p?.dt_saida)
+    case 'tma_rev':            return diffHHMM(row.dt_chegada_revenda,  row.dt_portaria_saida)
+    case 'aguardo':            return diffHHMM(row.dt_chegada_revenda,  row.dt_portaria_entrada)
+    case 'tempo_descarga':     return diffHHMM(row.dt_portaria_entrada, row.descarga_at)
+    case 'tempo_conf':         return diffHHMM(row.dt_inicio_conf,      row.dt_fim_conf)
+    case 'tmv':                return diffHHMM(row.dt_saida_revenda,    row.dt_portaria_saida)
     case 'dispersao': {
       const d = row._dispersao
       if (!d || d.size === 0) return 'OK'
       return [...d].map(k => METRICS_DISPERSAO.find(m => m.key === k)?.label ?? k).join(' · ')
     }
-    default:                   return '—'
+    default: return '—'
   }
 }
 
@@ -139,7 +121,6 @@ export default function Dados() {
   const [dispersaoMap, setDispersaoMap] = useState({})
   const [modalDisp,    setModalDisp]    = useState(null)
   const [salvandoDisp, setSalvandoDisp] = useState(false)
-  const [mktpRows,     setMktpRows]     = useState([])
   const [mostrarMktp,  setMostrarMktp]  = useState(true)
 
   const [filtroUnidade, setFiltroUnidade] = useState('')
@@ -155,174 +136,35 @@ export default function Dados() {
   async function carregar(silent = false) {
     if (!silent) setLoading(true)
 
-    const [{ data: viagens }, { data: unids }, { data: turnosData }, { data: mktpData }] = await Promise.all([
-      supabase
-        .from('viagens')
-        .select(`
-          id, status,
-          dt_saida_revenda, dt_chegada_fabrica, dt_saida_fabrica,
-          dt_chegada_revenda, dt_saida_entrega,
-          carreta:carretas(placa),
-          cavalo:cavalos(placa),
-          unidade:unidades(id, nome, cidade)
-        `)
-        .not('dt_saida_revenda', 'is', null)
-        .order('dt_saida_revenda', { ascending: false }),
-      supabase
-        .from('unidades')
-        .select('id, nome, cidade')
-        .eq('tipo', 'revenda')
-        .order('nome'),
-      supabase
-        .from('turnos')
-        .select('unidade_id, nome, hora_inicio, hora_fim')
-        .eq('ativo', true),
-      supabase
-        .from('portaria_atendimentos')
-        .select('id, unidade_id, placa_cavalo, placa_carreta, dt_entrada, dt_saida, unidade:unidades(id, nome)')
-        .eq('tipo', 'marketplace')
-        .is('viagem_id', null)
-        .is('excluido_em', null)
-        .order('dt_entrada', { ascending: false }),
+    const [{ data: viagensData }, { data: unids }] = await Promise.all([
+      supabase.rpc('get_dados_viagens'),
+      supabase.from('unidades').select('id, nome, cidade').eq('tipo', 'revenda').order('nome'),
     ])
 
-    const turnosMap = {}
-    ;(turnosData ?? []).forEach(t => {
-      if (!turnosMap[t.unidade_id]) turnosMap[t.unidade_id] = []
-      turnosMap[t.unidade_id].push(t)
-    })
-
-    const mktpMapped = (mktpData ?? []).map(atend => ({
-      id: `mktp_${atend.id}`,
-      _tipo: 'marketplace',
-      _portaria: { dt_entrada: atend.dt_entrada, dt_saida: atend.dt_saida },
-      unidade: atend.unidade,
-      dt_saida_revenda: atend.dt_entrada,
-      dt_chegada_fabrica: null, dt_saida_fabrica: null,
-      dt_chegada_revenda: null, dt_saida_entrega: null,
-      carreta: atend.placa_carreta ? { placa: atend.placa_carreta } : null,
-      cavalo:  atend.placa_cavalo  ? { placa: atend.placa_cavalo  } : null,
-      _nf: '—', _fabricas: '—', _tarefa: {}, _operador: null,
-      _turno: '—', _dispersao: new Set(),
+    const data = (viagensData ?? []).map(r => ({
+      ...r,
+      _dispersao: new Set(r.dispersao ?? []),
     }))
 
-    const viagemIds = (viagens ?? []).map(v => v.id)
+    const dMap = {}
+    data.forEach(r => { dMap[r.id] = r._dispersao })
 
-    if (!viagemIds.length) {
-      setRows([])
-      setMktpRows(mktpMapped)
-      setDispersaoMap({})
-      setUnidades(unids ?? [])
-      if (!silent) setLoading(false)
-      return
-    }
-
-    const [{ data: peds }, { data: tarefas }, { data: portarias }, { data: dispData }] = await Promise.all([
-      supabase
-        .from('pedidos')
-        .select('viagem_id, numero_pedido, codigo_fabrica')
-        .in('viagem_id', viagemIds),
-      supabase
-        .from('tarefas')
-        .select('viagem_id, numero_nf, dt_inicio_conferencia, dt_fim_conferencia')
-        .in('viagem_id', viagemIds),
-      supabase
-        .from('portaria_atendimentos')
-        .select('viagem_id, dt_entrada, dt_saida')
-        .in('viagem_id', viagemIds)
-        .is('excluido_em', null),
-      supabase
-        .from('viagens_dispersao')
-        .select('viagem_id, metrica')
-        .in('viagem_id', viagemIds),
-    ])
-
-    // tarefas_operador: join por numero_nf + unidade_id
-    const nfList = (tarefas ?? []).map(t => t.numero_nf).filter(Boolean)
-    let opMap = {}
-    if (nfList.length) {
-      const { data: opRows } = await supabase
-        .from('tarefas_operador')
-        .select('numero_nf, unidade_id, descarga_at, status')
-        .in('numero_nf', nfList)
-      const rank = { concluido: 4, em_andamento: 3, pendente: 2, aguardando_nri: 1, aguardando_descarga: 0 }
-      ;(opRows ?? []).forEach(op => {
-        if (!op.numero_nf || !op.unidade_id) return
-        const key  = `${op.numero_nf}_${op.unidade_id}`
-        const prev = opMap[key]
-        if (!prev || (rank[op.status] ?? 0) > (rank[prev.status] ?? 0)) opMap[key] = op
-      })
-    }
-
-    // Nomes das fábricas via codigo_ambev
-    const codigos = [...new Set((peds ?? []).map(p => p.codigo_fabrica).filter(Boolean))]
-    const fabMap  = {}
-    if (codigos.length) {
-      const { data: fabData } = await supabase
-        .from('unidades')
-        .select('codigo_ambev, nome')
-        .eq('tipo', 'fabrica')
-        .in('codigo_ambev', codigos)
-      ;(fabData ?? []).forEach(f => { fabMap[f.codigo_ambev] = f.nome })
-    }
-
-    // Mapas por viagem_id
-    const pedMap = {}
-    ;(peds ?? []).forEach(p => {
-      if (!pedMap[p.viagem_id]) pedMap[p.viagem_id] = { numeros: [], fabricas: new Set() }
-      pedMap[p.viagem_id].numeros.push(p.numero_pedido)
-      if (p.codigo_fabrica)
-        pedMap[p.viagem_id].fabricas.add(fabMap[p.codigo_fabrica] ?? p.codigo_fabrica)
-    })
-
-    const tarefaMap  = {}
-    ;(tarefas ?? []).forEach(t => {
-      if (!tarefaMap[t.viagem_id]) tarefaMap[t.viagem_id] = t
-    })
-
-    const portariaMap = {}
-    ;(portarias ?? []).forEach(p => { portariaMap[p.viagem_id] = p })
-
-    const dispMap = {}
-    ;(dispData ?? []).forEach(d => {
-      if (!dispMap[d.viagem_id]) dispMap[d.viagem_id] = new Set()
-      dispMap[d.viagem_id].add(d.metrica)
-    })
-
-    const mapped = (viagens ?? []).map(v => {
-      const nf       = tarefaMap[v.id]?.numero_nf
-      const opKey    = nf ? `${nf}_${v.unidade?.id}` : null
-      return {
-        ...v,
-        _nf:        nf ?? '—',
-        _fabricas:  [...(pedMap[v.id]?.fabricas ?? new Set())].join(' · ') || '—',
-        _tarefa:    tarefaMap[v.id]   ?? {},
-        _portaria:  portariaMap[v.id] ?? {},
-        _operador:  opKey ? (opMap[opKey] ?? null) : null,
-        _turno:     resolverTurno(v.dt_chegada_revenda, turnosMap[v.unidade?.id] ?? []),
-        _dispersao: dispMap[v.id] ?? new Set(),
-      }
-    })
-
-    setRows(mapped)
-    setMktpRows(mktpMapped)
-    setDispersaoMap(dispMap)
+    setRows(data)
+    setDispersaoMap(dMap)
     setUnidades(unids ?? [])
     if (!silent) setLoading(false)
   }
 
   const rowsFiltradas = useMemo(() => {
-    const base = mostrarMktp ? [...rows, ...mktpRows] : rows
-    return base
-      .filter(r => {
-        if (filtroUnidade && r.unidade?.id !== filtroUnidade) return false
-        const ref = (r.dt_saida_revenda ?? '').slice(0, 10)
-        if (filtroDataDe  && ref < filtroDataDe)  return false
-        if (filtroDataAte && ref > filtroDataAte) return false
-        return true
-      })
-      .sort((a, b) => (b.dt_saida_revenda ?? '').localeCompare(a.dt_saida_revenda ?? ''))
-  }, [rows, mktpRows, mostrarMktp, filtroUnidade, filtroDataDe, filtroDataAte])
+    const base = mostrarMktp ? rows : rows.filter(r => r._tipo !== 'marketplace')
+    return base.filter(r => {
+      if (filtroUnidade && r.unidade_id !== filtroUnidade) return false
+      const ref = (r.dt_saida_revenda ?? '').slice(0, 10)
+      if (filtroDataDe  && ref < filtroDataDe)  return false
+      if (filtroDataAte && ref > filtroDataAte) return false
+      return true
+    })
+  }, [rows, mostrarMktp, filtroUnidade, filtroDataDe, filtroDataAte])
 
   const temFiltro = filtroUnidade || filtroDataDe || filtroDataAte
 
@@ -497,7 +339,7 @@ export default function Dados() {
               <tbody>
                 {rowsFiltradas.map((row, ri) => (
                   <tr
-                    key={row.id}
+                    key={`${row._tipo}_${row.id}`}
                     className={ri % 2 === 0 ? 'bg-white' : 'bg-[#EBF5FF]/50'}
                   >
                     {COLS.map(col => {
@@ -577,7 +419,7 @@ export default function Dados() {
           <div className="w-full max-w-lg mx-auto bg-white rounded-t-2xl p-5">
             <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto mb-4" />
             <p className="text-cobeb-text font-semibold text-sm mb-0.5">
-              Dispersão — NF {modalDisp._nf}
+              Dispersão — NF {modalDisp.numero_nf ?? '—'}
             </p>
             <p className="text-slate-400 text-xs mb-4">
               Marque as métricas com problema. Elas serão excluídas das análises nos gráficos.
