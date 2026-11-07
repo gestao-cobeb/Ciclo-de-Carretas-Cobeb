@@ -32,7 +32,7 @@ function formatDuracao(inicio, fim) {
 }
 
 export default function Retrabalho() {
-  const { profile, signOut, modoVisao, setModoVisao } = useAuth()
+  const { user, profile, signOut, modoVisao, setModoVisao } = useAuth()
   const navigate = useNavigate()
 
   const [itens,          setItens]          = useState([])
@@ -41,16 +41,18 @@ export default function Retrabalho() {
   const [filtro,         setFiltro]         = useState('7dias')
   const [statusFiltro,   setStatusFiltro]   = useState('ativos')
   const [erro,           setErro]           = useState(null)
-  const [confirmando,    setConfirmando]    = useState(null)
-  const [excluindo,      setExcluindo]      = useState(null)
-  const [iniciando,      setIniciando]      = useState(null)
+  const [confirmando,        setConfirmando]        = useState(null)
+  const [excluindo,          setExcluindo]          = useState(null)
+  const [excluindoConcluido, setExcluindoConcluido] = useState(null)
+  const [iniciando,          setIniciando]          = useState(null)
   const [finalizando,    setFinalizando]    = useState(null)
   const [apontamentoItem, setApontamentoItem] = useState(null)
   const [criarModal,      setCriarModal]      = useState(false)
 
-  const podeConfirmarEnvio = profile?.perfil === 'empilheira' || profile?.acesso_total
-  const podeDesfazer       = profile?.acesso_total
-  const podeIniciar        = profile?.perfil !== 'empilheira'
+  const podeConfirmarEnvio  = profile?.perfil === 'empilheira' || profile?.acesso_total
+  const podeDesfazer        = profile?.acesso_total
+  const podeIniciar         = profile?.perfil !== 'empilheira'
+  const podeExcluirConcluido = user?.email === 'admin@cobeb.com.br'
 
   useEffect(() => {
     supabase.from('motivos_blitz').select('id, descricao').eq('ativo', true).order('descricao')
@@ -147,6 +149,19 @@ export default function Retrabalho() {
       setItens(prev => prev.filter(i => i.tarefa_id !== item.tarefa_id))
     }
     setExcluindo(null)
+  }
+
+  // ── Exclusão permanente de concluído (somente admin@cobeb.com.br) ───────────
+
+  async function excluirConcluido(item) {
+    if (!window.confirm(`Excluir permanentemente este retrabalho concluído (${item.descricao_produto ?? item.cod_produto})?\n\nEsta ação não pode ser desfeita.`)) return
+    setExcluindoConcluido(item.id)
+    const { error: e1 } = await supabase.from('retrabalho_apontamentos').delete().eq('tarefas_retrabalho_id', item.id)
+    if (e1) { alert('Erro ao excluir apontamentos: ' + e1.message); setExcluindoConcluido(null); return }
+    const { error: e2 } = await supabase.from('tarefas_retrabalho').delete().eq('id', item.id)
+    if (e2) { alert('Erro ao excluir retrabalho: ' + e2.message); setExcluindoConcluido(null); return }
+    setItens(prev => prev.filter(i => i.id !== item.id))
+    setExcluindoConcluido(null)
   }
 
   // ── Workflow de retrabalho ──────────────────────────────────────────────────
@@ -367,6 +382,15 @@ export default function Retrabalho() {
                         className="text-slate-300 hover:text-red-400 transition-colors p-1 shrink-0 disabled:opacity-40"
                         title="Excluir blitz">
                         {removendo
+                          ? <div className="w-3.5 h-3.5 border-2 border-red-400/40 border-t-red-400 rounded-full animate-spin" />
+                          : <Trash2 size={14} />}
+                      </button>
+                    )}
+                    {podeExcluirConcluido && concluido && (
+                      <button onClick={() => excluirConcluido(item)} disabled={excluindoConcluido === item.id}
+                        className="text-slate-300 hover:text-red-400 transition-colors p-1 shrink-0 disabled:opacity-40"
+                        title="Excluir permanentemente">
+                        {excluindoConcluido === item.id
                           ? <div className="w-3.5 h-3.5 border-2 border-red-400/40 border-t-red-400 rounded-full animate-spin" />
                           : <Trash2 size={14} />}
                       </button>
