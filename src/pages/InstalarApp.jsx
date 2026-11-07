@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Download, CheckCircle, Smartphone, Wifi, ChevronRight } from 'lucide-react'
 
-const APK_URL = import.meta.env.VITE_APK_URL ?? null
+// Link fixo do GitHub — sempre aponta para a release mais nova automaticamente.
+// O workflow publica cobeb-ciclo.apk com nome fixo em cada release para isso.
+const APK_URL = 'https://github.com/gestao-cobeb/Ciclo-de-Carretas-Cobeb/releases/latest/download/cobeb-ciclo.apk'
 
 const PASSOS = [
   { n: 1, texto: 'Toque em "Baixar" quando o Android perguntar' },
