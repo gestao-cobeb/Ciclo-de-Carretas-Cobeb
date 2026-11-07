@@ -44,6 +44,16 @@
             android:foregroundServiceType="location"
             tools:replace="android:exported" />
 
+        <!-- Task 7: watchdog de boot — reinicia o serviço se houver viagem ativa -->
+        <receiver
+            android:name=".CobebBootReceiver"
+            android:enabled="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -71,4 +81,6 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Permite solicitar isenção de otimização de bateria via diálogo do sistema -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Task 7: boot receiver -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 </manifest>
