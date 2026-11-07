@@ -22,6 +22,7 @@ import AdminLayout from './components/AdminLayout'
 import Dados from './pages/Dados'
 import OperadoresPage from './pages/OperadoresPage'
 import Retrabalho from './pages/Retrabalho'
+import Monitoramento from './pages/Monitoramento'
 
 // Perfis que têm acesso a qualquer guia do dashboard — adicione aqui para garantir
 // que novas guias fiquem acessíveis sem mudança adicional nas rotas.
@@ -46,7 +47,8 @@ const MODO_ROTA = {
   cadastros:   '/cadastros',
   importacao:  '/importacao',
   operadores:  '/operadores',
-  retrabalho:  '/retrabalho',
+  retrabalho:    '/retrabalho',
+  monitoramento: '/monitoramento',
 }
 
 function Spinner() {
@@ -142,6 +144,9 @@ function AppRoutes() {
       />
       <Route path="/retrabalho"
         element={<ProtectedRoute allowedRoles={['admin', 'empilheira', 'ajudante']}><Retrabalho /></ProtectedRoute>}
+      />
+      <Route path="/monitoramento"
+        element={<ProtectedRoute allowedRoles={['admin']} requireAdminTotal><Monitoramento /></ProtectedRoute>}
       />
 
       <Route path="/"  element={<Navigate to={home} replace />} />

@@ -133,6 +133,12 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
     if (ativoRef.current) return
     ativoRef.current = true
 
+    // Log para monitoramento de battery optimization (fire-and-forget)
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user && viagemIdRef.current)
+        supabase.from('gps_eventos').insert({ viagem_id: viagemIdRef.current, motorista_id: user.id, evento: 'iniciar' })
+    })
+
     if (IS_NATIVE_APP) {
       // 1. Serviço nativo próprio — rastreia e sincroniza com Supabase independente
       //    do WebView, com START_STICKY, WakeLock e timer de 30s próprios.
