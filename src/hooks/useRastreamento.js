@@ -15,8 +15,18 @@ export const IS_NATIVE_APP =
 const LAST_POS_KEY = 'cobeb_last_gps_pos'
 
 function lerPosCache() {
-  try { return JSON.parse(localStorage.getItem(LAST_POS_KEY) ?? 'null') }
-  catch { return null }
+  try {
+    const stored = JSON.parse(localStorage.getItem(LAST_POS_KEY) ?? 'null')
+    if (!stored) return null
+    // Formato legado sem ts: considera imediatamente velho (10 min check vai falhar)
+    return { lat: stored.lat, lng: stored.lng, ts: stored.ts ?? 0 }
+  } catch { return null }
+}
+
+function salvarPosCache(lat, lng) {
+  try {
+    localStorage.setItem(LAST_POS_KEY, JSON.stringify({ lat, lng, ts: Date.now() }))
+  } catch {}
 }
 
 // ── Haversine ─────────────────────────────────────────────────────────────────
@@ -38,18 +48,19 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
   const watcherIdRef    = useRef(null)
   const syncTimerRef    = useRef(null)
   const posRef          = useRef(null)
-  // Última posição GPS confirmada — persiste entre reinicializações do app via
-  // localStorage. Permite que sincronizar() atualize last_seen_at mesmo quando
-  // o GPS perde sinal temporariamente (galpão, área coberta, zona rural).
+  // Última posição GPS confirmada — persiste via localStorage entre reinicializações.
+  // Task 4: nunca usar se ts > 10 min (pode ser muito antiga para o fallback JS).
   const lastKnownPosRef  = useRef(lerPosCache())
   const dentroFabRef     = useRef(false)
   const pontosForaRef    = useRef(0)
   const callbackRef      = useRef(null)
   const viagemIdRef      = useRef(null)
   const isOnlineRef      = useRef(isOnline)
-  const authListenerRef  = useRef(null)
-  // Monitoramento de sem sinal: id do motorista (setado em iniciar) e
-  // timestamp de quando o sync começou a falhar (null = sincronizando ok).
+  // Task 1: listener do evento tokenRefreshed emitido pelo nativo
+  const tokenListenerRef = useRef(null)
+  // Task 4: listener de visibilidade para detectar retorno ao foreground
+  const visibilityHandlerRef = useRef(null)
+  // Task 8: monitoramento de sem sinal no lado JS (só ativo quando nativo não está rodando)
   const motoristaIdRef   = useRef(null)
   const semSinalDesdeRef = useRef(null)
 
@@ -61,17 +72,35 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
     dentroFabRef.current = statusRef.current === 'na_fabrica'
   }, [statusRef.current])
 
-  // Sync JS — fallback para browser e sync imediata na abertura do app.
-  // Usa posRef (GPS fresco) se disponível, senão lastKnownPosRef (última posição
-  // confirmada). Isso mantém last_seen_at vivo mesmo em áreas sem cobertura GPS.
-  // Rastreia períodos sem sinal (> 5 min) e grava em gps_eventos ao recuperar.
+  // Task 4: sincronizar() só faz PATCH quando o serviço nativo não está rodando.
+  // Quando está rodando, o nativo é o único escritor de posição — o JS evita
+  // sobrescrever com posição potencialmente mais velha ou de menor precisão.
+  // Task 8: sem_sinal só é gravado pelo JS quando nativo não está rodando.
   const sincronizar = useCallback(async () => {
-    const pos = posRef.current ?? lastKnownPosRef.current
+    const cached = lastKnownPosRef.current
+    const TEN_MIN = 10 * 60 * 1000
+    // Posição fresca do GPS ou última conhecida com menos de 10 min
+    const pos = posRef.current
+      ?? (cached && cached.ts && Date.now() - cached.ts < TEN_MIN ? cached : null)
     const vid = viagemIdRef.current
+
     if (!pos || !vid || !isOnlineRef.current) {
       if (!semSinalDesdeRef.current) semSinalDesdeRef.current = Date.now()
       return
     }
+
+    // Nativo rodando: ele já está fazendo o PATCH; JS não interfere
+    if (IS_NATIVE_APP) {
+      try {
+        const { running } = await CobebGps.isRunning()
+        if (running) {
+          semSinalDesdeRef.current = null
+          return
+        }
+      } catch {}
+      // Serviço parado: JS assume como fallback
+    }
+
     const { error } = await supabase
       .from('viagens')
       .update({
@@ -80,11 +109,13 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
         motorista_last_seen_at: new Date().toISOString(),
       })
       .eq('id', vid)
+
     if (error) {
       if (!semSinalDesdeRef.current) semSinalDesdeRef.current = Date.now()
       return
     }
-    // Sync bem-sucedido: registra período sem sinal se durou mais de 5 min
+
+    // Sync bem-sucedido: registra sem_sinal se durou > 5 min (apenas fallback JS)
     if (semSinalDesdeRef.current) {
       const duracaoMs = Date.now() - semSinalDesdeRef.current
       semSinalDesdeRef.current = null
@@ -101,8 +132,9 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
 
   function processarPosicao(lat, lng) {
     posRef.current = { lat, lng }
-    lastKnownPosRef.current = { lat, lng }
-    try { localStorage.setItem(LAST_POS_KEY, JSON.stringify({ lat, lng })) } catch {}
+    lastKnownPosRef.current = { lat, lng, ts: Date.now() }
+    salvarPosCache(lat, lng)
+
     const status = statusRef.current
     if (!fabricasAlvo?.length) return
 
@@ -163,19 +195,21 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
       if (!user) return
       motoristaIdRef.current = user.id
       if (viagemIdRef.current)
-        supabase.from('gps_eventos').insert({ viagem_id: viagemIdRef.current, motorista_id: user.id, evento: 'iniciar' })
+        supabase.from('gps_eventos').insert({
+          viagem_id:    viagemIdRef.current,
+          motorista_id: user.id,
+          evento:       'iniciar',
+        })
     })
 
     if (IS_NATIVE_APP) {
-      // 1. Serviço nativo próprio — rastreia e sincroniza com Supabase independente
-      //    do WebView, com START_STICKY, WakeLock e timer de 30s próprios.
       try {
         const { data: { session } } = await supabase.auth.getSession()
-        // Do `config()`, e nao de `import.meta.env`: o servico nativo guarda o
-        // endereco no aparelho e continua usando-o depois que o Android o
-        // reinicia. Se ele nascesse com o valor de compilacao, o celular
-        // seguiria gravando no servidor antigo depois da migracao -- com o
-        // aplicativo funcionando e nada denunciando.
+        // Task 1: o nativo passa a ser o único dono da renovação.
+        // stopAutoRefresh() impede que o supabase-js (na WebView) renove por conta
+        // própria e gire o refresh token — o que tornaria o token no nativo inválido.
+        supabase.auth.stopAutoRefresh()
+
         await CobebGps.startTracking({
           supabaseUrl:   config().supabaseUrl,
           supabaseKey:   config().supabaseAnonKey,
@@ -183,41 +217,47 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
           refreshToken:  session?.refresh_token ?? '',
           viagemId:      viagemIdRef.current,
         })
+
+        // Task 1: escuta renovações feitas pelo nativo e sincroniza a sessão JS
+        tokenListenerRef.current = await CobebGps.addListener(
+          'tokenRefreshed',
+          async ({ accessToken, refreshToken }) => {
+            try {
+              await supabase.auth.setSession({
+                access_token:  accessToken,
+                refresh_token: refreshToken,
+              })
+            } catch {}
+          }
+        )
+
+        // Task 7: watchdog WorkManager — reinicia o serviço se o Android o matar
+        try { await CobebGps.scheduleWatchdog() } catch {}
+
+        // Task 6: solicita isenção de battery optimization na primeira viagem
+        try {
+          const { ignoring } = await CobebGps.isIgnoringBatteryOptimizations()
+          if (!ignoring) await CobebGps.requestBatteryOptimizationExemption()
+        } catch {}
+
       } catch (err) {
         console.error('[Rastreamento] Erro ao iniciar CobebGpsService:', err)
       }
 
-      // Atualiza o token no serviço nativo sempre que o Supabase o renovar
-      const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'TOKEN_REFRESHED' && session && ativoRef.current) {
-          try {
-            await CobebGps.updateToken({
-              accessToken:  session.access_token,
-              refreshToken: session.refresh_token ?? '',
-            })
-          } catch {}
-        }
-      })
-      authListenerRef.current = listener
-
-      // 2. Watcher do plugin de terceiro — apenas para callbacks JS de geofence
-      //    enquanto o app está em foreground (tela ligada).
-      // Sync imediato ao iniciar (garante posição mesmo antes do primeiro callback)
+      // Task 4: sync JS periódico — só envia PATCH se o nativo não estiver rodando
       sincronizar()
       syncTimerRef.current = setInterval(sincronizar, 30000)
 
-      // Fallback de posição por rede (cell/WiFi): funciona em galpões e áreas sem
-      // GPS. Não bloqueia — dispara e esquece. Só popula posRef se o watcher ainda
-      // não entregou uma posição mais precisa.
+      // Fallback de posição por rede (cell/WiFi): funciona em galpões e áreas sem GPS.
+      // Task 4: enableHighAccuracy: true para maior precisão quando o JS assume
       if (!lastKnownPosRef.current) {
         navigator.geolocation?.getCurrentPosition(
-          (p) => {
-            if (!posRef.current) {
+          p => {
+            if (!posRef.current)
               posRef.current = { lat: p.coords.latitude, lng: p.coords.longitude }
-            }
           },
           () => {},
-          { enableHighAccuracy: false, timeout: 5000, maximumAge: 600000 },
+          { enableHighAccuracy: true, timeout: 5000, maximumAge: 600000 },
         )
       }
 
@@ -227,9 +267,6 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
             backgroundMessage:  'COBEB está rastreando sua localização',
             backgroundTitle:    'COBEB Ciclo — Rastreamento ativo',
             requestPermissions: true,
-            // stale: true entrega a última posição cacheada pelo Android
-            // imediatamente, sem esperar um fix GPS fresco. Reduz o tempo inicial
-            // em que posRef fica nulo (e last_seen_at para de atualizar).
             stale:              true,
             distanceFilter:     20,
           },
@@ -240,7 +277,6 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
             }
             if (location) {
               processarPosicao(location.latitude, location.longitude)
-              // Sync JS enquanto tela está ligada (fallback se o serviço nativo falhar)
               sincronizar()
             }
           }
@@ -249,6 +285,28 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
       } catch (err) {
         console.error('[Rastreamento] Erro ao registrar watcher de geofence:', err)
       }
+
+      // Task 4: ao voltar ao foreground, verifica se o nativo ainda está rodando.
+      // Se parou (battery optimization), reinicia antes que o JS mande PATCH.
+      const handleVisibility = async () => {
+        if (document.visibilityState !== 'visible' || !ativoRef.current) return
+        try {
+          const { running } = await CobebGps.isRunning()
+          if (!running && viagemIdRef.current) {
+            console.warn('[Rastreamento] Nativo parado ao retornar ao foreground — reiniciando')
+            const { data: { session } } = await supabase.auth.getSession()
+            await CobebGps.startTracking({
+              supabaseUrl:  config().supabaseUrl,
+              supabaseKey:  config().supabaseAnonKey,
+              accessToken:  session?.access_token  ?? '',
+              refreshToken: session?.refresh_token ?? '',
+              viagemId:     viagemIdRef.current,
+            })
+          }
+        } catch {}
+      }
+      visibilityHandlerRef.current = handleVisibility
+      document.addEventListener('visibilitychange', handleVisibility)
 
     } else {
       // Browser: sync JS periódico + watchPosition para geofence
@@ -274,8 +332,17 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
 
     if (IS_NATIVE_APP) {
       try { await CobebGps.stopTracking() } catch {}
-      authListenerRef.current?.subscription?.unsubscribe()
-      authListenerRef.current = null
+      // Task 7: cancela o watchdog ao encerrar a viagem
+      try { await CobebGps.cancelWatchdog() } catch {}
+      // Task 1: restaura auto-refresh do supabase-js
+      supabase.auth.startAutoRefresh()
+      // Limpa listeners
+      tokenListenerRef.current?.remove()
+      tokenListenerRef.current = null
+      if (visibilityHandlerRef.current) {
+        document.removeEventListener('visibilitychange', visibilityHandlerRef.current)
+        visibilityHandlerRef.current = null
+      }
       const w = watcherIdRef.current
       if (w?.type === 'capacitor' && w.id) {
         try { await BackgroundGeolocation.removeWatcher({ id: w.id }) } catch {}
