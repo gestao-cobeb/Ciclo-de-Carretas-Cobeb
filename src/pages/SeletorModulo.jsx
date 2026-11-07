@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, BarChart2, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet, Forklift, RotateCcw } from 'lucide-react'
+import { LayoutDashboard, BarChart2, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet, Forklift, RotateCcw, Activity } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -126,6 +126,17 @@ export const MODULOS = [
     texto:          'text-purple-700',
     fundo:          'bg-purple-600/5 hover:bg-purple-600/10',
     sempreExplicito: true,
+  },
+  {
+    key:   'monitoramento',
+    rota:  '/monitoramento',
+    label: 'Monitoramento GPS',
+    desc:  'Reinicializações e tempo sem sinal por motorista',
+    Icon:  Activity,
+    cor:   'bg-cyan-600',
+    borda: 'border-cyan-600/30',
+    texto: 'text-cyan-700',
+    fundo: 'bg-cyan-600/5 hover:bg-cyan-600/10',
   },
 ]
 
