@@ -9,6 +9,15 @@ function fmtTs(iso) {
   return d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
 }
 
+function fmtDuracao(segundos) {
+  if (!segundos || segundos <= 0) return '—'
+  const h = Math.floor(segundos / 3600)
+  const m = Math.floor((segundos % 3600) / 60)
+  if (h > 0) return `${h}h ${m}min`
+  if (m > 0) return `${m}min`
+  return `${segundos}s`
+}
+
 const STATUS_LABEL = {
   iniciada:               'Iniciada',
   em_transito:            'Em trânsito',
@@ -37,6 +46,13 @@ function badgeCls(contagem) {
   return 'bg-green-500/10 text-green-600 border-green-500/20'
 }
 
+function semSinalCls(segs) {
+  if (!segs || segs <= 0)       return 'text-slate-300'
+  if (segs >= 30 * 60)          return 'text-red-600 font-semibold'
+  if (segs >= 10 * 60)          return 'text-amber-600 font-semibold'
+  return 'text-slate-500'
+}
+
 export default function Monitoramento() {
   const [grupos,        setGrupos]        = useState([])
   const [unidades,      setUnidades]      = useState([])
@@ -44,6 +60,7 @@ export default function Monitoramento() {
   const [ultimaSync,    setUltimaSync]    = useState(null)
   const [expandidos,    setExpandidos]    = useState({})
   const [filtroUnidade, setFiltroUnidade] = useState('')
+  const [aba,           setAba]           = useState('viagens') // 'viagens' | 'ranking'
 
   useEffect(() => { carregar() }, [])
   useEffect(() => {
@@ -60,7 +77,7 @@ export default function Monitoramento() {
       supabase
         .from('gps_eventos')
         .select(`
-          viagem_id, created_at,
+          viagem_id, evento, created_at, duracao_segundos,
           motorista:profiles!motorista_id(nome),
           viagem:viagens!viagem_id(
             id, status, dt_saida_revenda, numero_nf_saida,
@@ -69,37 +86,51 @@ export default function Monitoramento() {
             cavalo:cavalos!cavalo_id(placa)
           )
         `)
-        .eq('evento', 'iniciar')
+        .in('evento', ['iniciar', 'sem_sinal'])
         .gte('created_at', quatroDiasAtras)
         .order('created_at', { ascending: false })
-        .limit(500),
+        .limit(1000),
       supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').order('nome'),
     ])
 
-    // Agrupa por viagem_id
+    // Separa os dois tipos de evento
+    const iniciares = (eventos ?? []).filter(e => e.evento === 'iniciar')
+    const semSinais = (eventos ?? []).filter(e => e.evento === 'sem_sinal')
+
+    // Sem sinal acumulado por viagem_id
+    const semSinalPorViagem = {}
+    for (const e of semSinais) {
+      semSinalPorViagem[e.viagem_id] = (semSinalPorViagem[e.viagem_id] ?? 0) + (e.duracao_segundos ?? 0)
+    }
+
+    // Agrupa iniciares por viagem_id
     const mapa = {}
-    for (const e of (eventos ?? [])) {
+    for (const e of iniciares) {
       const id = e.viagem_id
       if (!mapa[id]) {
         mapa[id] = {
-          viagem_id:  id,
-          viagem:     e.viagem,
-          motorista:  e.motorista,
-          timestamps: [],
+          viagem_id:   id,
+          viagem:      e.viagem,
+          motorista:   e.motorista,
+          timestamps:  [],
         }
       }
       mapa[id].timestamps.push(e.created_at)
     }
 
-    // timestamps chegam DESC; reverte para ASC na exibição
     const lista = Object.values(mapa).map(g => ({
       ...g,
-      timestamps: [...g.timestamps].reverse(),
-      contagem:   g.timestamps.length,
-      ultima_at:  g.timestamps[0],
+      timestamps:   [...g.timestamps].reverse(), // ASC para exibição
+      contagem:     g.timestamps.length,
+      ultima_at:    g.timestamps[0],
+      semSinalSegs: semSinalPorViagem[g.viagem_id] ?? 0,
     }))
 
-    lista.sort((a, b) => b.contagem - a.contagem || (b.ultima_at > a.ultima_at ? 1 : -1))
+    lista.sort((a, b) =>
+      (b.semSinalSegs - a.semSinalSegs) ||
+      (b.contagem - a.contagem) ||
+      (b.ultima_at > a.ultima_at ? 1 : -1)
+    )
 
     setGrupos(lista)
     setUnidades(unids ?? [])
@@ -112,8 +143,33 @@ export default function Monitoramento() {
     return grupos.filter(g => g.viagem?.unidade?.id === filtroUnidade)
   }, [grupos, filtroUnidade])
 
+  // Ranking por motorista
+  const ranking = useMemo(() => {
+    const mapa = {}
+    for (const g of gruposFiltrados) {
+      const nome = g.motorista?.nome ?? '—'
+      if (!mapa[nome]) {
+        mapa[nome] = {
+          nome,
+          reinicializacoes: 0,
+          semSinalSegs:     0,
+          numViagens:       0,
+          placas:           new Set(),
+        }
+      }
+      mapa[nome].reinicializacoes += Math.max(g.contagem - 1, 0)
+      mapa[nome].semSinalSegs     += g.semSinalSegs
+      mapa[nome].numViagens++
+      if (g.viagem?.carreta?.placa) mapa[nome].placas.add(g.viagem.carreta.placa)
+      if (g.viagem?.cavalo?.placa)  mapa[nome].placas.add(g.viagem.cavalo.placa)
+    }
+    return Object.values(mapa)
+      .sort((a, b) => b.semSinalSegs - a.semSinalSegs || b.reinicializacoes - a.reinicializacoes)
+  }, [gruposFiltrados])
+
   const totalReinits    = gruposFiltrados.reduce((s, g) => s + Math.max(g.contagem - 1, 0), 0)
-  const alertasCriticos = gruposFiltrados.filter(g => g.contagem >= 4).length
+  const totalSemSinalS  = gruposFiltrados.reduce((s, g) => s + g.semSinalSegs, 0)
+  const alertasCriticos = gruposFiltrados.filter(g => g.contagem >= 4 || g.semSinalSegs >= 30 * 60).length
 
   function toggleExpand(id) {
     setExpandidos(prev => ({ ...prev, [id]: !prev[id] }))
@@ -123,7 +179,7 @@ export default function Monitoramento() {
     <AdminLayout title="Monitoramento GPS">
       <div className="px-4 pt-5 pb-6 space-y-4">
 
-        {/* Filtro + última sync */}
+        {/* Filtro + sync */}
         <div className="flex items-center gap-2">
           <select
             value={filtroUnidade}
@@ -131,9 +187,7 @@ export default function Monitoramento() {
             className={`flex-1 ${selCls}`}
           >
             <option value="">Todos os CDs</option>
-            {unidades.map(u => (
-              <option key={u.id} value={u.id}>{u.nome}</option>
-            ))}
+            {unidades.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
           </select>
           {ultimaSync && (
             <span className="text-[10px] text-slate-400 shrink-0 flex items-center gap-1">
@@ -150,26 +204,38 @@ export default function Monitoramento() {
               <p className="text-cobeb-navy font-bold text-lg leading-none">{gruposFiltrados.length}</p>
               <p className="text-slate-400 text-[10px] mt-1">viagens</p>
             </div>
-            <div className={`rounded-xl border p-3 text-center ${
-              totalReinits > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-cobeb-border'
-            }`}>
+            <div className={`rounded-xl border p-3 text-center ${totalReinits > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-cobeb-border'}`}>
               <p className={`font-bold text-lg leading-none ${totalReinits > 0 ? 'text-amber-600' : 'text-cobeb-navy'}`}>
                 {totalReinits}
               </p>
               <p className="text-slate-400 text-[10px] mt-1">reinicializações</p>
             </div>
-            <div className={`rounded-xl border p-3 text-center ${
-              alertasCriticos > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-cobeb-border'
-            }`}>
-              <p className={`font-bold text-lg leading-none ${alertasCriticos > 0 ? 'text-red-600' : 'text-cobeb-navy'}`}>
-                {alertasCriticos}
+            <div className={`rounded-xl border p-3 text-center ${totalSemSinalS > 0 ? 'bg-red-50 border-red-200' : 'bg-white border-cobeb-border'}`}>
+              <p className={`font-bold text-base leading-none ${totalSemSinalS > 0 ? 'text-red-600' : 'text-cobeb-navy'}`}>
+                {fmtDuracao(totalSemSinalS)}
               </p>
-              <p className="text-slate-400 text-[10px] mt-1">críticos (4+)</p>
+              <p className="text-slate-400 text-[10px] mt-1">sem sinal total</p>
             </div>
           </div>
         )}
 
-        {/* Lista */}
+        {/* Abas */}
+        <div className="flex rounded-xl border border-cobeb-border overflow-hidden text-xs font-semibold">
+          {[['viagens', 'Por Viagem'], ['ranking', 'Por Motorista']].map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setAba(key)}
+              className={`flex-1 py-2 transition-colors ${
+                aba === key
+                  ? 'bg-cobeb-navy text-white'
+                  : 'bg-white text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <div className="flex justify-center py-14">
             <div className="w-6 h-6 border-2 border-cobeb-blue border-t-transparent rounded-full animate-spin" />
@@ -179,16 +245,16 @@ export default function Monitoramento() {
             <p className="text-slate-400 text-sm">Nenhum dado nos últimos 4 dias</p>
             <p className="text-slate-300 text-xs">O log começa após instalar esta versão do app</p>
           </div>
-        ) : (
+        ) : aba === 'viagens' ? (
+
+          /* ── Aba Por Viagem ───────────────────────────────────────────── */
           <div className="space-y-2">
             {gruposFiltrados.map(g => {
               const v        = g.viagem
               const expanded = expandidos[g.viagem_id]
-
               return (
                 <div key={g.viagem_id}
                   className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
-
                   <button
                     onClick={() => toggleExpand(g.viagem_id)}
                     className="w-full px-4 py-3 flex items-start gap-3 text-left"
@@ -213,9 +279,14 @@ export default function Monitoramento() {
                         {v?.numero_nf_saida ? ` · NF ${v.numero_nf_saida}` : ''}
                         {v?.unidade?.nome   ? ` · ${v.unidade.nome}`       : ''}
                       </p>
-                      <p className="text-slate-400 text-[10px] mt-0.5">
-                        Saída: {fmtTs(v?.dt_saida_revenda)}
-                      </p>
+                      <div className="flex items-center gap-3 mt-0.5">
+                        <p className="text-slate-400 text-[10px]">Saída: {fmtTs(v?.dt_saida_revenda)}</p>
+                        {g.semSinalSegs > 0 && (
+                          <p className={`text-[10px] ${semSinalCls(g.semSinalSegs)}`}>
+                            Sem sinal: {fmtDuracao(g.semSinalSegs)}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
                     {g.contagem > 1 && (
@@ -253,10 +324,49 @@ export default function Monitoramento() {
               )
             })}
           </div>
+
+        ) : (
+
+          /* ── Aba Por Motorista ────────────────────────────────────────── */
+          <div className="space-y-2">
+            {ranking.map((r, i) => (
+              <div key={r.nome}
+                className="bg-white rounded-2xl border border-cobeb-border shadow-sm px-4 py-3 flex items-center gap-3">
+
+                {/* Posição */}
+                <span className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${
+                  i === 0 ? 'bg-red-100 text-red-600'
+                  : i === 1 ? 'bg-amber-100 text-amber-600'
+                  : i === 2 ? 'bg-yellow-100 text-yellow-600'
+                  : 'bg-slate-100 text-slate-500'
+                }`}>
+                  {i + 1}
+                </span>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-cobeb-text font-semibold text-sm truncate">{r.nome}</p>
+                  <p className="text-slate-400 text-[10px] mt-0.5">
+                    {[...r.placas].join(' · ') || '—'}
+                    {' · '}
+                    {r.numViagens} viagem{r.numViagens !== 1 ? 's' : ''}
+                  </p>
+                </div>
+
+                <div className="text-right shrink-0">
+                  <p className={`font-bold text-sm ${semSinalCls(r.semSinalSegs)}`}>
+                    {fmtDuracao(r.semSinalSegs)}
+                  </p>
+                  <p className="text-slate-400 text-[10px] mt-0.5">
+                    {r.reinicializacoes} reinício{r.reinicializacoes !== 1 ? 's' : ''}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
 
         <p className="text-center text-[10px] text-slate-300 pt-1">
-          Últimos 4 dias · 1× = normal · 2–3× = atenção · 4+× = possível battery optimization
+          Últimos 4 dias · 1× = normal · sem sinal: gap registrado ao recuperar conexão
         </p>
       </div>
     </AdminLayout>

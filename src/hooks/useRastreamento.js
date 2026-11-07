@@ -41,13 +41,17 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
   // Última posição GPS confirmada — persiste entre reinicializações do app via
   // localStorage. Permite que sincronizar() atualize last_seen_at mesmo quando
   // o GPS perde sinal temporariamente (galpão, área coberta, zona rural).
-  const lastKnownPosRef = useRef(lerPosCache())
-  const dentroFabRef    = useRef(false)
-  const pontosForaRef   = useRef(0)
-  const callbackRef     = useRef(null)
-  const viagemIdRef     = useRef(null)
-  const isOnlineRef     = useRef(isOnline)
-  const authListenerRef = useRef(null)
+  const lastKnownPosRef  = useRef(lerPosCache())
+  const dentroFabRef     = useRef(false)
+  const pontosForaRef    = useRef(0)
+  const callbackRef      = useRef(null)
+  const viagemIdRef      = useRef(null)
+  const isOnlineRef      = useRef(isOnline)
+  const authListenerRef  = useRef(null)
+  // Monitoramento de sem sinal: id do motorista (setado em iniciar) e
+  // timestamp de quando o sync começou a falhar (null = sincronizando ok).
+  const motoristaIdRef   = useRef(null)
+  const semSinalDesdeRef = useRef(null)
 
   callbackRef.current = onMudarStatus
   viagemIdRef.current = viagemId
@@ -60,11 +64,15 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
   // Sync JS — fallback para browser e sync imediata na abertura do app.
   // Usa posRef (GPS fresco) se disponível, senão lastKnownPosRef (última posição
   // confirmada). Isso mantém last_seen_at vivo mesmo em áreas sem cobertura GPS.
+  // Rastreia períodos sem sinal (> 5 min) e grava em gps_eventos ao recuperar.
   const sincronizar = useCallback(async () => {
     const pos = posRef.current ?? lastKnownPosRef.current
     const vid = viagemIdRef.current
-    if (!pos || !vid || !isOnlineRef.current) return
-    await supabase
+    if (!pos || !vid || !isOnlineRef.current) {
+      if (!semSinalDesdeRef.current) semSinalDesdeRef.current = Date.now()
+      return
+    }
+    const { error } = await supabase
       .from('viagens')
       .update({
         motorista_lat:          pos.lat,
@@ -72,6 +80,23 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
         motorista_last_seen_at: new Date().toISOString(),
       })
       .eq('id', vid)
+    if (error) {
+      if (!semSinalDesdeRef.current) semSinalDesdeRef.current = Date.now()
+      return
+    }
+    // Sync bem-sucedido: registra período sem sinal se durou mais de 5 min
+    if (semSinalDesdeRef.current) {
+      const duracaoMs = Date.now() - semSinalDesdeRef.current
+      semSinalDesdeRef.current = null
+      if (duracaoMs >= 5 * 60 * 1000 && motoristaIdRef.current) {
+        supabase.from('gps_eventos').insert({
+          viagem_id:        vid,
+          motorista_id:     motoristaIdRef.current,
+          evento:           'sem_sinal',
+          duracao_segundos: Math.round(duracaoMs / 1000),
+        })
+      }
+    }
   }, [])
 
   function processarPosicao(lat, lng) {
@@ -135,7 +160,9 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
 
     // Log para monitoramento de battery optimization (fire-and-forget)
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user && viagemIdRef.current)
+      if (!user) return
+      motoristaIdRef.current = user.id
+      if (viagemIdRef.current)
         supabase.from('gps_eventos').insert({ viagem_id: viagemIdRef.current, motorista_id: user.id, evento: 'iniciar' })
     })
 
