@@ -530,7 +530,7 @@ public class CobebGpsService extends Service {
             try { connectivityManager.unregisterNetworkCallback(networkCallback); } catch (Exception ignored) {}
         }
         if (fusedClient != null && locationCallback != null) {
-            fusedClient.removeLocationUpdates(locationCallback);
+            try { fusedClient.removeLocationUpdates(locationCallback); } catch (Exception ignored) {}
         }
         if (syncExecutor != null) { syncExecutor.shutdownNow(); syncExecutor = null; }
         if (callbackThread != null) { callbackThread.quitSafely(); callbackThread = null; }
