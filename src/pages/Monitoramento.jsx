@@ -94,8 +94,7 @@ export default function Monitoramento() {
       supabase
         .from('viagens')
         .select(`
-          id, status, dt_saida_revenda, numero_nf_saida,
-          motorista:profiles!motorista_id(nome),
+          id, status, dt_saida_revenda, numero_nf_saida, motorista_id,
           unidade:unidades!unidade_descarga_id(id, nome),
           carreta:carretas!carreta_id(placa),
           cavalo:cavalos!cavalo_id(placa)
@@ -130,12 +129,18 @@ export default function Monitoramento() {
     }
 
     // Inclui viagens ativas que não têm evento GPS no período
-    for (const v of (viagensAtivas ?? [])) {
-      if (!mapa[v.id]) {
+    const semGPS = (viagensAtivas ?? []).filter(v => !mapa[v.id])
+    if (semGPS.length > 0) {
+      const ids = [...new Set(semGPS.map(v => v.motorista_id).filter(Boolean))]
+      const { data: profs } = ids.length
+        ? await supabase.from('profiles').select('id, nome').in('id', ids)
+        : { data: [] }
+      const profMap = Object.fromEntries((profs ?? []).map(p => [p.id, p]))
+      for (const v of semGPS) {
         mapa[v.id] = {
           viagem_id:  v.id,
           viagem:     v,
-          motorista:  v.motorista,
+          motorista:  profMap[v.motorista_id] ?? null,
           timestamps: [],
         }
       }
