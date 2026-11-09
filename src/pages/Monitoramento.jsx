@@ -73,7 +73,7 @@ export default function Monitoramento() {
 
     const quatroDiasAtras = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000).toISOString()
 
-    const [{ data: eventos }, { data: unids }] = await Promise.all([
+    const [{ data: eventos }, { data: unids }, { data: viagensAtivas }] = await Promise.all([
       supabase
         .from('gps_eventos')
         .select(`
@@ -91,6 +91,17 @@ export default function Monitoramento() {
         .order('created_at', { ascending: false })
         .limit(1000),
       supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').order('nome'),
+      supabase
+        .from('viagens')
+        .select(`
+          id, status, dt_saida_revenda, numero_nf_saida,
+          motorista:profiles!motorista_id(nome),
+          unidade:unidades!unidade_descarga_id(id, nome),
+          carreta:carretas!carreta_id(placa),
+          cavalo:cavalos!cavalo_id(placa)
+        `)
+        .neq('status', 'concluida')
+        .order('created_at', { ascending: false }),
     ])
 
     // Separa os dois tipos de evento
@@ -116,6 +127,18 @@ export default function Monitoramento() {
         }
       }
       mapa[id].timestamps.push(e.created_at)
+    }
+
+    // Inclui viagens ativas que não têm evento GPS no período
+    for (const v of (viagensAtivas ?? [])) {
+      if (!mapa[v.id]) {
+        mapa[v.id] = {
+          viagem_id:  v.id,
+          viagem:     v,
+          motorista:  v.motorista,
+          timestamps: [],
+        }
+      }
     }
 
     const lista = Object.values(mapa).map(g => ({
@@ -242,8 +265,7 @@ export default function Monitoramento() {
           </div>
         ) : gruposFiltrados.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 gap-1">
-            <p className="text-slate-400 text-sm">Nenhum dado nos últimos 4 dias</p>
-            <p className="text-slate-300 text-xs">O log começa após instalar esta versão do app</p>
+            <p className="text-slate-400 text-sm">Nenhuma viagem ativa no momento</p>
           </div>
         ) : aba === 'viagens' ? (
 
