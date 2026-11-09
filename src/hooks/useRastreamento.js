@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback } from 'react'
 import { registerPlugin } from '@capacitor/core'
 import { supabase } from '../lib/supabase'
 import { config } from '../lib/config'
+import { VERSAO_APP } from '../lib/versaoApp'
 
 // Plugin nativo próprio do app — independente do WebView, com START_STICKY
 const CobebGps = registerPlugin('CobebGps')
@@ -199,6 +200,7 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
           viagem_id:    viagemIdRef.current,
           motorista_id: user.id,
           evento:       'iniciar',
+          app_version:  VERSAO_APP,
         })
     })
 

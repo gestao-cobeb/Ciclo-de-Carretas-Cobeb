@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
 import AdminLayout from '../components/AdminLayout'
 import { supabase } from '../lib/supabase'
+import { VERSAO_APP } from '../lib/versaoApp'
 
 function fmtTs(iso) {
   if (!iso) return '—'
@@ -77,7 +78,7 @@ export default function Monitoramento() {
       supabase
         .from('gps_eventos')
         .select(`
-          viagem_id, evento, created_at, duracao_segundos,
+          viagem_id, evento, created_at, duracao_segundos, app_version,
           motorista:profiles!motorista_id(nome),
           viagem:viagens!viagem_id(
             id, status, dt_saida_revenda, numero_nf_saida,
@@ -113,7 +114,7 @@ export default function Monitoramento() {
       semSinalPorViagem[e.viagem_id] = (semSinalPorViagem[e.viagem_id] ?? 0) + (e.duracao_segundos ?? 0)
     }
 
-    // Agrupa iniciares por viagem_id
+    // Agrupa iniciares por viagem_id (ordem DESC — primeiro é o mais recente)
     const mapa = {}
     for (const e of iniciares) {
       const id = e.viagem_id
@@ -122,6 +123,7 @@ export default function Monitoramento() {
           viagem_id:   id,
           viagem:      e.viagem,
           motorista:   e.motorista,
+          app_version: e.app_version ?? null, // versão do evento mais recente
           timestamps:  [],
         }
       }
@@ -138,20 +140,22 @@ export default function Monitoramento() {
       const profMap = Object.fromEntries((profs ?? []).map(p => [p.id, p]))
       for (const v of semGPS) {
         mapa[v.id] = {
-          viagem_id:  v.id,
-          viagem:     v,
-          motorista:  profMap[v.motorista_id] ?? null,
-          timestamps: [],
+          viagem_id:   v.id,
+          viagem:      v,
+          motorista:   profMap[v.motorista_id] ?? null,
+          app_version: null,
+          timestamps:  [],
         }
       }
     }
 
     const lista = Object.values(mapa).map(g => ({
       ...g,
-      timestamps:   [...g.timestamps].reverse(), // ASC para exibição
+      timestamps:   [...g.timestamps].reverse(),
       contagem:     g.timestamps.length,
       ultima_at:    g.timestamps[0],
       semSinalSegs: semSinalPorViagem[g.viagem_id] ?? 0,
+      versaoOk:     g.app_version === VERSAO_APP,
     }))
 
     lista.sort((a, b) =>
@@ -306,13 +310,25 @@ export default function Monitoramento() {
                         {v?.numero_nf_saida ? ` · NF ${v.numero_nf_saida}` : ''}
                         {v?.unidade?.nome   ? ` · ${v.unidade.nome}`       : ''}
                       </p>
-                      <div className="flex items-center gap-3 mt-0.5">
+                      <div className="flex items-center gap-3 mt-0.5 flex-wrap">
                         <p className="text-slate-400 text-[10px]">Saída: {fmtTs(v?.dt_saida_revenda)}</p>
                         {g.semSinalSegs > 0 && (
                           <p className={`text-[10px] ${semSinalCls(g.semSinalSegs)}`}>
                             Sem sinal: {fmtDuracao(g.semSinalSegs)}
                           </p>
                         )}
+                        {g.app_version
+                          ? <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${
+                              g.versaoOk
+                                ? 'bg-green-500/10 text-green-600 border-green-500/20'
+                                : 'bg-amber-500/10 text-amber-600 border-amber-400/30'
+                            }`}>
+                              v{g.app_version}{g.versaoOk ? '' : ' ⚠'}
+                            </span>
+                          : g.contagem === 0
+                            ? <span className="text-[10px] text-slate-300">sem app GPS</span>
+                            : <span className="text-[10px] text-slate-300">versão desconhecida</span>
+                        }
                       </div>
                     </div>
 
