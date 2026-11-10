@@ -249,12 +249,6 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
         // Task 7: watchdog WorkManager — reinicia o serviço se o Android o matar
         try { await CobebGps.scheduleWatchdog() } catch {}
 
-        // Task 6: solicita isenção de battery optimization na primeira viagem
-        try {
-          const { ignoring } = await CobebGps.isIgnoringBatteryOptimizations()
-          if (!ignoring) await CobebGps.requestBatteryOptimizationExemption()
-        } catch {}
-
       } catch (err) {
         console.error('[Rastreamento] Erro ao iniciar CobebGpsService:', err)
       }
@@ -382,5 +376,19 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
     return () => { if (ativoRef.current) parar() }
   }, [])
 
-  return { iniciar, parar }
+  async function verificarBateria() {
+    if (!IS_NATIVE_APP) return { ignoring: true }
+    try {
+      return await CobebGps.isIgnoringBatteryOptimizations()
+    } catch {
+      return { ignoring: true }
+    }
+  }
+
+  async function pedirIsencao() {
+    if (!IS_NATIVE_APP) return
+    try { await CobebGps.requestBatteryOptimizationExemption() } catch {}
+  }
+
+  return { iniciar, parar, verificarBateria, pedirIsencao }
 }

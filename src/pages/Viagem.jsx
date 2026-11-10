@@ -617,6 +617,8 @@ export default function Viagem() {
               onDefinirUnidade={definirUnidadeDescarga}
               onDispensar={dispensarViagem}
               dispensando={dispensando}
+              verificarBateria={rastreamento.verificarBateria}
+              pedirIsencaoBateria={rastreamento.pedirIsencao}
             />
         }
       </main>
@@ -1002,14 +1004,16 @@ const STATUS_GPS_LABEL = {
   retornando:  'Rastreando — retornando à revenda',
 }
 
-function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerificarTarefa, showNF, setShowNF, numeroNF, setNumeroNF, registrando, setRegistrando, registrarEtapa, agendamento, unidades, onAbrirAgendamento, onCancelarAgendamento, showModalAgendamento, onFecharModalAgendamento, onCriarAgendamento, onDefinirUnidade, onDispensar, dispensando }) {
+function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerificarTarefa, showNF, setShowNF, numeroNF, setNumeroNF, registrando, setRegistrando, registrarEtapa, agendamento, unidades, onAbrirAgendamento, onCancelarAgendamento, showModalAgendamento, onFecharModalAgendamento, onCriarAgendamento, onDefinirUnidade, onDispensar, dispensando, verificarBateria, pedirIsencaoBateria }) {
   const numerosUnicos = [...new Set(pedidos.map(p => p.numero_pedido))]
   const totalPallets  = pedidos.reduce((s, p) => s + (Number(p.qtde_pallets) || 0), 0)
   const totalSkus     = pedidos.reduce((s, p) => s + (Number(p.qtde_skus)    || 0), 0)
   const etapaAtualIdx = ETAPAS.findIndex(e => !viagem?.[e.field])
 
-  const [showModalUnidade,    setShowModalUnidade]    = useState(false)
+  const [showModalUnidade,     setShowModalUnidade]    = useState(false)
   const [showConfirmDispensar, setShowConfirmDispensar] = useState(false)
+  const [showModalBateria,     setShowModalBateria]    = useState(false)
+  const [pendingUnidade,       setPendingUnidade]      = useState(null)
 
   // Bloqueio chegada_revenda sem agendamento — só aplica quando etapa ainda não está concluída
   const saidaRevenda   = !!viagem?.dt_saida_revenda
@@ -1026,6 +1030,20 @@ function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerifica
 
   async function confirmarUnidadeESair(unidade) {
     setShowModalUnidade(false)
+    // Verifica se o app está isento de battery optimization antes de iniciar
+    // o rastreamento. Se não estiver, mostra explicação antes de pedir ao sistema.
+    try {
+      const { ignoring } = await verificarBateria()
+      if (!ignoring) {
+        setPendingUnidade(unidade)
+        setShowModalBateria(true)
+        return
+      }
+    } catch {}
+    await _iniciarViagem(unidade)
+  }
+
+  async function _iniciarViagem(unidade) {
     setRegistrando(true)
     await registrarEtapa(ETAPAS[0], null)
     // Aplica unidade ao estado APÓS registrarEtapa para não ser sobrescrita
@@ -1256,6 +1274,23 @@ function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerifica
           onCancelar={onFecharModalAgendamento}
         />
       )}
+
+      {/* Modal Battery Optimization */}
+      {showModalBateria && (
+        <ModalBateriaOtimizacao
+          onConfigurar={async () => {
+            setShowModalBateria(false)
+            await pedirIsencaoBateria()
+            await _iniciarViagem(pendingUnidade)
+            setPendingUnidade(null)
+          }}
+          onPular={async () => {
+            setShowModalBateria(false)
+            await _iniciarViagem(pendingUnidade)
+            setPendingUnidade(null)
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -1322,6 +1357,40 @@ function NFModal({ numeroNF, setNumeroNF, onConfirmar }) {
         <button onClick={onConfirmar} disabled={!numeroNF.trim()}
           className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-semibold py-4 rounded-2xl text-sm transition-colors">
           Confirmar Chegada
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Modal Battery Optimization ───────────────────────────────────────────────
+
+function ModalBateriaOtimizacao({ onConfigurar, onPular }) {
+  return (
+    <div className="fixed inset-0 bg-black/70 z-50 flex items-end">
+      <div className="w-full max-w-lg mx-auto bg-white rounded-t-3xl p-6 space-y-5">
+        <div className="w-10 h-1 bg-cobeb-border rounded-full mx-auto" />
+        <div className="flex items-start gap-3">
+          <div className="bg-amber-100 rounded-xl p-2.5 shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-amber-600"><rect x="2" y="7" width="16" height="11" rx="2"/><path d="M22 11v3"/><line x1="6" y1="12" x2="6" y2="13"/><line x1="10" y1="12" x2="10" y2="13"/></svg>
+          </div>
+          <div>
+            <p className="text-cobeb-text font-semibold text-base">Libere o GPS em segundo plano</p>
+            <p className="text-slate-500 text-sm mt-1">
+              Alguns celulares encerram o GPS quando a tela apaga. Para o rastreamento não parar durante a viagem, autorize o app a funcionar sem restrições de bateria.
+            </p>
+          </div>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-700 text-xs">
+          Uma tela do sistema vai abrir — toque em <strong>Permitir</strong> ou <strong>Sem restrições</strong>.
+        </div>
+        <button onClick={onConfigurar}
+          className="w-full bg-cobeb-navy hover:bg-cobeb-blue text-white font-semibold py-4 rounded-2xl text-sm transition-colors">
+          Configurar agora
+        </button>
+        <button onClick={onPular}
+          className="w-full text-slate-400 text-sm py-2">
+          Continuar sem configurar
         </button>
       </div>
     </div>
