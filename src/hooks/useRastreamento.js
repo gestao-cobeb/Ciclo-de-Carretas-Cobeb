@@ -63,7 +63,8 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
   const visibilityHandlerRef = useRef(null)
   // Task 8: monitoramento de sem sinal no lado JS (só ativo quando nativo não está rodando)
   const motoristaIdRef   = useRef(null)
-  const semSinalDesdeRef = useRef(null)
+  const semSinalDesdeRef  = useRef(null)
+  const sincronizandoRef  = useRef(false)
 
   callbackRef.current = onMudarStatus
   viagemIdRef.current = viagemId
@@ -78,60 +79,69 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
   // sobrescrever com posição potencialmente mais velha ou de menor precisão.
   // Task 8: sem_sinal só é gravado pelo JS quando nativo não está rodando.
   const sincronizar = useCallback(async () => {
-    const cached = lastKnownPosRef.current
-    const TEN_MIN = 10 * 60 * 1000
-    // Posição fresca do GPS ou última conhecida com menos de 10 min
-    const pos = posRef.current
-      ?? (cached && cached.ts && Date.now() - cached.ts < TEN_MIN ? cached : null)
-    const vid = viagemIdRef.current
+    if (sincronizandoRef.current) return
+    sincronizandoRef.current = true
+    try {
+      const vid = viagemIdRef.current
+      if (!vid) return
 
-    if (!pos || !vid || !isOnlineRef.current) {
-      if (!semSinalDesdeRef.current) semSinalDesdeRef.current = Date.now()
-      return
-    }
-
-    // Nativo rodando: ele já está fazendo o PATCH; JS não interfere
-    if (IS_NATIVE_APP) {
-      try {
-        const { running } = await CobebGps.isRunning()
-        if (running) {
-          semSinalDesdeRef.current = null
-          return
-        }
-      } catch {}
-      // Serviço parado: JS assume como fallback
-    }
-
-    const { error } = await supabase
-      .from('viagens')
-      .update({
-        motorista_lat:          pos.lat,
-        motorista_lng:          pos.lng,
-        motorista_last_seen_at: new Date().toISOString(),
-      })
-      .eq('id', vid)
-
-    if (error) {
-      if (!semSinalDesdeRef.current) semSinalDesdeRef.current = Date.now()
-      return
-    }
-
-    // Sync bem-sucedido: registra sem_sinal se durou > 5 min (apenas fallback JS)
-    if (semSinalDesdeRef.current) {
-      const duracaoMs = Date.now() - semSinalDesdeRef.current
-      semSinalDesdeRef.current = null
-      if (duracaoMs >= 5 * 60 * 1000 && motoristaIdRef.current) {
-        supabase.from('gps_eventos').insert({
-          viagem_id:        vid,
-          motorista_id:     motoristaIdRef.current,
-          evento:           'sem_sinal',
-          duracao_segundos: Math.round(duracaoMs / 1000),
-        })
+      // Nativo rodando: ele já está fazendo o PATCH; JS não interfere.
+      // Verificar antes de acumular semSinalDesdeRef para evitar falso positivo
+      // quando há posição nula mas o nativo está ativo.
+      if (IS_NATIVE_APP) {
+        try {
+          const { running } = await CobebGps.isRunning()
+          if (running) {
+            semSinalDesdeRef.current = null
+            return
+          }
+        } catch {}
+        // Serviço parado: JS assume como fallback
       }
+
+      const cached = lastKnownPosRef.current
+      const TEN_MIN = 10 * 60 * 1000
+      const pos = posRef.current
+        ?? (cached && cached.ts && Date.now() - cached.ts < TEN_MIN ? cached : null)
+
+      if (!pos || !isOnlineRef.current) {
+        if (!semSinalDesdeRef.current) semSinalDesdeRef.current = Date.now()
+        return
+      }
+
+      const { error } = await supabase
+        .from('viagens')
+        .update({
+          motorista_lat:          pos.lat,
+          motorista_lng:          pos.lng,
+          motorista_last_seen_at: new Date().toISOString(),
+        })
+        .eq('id', vid)
+
+      if (error) {
+        if (!semSinalDesdeRef.current) semSinalDesdeRef.current = Date.now()
+        return
+      }
+
+      // Sync bem-sucedido: registra sem_sinal se durou > 5 min (apenas fallback JS)
+      if (semSinalDesdeRef.current) {
+        const duracaoMs = Date.now() - semSinalDesdeRef.current
+        semSinalDesdeRef.current = null
+        if (duracaoMs >= 5 * 60 * 1000 && motoristaIdRef.current) {
+          supabase.from('gps_eventos').insert({
+            viagem_id:        vid,
+            motorista_id:     motoristaIdRef.current,
+            evento:           'sem_sinal',
+            duracao_segundos: Math.round(duracaoMs / 1000),
+          })
+        }
+      }
+    } finally {
+      sincronizandoRef.current = false
     }
   }, [])
 
-  function processarPosicao(lat, lng) {
+  function processarPosicao(lat, lng, tsGps) {
     posRef.current = { lat, lng }
     lastKnownPosRef.current = { lat, lng, ts: Date.now() }
     salvarPosCache(lat, lng)
@@ -140,7 +150,7 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
     if (!fabricasAlvo?.length) return
 
     const dentroAgora = fabricasAlvo.some(f => {
-      if (!f.latitude || !f.longitude) return false
+      if (f.latitude == null || f.longitude == null) return false
       return distanciaMetros(lat, lng, parseFloat(f.latitude), parseFloat(f.longitude))
              <= (f.raio_geofence || 100)
     })
@@ -152,6 +162,7 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
       callbackRef.current?.({
         key: 'chegada_fabrica', field: 'dt_chegada_fabrica',
         nextStatus: 'na_fabrica', requireNF: false, closeCycle: false,
+        tsGps: tsGps ?? Date.now(),
       })
       return
     }
@@ -171,6 +182,7 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
         callbackRef.current?.({
           key: 'saida_fabrica', field: 'dt_saida_fabrica',
           nextStatus: 'retornando', requireNF: false, closeCycle: false,
+          tsGps: tsGps ?? Date.now(),
         })
       }
       return
@@ -183,6 +195,7 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
       callbackRef.current?.({
         key: 'reentrada_fabrica', field: 'dt_saida_fabrica', fieldValue: null,
         nextStatus: 'na_fabrica', requireNF: false, closeCycle: false,
+        tsGps: tsGps ?? Date.now(),
       })
     }
   }
@@ -278,7 +291,7 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
               return
             }
             if (location) {
-              processarPosicao(location.latitude, location.longitude)
+              processarPosicao(location.latitude, location.longitude, location.time ?? location.timestamp)
               sincronizar()
             }
           }
@@ -317,7 +330,7 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
 
       if (!navigator.geolocation) return
       const watchId = navigator.geolocation.watchPosition(
-        pos => { processarPosicao(pos.coords.latitude, pos.coords.longitude); sincronizar() },
+        pos => { processarPosicao(pos.coords.latitude, pos.coords.longitude, pos.timestamp); sincronizar() },
         err => console.warn('[Rastreamento] Erro GPS:', err),
         { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 }
       )

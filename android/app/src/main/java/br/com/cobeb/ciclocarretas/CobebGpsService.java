@@ -91,9 +91,11 @@ public class CobebGpsService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null
+        boolean isFreshStart = intent != null
                 && intent.hasExtra("supabaseUrl")
-                && intent.hasExtra("viagemId")) {
+                && intent.hasExtra("viagemId");
+
+        if (isFreshStart) {
             supabaseUrl  = intent.getStringExtra("supabaseUrl");
             supabaseKey  = intent.getStringExtra("supabaseKey");
             accessToken  = intent.getStringExtra("accessToken");
@@ -116,6 +118,13 @@ public class CobebGpsService extends Service {
         startLocationTracking();
         startSyncExecutor();
         registerNetworkCallback();
+
+        // Restart após morte pelo Android: confirma que a viagem ainda está ativa.
+        // clearPrefsStatic() não é chamado quando o app é forçado a fechar, então
+        // o serviço pode reiniciar para uma viagem já concluída.
+        if (!isFreshStart) {
+            syncExecutor.execute(this::verificarViagemAtivaOuEncerrar);
+        }
 
         Log.i(TAG, "Rastreamento iniciado para viagem " + viagemId);
         return START_STICKY;
@@ -520,6 +529,56 @@ public class CobebGpsService extends Service {
             conn.disconnect();
         } catch (Exception e) {
             Log.w(TAG, "Falha ao inserir gps_evento: " + e.getMessage());
+        }
+    }
+
+    // ── Verificação de viagem ativa (restart START_STICKY) ────────────────────
+
+    // Se o app foi encerrado sem chamar stopTracking(), as prefs ficam com
+    // viagemId de uma viagem que pode já ter sido concluída. Ao reiniciar,
+    // verificamos o status no Supabase e encerramos o serviço se necessário.
+    private void verificarViagemAtivaOuEncerrar() {
+        final String url_ = supabaseUrl;
+        final String key_ = supabaseKey;
+        final String vid_ = viagemId;
+        if (url_ == null || key_ == null || vid_ == null) return;
+
+        try {
+            refreshTokenIfNeeded();
+            final String token_ = accessToken;
+            final String bearer = (token_ != null && !token_.isEmpty()) ? token_ : key_;
+
+            URL url = new URL(url_ + "/rest/v1/viagens?id=eq." + vid_ + "&select=status");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setRequestProperty("apikey", key_);
+            conn.setRequestProperty("Authorization", "Bearer " + bearer);
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            conn.setReadTimeout(READ_TIMEOUT_MS);
+
+            int code = conn.getResponseCode();
+            String body = "";
+            if (code >= 200 && code < 300) {
+                BufferedReader br = new BufferedReader(
+                        new InputStreamReader(conn.getInputStream(), StandardCharsets.UTF_8));
+                StringBuilder sb = new StringBuilder();
+                String line;
+                while ((line = br.readLine()) != null) sb.append(line);
+                body = sb.toString();
+            }
+            conn.disconnect();
+
+            if (body.contains("\"concluida\"")) {
+                Log.i(TAG, "Viagem " + vid_ + " já concluída — encerrando serviço");
+                clearPrefsStatic(this);
+                stopSelf();
+            } else {
+                Log.i(TAG, "Viagem " + vid_ + " ainda ativa — rastreamento continua");
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "verificarViagemAtiva falhou (sem rede?): " + e.getMessage());
+            // Sem rede: mantém o serviço; o próximo sync tentará de novo
         }
     }
 

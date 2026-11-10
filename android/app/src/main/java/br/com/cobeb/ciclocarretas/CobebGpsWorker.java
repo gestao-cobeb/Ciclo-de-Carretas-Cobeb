@@ -53,6 +53,7 @@ public class CobebGpsWorker extends Worker {
         } catch (Exception e) {
             // ForegroundServiceStartNotAllowedException (Android 12+) se app em background restrito
             Log.e(TAG, "Falha ao reiniciar servico: " + e.getMessage());
+            return Result.retry();
         }
         return Result.success();
     }

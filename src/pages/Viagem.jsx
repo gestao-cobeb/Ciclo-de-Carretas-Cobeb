@@ -368,7 +368,9 @@ export default function Viagem() {
   async function registrarEtapa(etapa, nf) {
     const fieldVal = 'fieldValue' in etapa
       ? etapa.fieldValue
-      : (etapa.closeCycle && portariaSaida ? portariaSaida : new Date().toISOString())
+      : (etapa.closeCycle && portariaSaida
+          ? portariaSaida
+          : (etapa.tsGps ? new Date(etapa.tsGps).toISOString() : new Date().toISOString()))
     const updates = { [etapa.field]: fieldVal, status: etapa.nextStatus }
     if (nf) updates.numero_nf = nf
     const updated = { ...viagemAtiva, ...updates }
@@ -478,7 +480,7 @@ export default function Viagem() {
   // ── sync offline ──────────────────────────────────────────────────────────
 
   // Ordem crescente do ciclo — status offline nunca pode regredir um status já avançado online.
-  const STATUS_CYCLE = { em_transito: 1, aguardando_conferencia: 2, concluida: 3 }
+  const STATUS_CYCLE = { em_transito: 1, na_fabrica: 2, retornando: 3, aguardando_conferencia: 4, concluida: 5 }
 
   async function syncOffline() {
     setSyncing(true)
