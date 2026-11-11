@@ -350,6 +350,7 @@ function CardSemanas({ year, month, semanas, metaTotalHL, hlData }) {
             realSem += hlPorDia[ds] || 0
           }
           const pct      = metaSem > 0 ? realSem / metaSem * 100 : null
+          const pctVol   = metaTotalHL > 0 ? realSem / metaTotalHL * 100 : null
           const isActive = semanaAtual === sem
           const isPast   = isCurrentMonth && today.getDate() > fim
           const isFuture = isCurrentMonth && today.getDate() < ini
@@ -380,6 +381,12 @@ function CardSemanas({ year, month, semanas, metaTotalHL, hlData }) {
                   <div className="flex justify-between">
                     <span className="text-[10px] text-slate-400">Ating.</span>
                     <span className={`text-[10px] font-bold ${pctColor}`}>{fmtPct(pct)}</span>
+                  </div>
+                )}
+                {pctVol != null && (
+                  <div className="flex justify-between">
+                    <span className="text-[10px] text-slate-400">% Vol. mensal</span>
+                    <span className="text-[10px] font-bold text-cobeb-navy">{fmtPct(pctVol)}</span>
                   </div>
                 )}
               </div>
