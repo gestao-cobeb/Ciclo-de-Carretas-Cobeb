@@ -455,7 +455,7 @@ function CardCarrosPorDia({ saldoHL, diasRestantes, hlPerPallet }) {
 
 // ── Card Carros por Dia por Segmento ─────────────────────────────────────────
 
-function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unitFactor }) {
+function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unitFactor, saldoHL }) {
   if (diasRestantes === 0) return null
 
   const mf = k => (metas[k] || 0) * unitFactor
@@ -493,8 +493,7 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
       return { ...g, saldo, hlPorDia, paletsPorDia, carrosPorDia }
     })
 
-  const totalPaletsPorDia = grupos.reduce((s, g) => s + g.paletsPorDia, 0)
-  const totalCarros = Math.ceil(totalPaletsPorDia / 26)
+  const totalCarros = Math.ceil((saldoHL / diasRestantes) / hlPerPallet / 26)
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
@@ -814,6 +813,7 @@ export default function DashboardVolume() {
                   diasRestantes={diasRestantes}
                   hlPerPallet={hlPerPallet}
                   unitFactor={unitFactor}
+                  saldoHL={saldoTotalHL}
                 />
               </>
             )}
