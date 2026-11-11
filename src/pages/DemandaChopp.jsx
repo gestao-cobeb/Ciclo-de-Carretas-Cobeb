@@ -172,6 +172,8 @@ function SolicitarDemanda({ ano, mes, semana, unidades, deParaMap, isAdminTotal,
   const [erro,      setErro]      = useState('')
   const [salvando,  setSalvando]  = useState(false)
 
+  const [itens,    setItens]    = useState([])   // rascunho: vários itens numa única demanda
+
   const [demandas, setDemandas] = useState([])
   const [loading,  setLoading]  = useState(true)
   const [editId,   setEditId]   = useState(null)
@@ -180,7 +182,14 @@ function SolicitarDemanda({ ano, mes, semana, unidades, deParaMap, isAdminTotal,
 
   const litros = (parseFloat(String(qtde).replace(',', '.')) || 0) * (litrosBarril || 0)
 
+  // Já existe demanda enviada para esta unidade nesta semana? Então não pode enviar de novo.
+  const jaEnviada = !!unidadeId && demandas.some(d => d.unidade_id === unidadeId)
+  const totalUn   = itens.reduce((s, it) => s + it.qtde, 0)
+  const totalL    = itens.reduce((s, it) => s + it.litros, 0)
+
   useEffect(() => { carregar() }, [ano, mes, semana])
+  // Troca de unidade limpa o rascunho (evita misturar itens de unidades diferentes)
+  useEffect(() => { setItens([]); setErro('') }, [unidadeId])
 
   async function carregar() {
     setLoading(true)
@@ -212,30 +221,44 @@ function SolicitarDemanda({ ano, mes, semana, unidades, deParaMap, isAdminTotal,
     setErro(`Código ${cod} não tem litros cadastrados. Cadastre em Cadastros › Metas › De-para de Litros do Chopp.`)
   }
 
-  async function enviar() {
+  function adicionarItem() {
     setErro('')
     const cod = codigo.trim()
     const q   = parseFloat(String(qtde).replace(',', '.'))
-    if (!unidadeId)       { setErro('Selecione a unidade.'); return }
-    if (!cod)             { setErro('Informe o código do chopp.'); return }
-    if (!litrosBarril)    { setErro('Código sem litros cadastrados no de-para (Cadastros › Metas).'); return }
-    if (!(q > 0))         { setErro('Informe a quantidade em unidades (maior que zero).'); return }
+    if (!cod)          { setErro('Informe o código do chopp.'); return }
+    if (!litrosBarril) { setErro('Código sem litros cadastrados no de-para (Cadastros › Metas).'); return }
+    if (!(q > 0))      { setErro('Informe a quantidade em unidades (maior que zero).'); return }
+    if (itens.some(it => it.codigo === cod)) { setErro(`Código ${cod} já está na lista.`); return }
+    setItens(prev => [...prev, { codigo: cod, descricao, litrosBarril, qtde: q, litros: q * litrosBarril }])
+    setCodigo(''); setDescricao(''); setLitrosBarril(null); setQtde('')
+  }
+
+  function removerItem(cod) {
+    setItens(prev => prev.filter(it => it.codigo !== cod))
+  }
+
+  async function enviar() {
+    setErro('')
+    if (!unidadeId)         { setErro('Selecione a unidade.'); return }
+    if (jaEnviada)          { setErro('Já existe demanda enviada para esta unidade nesta semana.'); return }
+    if (itens.length === 0) { setErro('Adicione pelo menos um item à demanda.'); return }
 
     setSalvando(true)
-    const { error } = await supabase.from('demanda_chopp').insert({
+    const rows = itens.map(it => ({
       unidade_id:          unidadeId,
       ano, mes: mes + 1, semana,
-      codigo:              cod,
-      descricao:           descricao || null,
-      qtde_unidades:       q,
-      litros_por_barril:   litrosBarril,
-      litros:              q * litrosBarril,
+      codigo:              it.codigo,
+      descricao:           it.descricao || null,
+      qtde_unidades:       it.qtde,
+      litros_por_barril:   it.litrosBarril,
+      litros:              it.litros,
       solicitado_por:      profile?.id ?? null,
       solicitado_por_nome: profile?.nome ?? null,
-    })
+    }))
+    const { error } = await supabase.from('demanda_chopp').insert(rows)
     setSalvando(false)
     if (error) { setErro('Erro ao enviar: ' + error.message); return }
-    setCodigo(''); setDescricao(''); setLitrosBarril(null); setQtde('')
+    setItens([])
     carregar()
   }
 
@@ -280,50 +303,93 @@ function SolicitarDemanda({ ano, mes, semana, unidades, deParaMap, isAdminTotal,
           </select>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
-          <div className="col-span-1">
-            <label className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-1.5">Código *</label>
-            <input type="text" value={codigo}
-              onChange={e => setCodigo(e.target.value)} onBlur={buscarCodigo}
-              placeholder="Código" className={inputCls} />
+        {jaEnviada ? (
+          <div className="bg-green-500/10 border border-green-500/20 rounded-xl px-4 py-3 text-sm text-green-700 flex items-start gap-2">
+            <Lock size={15} className="shrink-0 mt-0.5" />
+            <span>
+              Demanda já enviada para esta unidade nesta semana — não é possível enviar novamente.
+              {isAdminTotal && ' Para refazer, exclua os itens na lista abaixo.'}
+            </span>
           </div>
-          <div className="col-span-2">
-            <label className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-1.5">Descrição</label>
-            <input type="text" value={descricao} readOnly
-              placeholder="— busca pelo código —"
-              className={`${inputCls} bg-slate-50 text-slate-500`} />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <div>
-            <label className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-1.5">Qtde (unidades) *</label>
-            <input type="number" min="0" step="0.01" value={qtde}
-              onChange={e => setQtde(e.target.value)}
-              placeholder="0" className={`${inputCls} text-right [appearance:textfield]`} />
-          </div>
-          <div>
-            <label className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-1.5">Litros</label>
-            <div className={`${inputCls} bg-slate-50 text-right font-semibold text-cobeb-navy`}>
-              {fmtL(litros)} L
+        ) : (
+          <>
+            {/* Entrada de item */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-1">
+                <label className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-1.5">Código *</label>
+                <input type="text" value={codigo}
+                  onChange={e => setCodigo(e.target.value)} onBlur={buscarCodigo}
+                  placeholder="Código" className={inputCls} />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-1.5">Descrição</label>
+                <input type="text" value={descricao} readOnly
+                  placeholder="— busca pelo código —"
+                  className={`${inputCls} bg-slate-50 text-slate-500`} />
+              </div>
             </div>
-            {litrosBarril != null && (
-              <p className="text-[10px] text-slate-400 mt-1 text-right">{fmtL(litrosBarril)} L / barril</p>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-1.5">Qtde (unidades) *</label>
+                <input type="number" min="0" step="0.01" value={qtde}
+                  onChange={e => setQtde(e.target.value)}
+                  placeholder="0" className={`${inputCls} text-right [appearance:textfield]`} />
+              </div>
+              <div>
+                <label className="block text-slate-500 text-[11px] font-semibold uppercase tracking-widest mb-1.5">Litros</label>
+                <div className={`${inputCls} bg-slate-50 text-right font-semibold text-cobeb-navy`}>
+                  {fmtL(litros)} L
+                </div>
+                {litrosBarril != null && (
+                  <p className="text-[10px] text-slate-400 mt-1 text-right">{fmtL(litrosBarril)} L / barril</p>
+                )}
+              </div>
+            </div>
+
+            {erro && <p className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 text-red-500 text-sm">{erro}</p>}
+
+            <button onClick={adicionarItem}
+              className="w-full border border-cobeb-navy text-cobeb-navy hover:bg-cobeb-navy/5 font-semibold py-2.5 rounded-xl transition-colors text-sm flex items-center justify-center gap-1.5">
+              <Plus size={15} /> Adicionar item
+            </button>
+
+            {/* Rascunho de itens */}
+            {itens.length > 0 && (
+              <div className="rounded-xl border border-cobeb-border divide-y divide-cobeb-border/50 overflow-hidden">
+                {itens.map(it => (
+                  <div key={it.codigo} className="flex items-center justify-between gap-2 px-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm text-cobeb-text truncate">
+                        <span className="font-mono text-cobeb-navy">{it.codigo}</span>
+                        {it.descricao ? ` — ${it.descricao}` : ''}
+                      </p>
+                      <p className="text-[11px] text-slate-500">{fmtU(it.qtde)} un · {fmtL(it.litros)} L</p>
+                    </div>
+                    <button onClick={() => removerItem(it.codigo)}
+                      className="text-slate-400 hover:text-red-500 p-1 shrink-0" title="Remover item">
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between px-3 py-2 bg-[#EBF5FF]/60">
+                  <span className="text-xs font-semibold text-cobeb-text">{itens.length} item(ns)</span>
+                  <span className="text-xs font-semibold text-cobeb-navy">{fmtU(totalUn)} un · {fmtL(totalL)} L</span>
+                </div>
+              </div>
             )}
-          </div>
-        </div>
 
-        {erro && <p className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 text-red-500 text-sm">{erro}</p>}
+            <div className="flex items-center gap-2 text-[11px] text-slate-400">
+              <Lock size={12} className="shrink-0" />
+              <span>Envie uma única vez. Após enviar, não dá para enviar de novo nesta semana; só o acesso total altera ou exclui.</span>
+            </div>
 
-        <div className="flex items-center gap-2 text-[11px] text-slate-400">
-          <Lock size={12} className="shrink-0" />
-          <span>Após enviar, a demanda não pode mais ser editada. Apenas o acesso total pode alterar ou excluir.</span>
-        </div>
-
-        <button onClick={enviar} disabled={salvando}
-          className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-1.5">
-          <Plus size={15} /> {salvando ? 'Enviando...' : 'Enviar demanda'}
-        </button>
+            <button onClick={enviar} disabled={salvando || itens.length === 0}
+              className="w-full bg-yellow-500 hover:bg-yellow-600 disabled:opacity-50 text-white font-semibold py-3 rounded-xl transition-colors text-sm flex items-center justify-center gap-1.5">
+              <Plus size={15} /> {salvando ? 'Enviando...' : `Enviar demanda${itens.length ? ` (${itens.length})` : ''}`}
+            </button>
+          </>
+        )}
       </div>
 
       {/* Lista da semana */}
