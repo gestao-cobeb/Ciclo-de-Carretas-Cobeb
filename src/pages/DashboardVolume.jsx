@@ -453,6 +453,97 @@ function CardCarrosPorDia({ saldoHL, diasRestantes, hlPerPallet }) {
   )
 }
 
+// ── Card Carros por Dia por Segmento ─────────────────────────────────────────
+
+function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unitFactor }) {
+  if (diasRestantes === 0) return null
+
+  const mf = k => (metas[k] || 0) * unitFactor
+
+  const owReal  = ['OW Core', 'OW Match', 'OW High End', 'OW Zero Álcool'].reduce((s, seg) => s + (hlData[seg]?.total || 0), 0)
+  const gmReal  = ['Garrafa Meia Core', 'Garrafa Meia HE'].reduce((s, seg) => s + (hlData[seg]?.total || 0), 0)
+  const giReal  = ['Garrafa Inteira Core', 'Garrafa Inteira HE'].reduce((s, seg) => s + (hlData[seg]?.total || 0), 0)
+  const g1Real  = ['Garrafa 1L Core', 'Garrafa 1L HE'].reduce((s, seg) => s + (hlData[seg]?.total || 0), 0)
+  const nabReal  = (hlData['NAB']?.total || 0) + (hlData['NAB Zero']?.total || 0)
+  const rgbReal  = gmReal + giReal + g1Real
+
+  const owMeta   = mf('Cerveja OW')
+  const rgbMeta  = mf('RGB')
+  const nabMeta  = mf('NAB') + mf('NAB Zero')
+
+  // Distribui meta do RGB proporcionalmente pelo real de cada tipo de garrafa;
+  // sem real ainda, divide em partes iguais.
+  const gmMeta  = rgbReal > 0 ? rgbMeta * (gmReal / rgbReal) : rgbMeta / 3
+  const giMeta  = rgbReal > 0 ? rgbMeta * (giReal / rgbReal) : rgbMeta / 3
+  const g1Meta  = rgbReal > 0 ? rgbMeta * (g1Real / rgbReal) : rgbMeta / 3
+
+  const grupos = [
+    { label: 'Cerveja OW',      meta: owMeta, real: owReal },
+    { label: 'Garrafa Meia',    meta: gmMeta, real: gmReal },
+    { label: 'Garrafa Inteira', meta: giMeta, real: giReal },
+    { label: 'Garrafa 1L',      meta: g1Meta, real: g1Real },
+    { label: 'NAB',             meta: nabMeta, real: nabReal },
+  ]
+    .filter(g => g.meta > 0)
+    .map(g => {
+      const saldo       = Math.max(g.meta - g.real, 0)
+      const hlPorDia    = saldo / diasRestantes
+      const paletsPorDia = hlPerPallet > 0 ? hlPorDia / hlPerPallet : 0
+      const carrosPorDia = Math.ceil(paletsPorDia / 26)
+      return { ...g, saldo, hlPorDia, paletsPorDia, carrosPorDia }
+    })
+
+  const totalCarros = grupos.reduce((s, g) => s + g.carrosPorDia, 0)
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
+      <div className="px-4 pt-4 pb-3 border-b border-cobeb-border/50 flex items-center gap-2">
+        <Truck size={15} className="text-cobeb-navy" />
+        <div>
+          <h2 className="text-cobeb-text font-semibold text-sm">Carros por Dia por Segmento</h2>
+          <p className="text-xs text-slate-400 mt-0.5">Necessidade diária distribuída por grupo · cap. 26 plt/carreta</p>
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full text-xs">
+          <thead>
+            <tr className="bg-[#EBF5FF]/60 border-b border-cobeb-border">
+              <th className="px-4 py-2 text-left text-cobeb-navy font-semibold whitespace-nowrap">Segmento</th>
+              <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Saldo (HL)</th>
+              <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">HL/Dia</th>
+              <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Plt/Dia</th>
+              <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Carros/Dia</th>
+            </tr>
+          </thead>
+          <tbody>
+            {grupos.map(g => (
+              <tr key={g.label} className="border-t border-cobeb-border/40 hover:bg-cobeb-sky/30 transition-colors">
+                <td className="px-4 py-2.5 text-cobeb-text whitespace-nowrap">{g.label}</td>
+                <td className="px-3 py-2.5 text-right text-slate-500">{fmtHL(g.saldo)}</td>
+                <td className="px-3 py-2.5 text-right text-slate-500">{fmtHL(g.hlPorDia)}</td>
+                <td className="px-3 py-2.5 text-right text-slate-500">
+                  {g.paletsPorDia.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} plt
+                </td>
+                <td className="px-3 py-2.5 text-right">
+                  {g.carrosPorDia > 0
+                    ? <span className="font-black text-cobeb-navy text-sm">{g.carrosPorDia}</span>
+                    : <span className="text-emerald-600 font-semibold">—</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr className="bg-[#EBF5FF]/80 border-t-2 border-cobeb-navy/30">
+              <td className="px-4 py-2.5 font-black text-cobeb-navy text-xs" colSpan={4}>Total</td>
+              <td className="px-3 py-2.5 text-right font-black text-cobeb-navy text-sm">{totalCarros}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 // ── Componente principal ──────────────────────────────────────────────────────
 
 export default function DashboardVolume() {
@@ -710,11 +801,20 @@ export default function DashboardVolume() {
             />
 
             {isCurrentMonth && (
-              <CardCarrosPorDia
-                saldoHL={saldoTotalHL}
-                diasRestantes={diasRestantes}
-                hlPerPallet={hlPerPallet}
-              />
+              <>
+                <CardCarrosPorDia
+                  saldoHL={saldoTotalHL}
+                  diasRestantes={diasRestantes}
+                  hlPerPallet={hlPerPallet}
+                />
+                <CardCarrosPorSegmento
+                  metas={metas}
+                  hlData={hlData}
+                  diasRestantes={diasRestantes}
+                  hlPerPallet={hlPerPallet}
+                  unitFactor={unitFactor}
+                />
+              </>
             )}
           </>
         )}
