@@ -495,16 +495,18 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
   ]
     .filter(g => g.meta > 0)
     .map(g => {
-      const hlPlt       = hlPerPalletSeg[g.label] || hlPerPallet
-      const saldo       = Math.max(g.meta - g.real, 0)
-      const hlPorDia    = saldo / diasRestantes
+      const hlPlt        = hlPerPalletSeg[g.label] || hlPerPallet
+      const saldo        = Math.max(g.meta - g.real, 0)
+      const hlPorDia     = saldo / diasRestantes
       const paletsPorDia = hlPlt > 0 ? hlPorDia / hlPlt : 0
-      const carrosPorDia = Math.ceil(paletsPorDia / 26)
+      const paletsArred  = paletsPorDia % 1 > 0.6 ? Math.ceil(paletsPorDia) : Math.floor(paletsPorDia)
+      const carrosPorDia = Math.ceil(paletsArred / 26)
       return { ...g, hlPlt, saldo, hlPorDia, paletsPorDia, carrosPorDia }
     })
 
   const totalPaletsPorDia = grupos.reduce((s, g) => s + g.paletsPorDia, 0)
-  const totalCarros = Math.ceil(totalPaletsPorDia / 26)
+  const totalPaletsArred  = totalPaletsPorDia % 1 > 0.6 ? Math.ceil(totalPaletsPorDia) : Math.floor(totalPaletsPorDia)
+  const totalCarros = Math.ceil(totalPaletsArred / 26)
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
