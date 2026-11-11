@@ -9,6 +9,15 @@ function fmt4Y(iso) {
   return `${d}/${m}/${y}`
 }
 
+// Data de validade só é aceita como 'YYYY-MM-DD' real. Barra ano com dígito a
+// mais (ex.: '20267-11-11', que alguns navegadores deixam digitar) antes que
+// vire NRI com vencimento inválido.
+function dataValida(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso ?? ''))) return false
+  const d = new Date(`${iso}T12:00:00`)
+  return !Number.isNaN(d.getTime())
+}
+
 const uid = () => Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2)
 
 function newGrupo() {
@@ -114,7 +123,7 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, profileId, gr
       ...gr,
       erroCodigo: !(gr.codigo ?? '').trim() ? 'Obrigatório' : (!gr.descricao ? (gr.erroCodigo || 'Busque o produto') : null),
       erroQtd:    !gr.qtdePaletes || Number(gr.qtdePaletes) <= 0,
-      erroData:   !gr.dataValidade,
+      erroData:   !dataValida(gr.dataValidade),
     }))
     setGrupos(gruposV)
     return Object.keys(ec).length === 0 && gruposV.every(gr => !gr.erroCodigo && !gr.erroQtd && !gr.erroData)
@@ -413,10 +422,11 @@ export default function EmissaoNRI({ tarefa, pedidos, profileNome, profileId, gr
                     </div>
                     <div>
                       <label className="text-[11px] font-semibold uppercase tracking-widest text-slate-500 block mb-1.5">Data de Validade <span className="text-cobeb-yellow">*</span></label>
-                      <input type="date" value={gr.dataValidade} onChange={e => updateGrupo(idx, 'dataValidade', e.target.value)}
+                      <input type="date" value={gr.dataValidade} min="2000-01-01" max="9999-12-31"
+                        onChange={e => updateGrupo(idx, 'dataValidade', e.target.value)}
                         className={`bg-[#EBF5FF] border rounded-xl px-3 py-2.5 text-xs text-cobeb-text focus:outline-none focus:border-cobeb-blue transition-colors [color-scheme:light] ${gr.erroData ? 'border-red-400' : 'border-cobeb-border'}`} />
-                      {gr.dataValidade && <p className="text-slate-400 text-[10px] mt-1">Carregar até: {fmt4Y(minus30(gr.dataValidade))}</p>}
-                      {gr.erroData && <p className="text-red-400 text-[10px] mt-1">Obrigatório</p>}
+                      {dataValida(gr.dataValidade) && <p className="text-slate-400 text-[10px] mt-1">Carregar até: {fmt4Y(minus30(gr.dataValidade))}</p>}
+                      {gr.erroData && <p className="text-red-400 text-[10px] mt-1">{gr.dataValidade ? 'Data inválida' : 'Obrigatório'}</p>}
                     </div>
                   </div>
                 </div>

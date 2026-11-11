@@ -2,15 +2,36 @@ import { jsPDF } from 'jspdf'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// Normaliza qualquer entrada de data para 'YYYY-MM-DD'. Aceita string ISO
+// (com ou sem hora) e Date. Devolve '' para valor ausente ou inválido — nunca
+// lança exceção. É a rede de segurança desta tela: data inválida não pode
+// derrubar o render nem a geração do PDF.
+function toYMD(v) {
+  if (!v) return ''
+  if (v instanceof Date) {
+    return Number.isNaN(v.getTime()) ? '' : v.toISOString().slice(0, 10)
+  }
+  const m = String(v).trim().match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) {
+    const d = new Date(`${m[1]}-${m[2]}-${m[3]}T12:00:00`)
+    return Number.isNaN(d.getTime()) ? '' : `${m[1]}-${m[2]}-${m[3]}`
+  }
+  const d = new Date(String(v))
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
+}
+
 export function fmt2Y(iso) {
-  if (!iso) return ''
-  const [y, m, d] = iso.split('-')
+  const s = toYMD(iso)
+  if (!s) return ''
+  const [y, m, d] = s.split('-')
   return `${d}/${m}/${y.slice(-2)}`
 }
 
 export function minus30(iso) {
-  if (!iso) return ''
-  const d = new Date(iso + 'T12:00:00')
+  const s = toYMD(iso)
+  if (!s) return ''
+  const d = new Date(s + 'T12:00:00')
+  if (Number.isNaN(d.getTime())) return ''
   d.setDate(d.getDate() - 30)
   return d.toISOString().slice(0, 10)
 }
