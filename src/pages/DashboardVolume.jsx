@@ -524,8 +524,9 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
   ]
     .filter(g => g.meta > 0)
     .map(g => {
-      const hlPlt    = hlPerPalletSeg[g.label] || hlPerPallet
-      const saldo    = Math.max(g.meta - g.real, 0)
+      const hlPlt     = hlPerPalletSeg[g.label] || hlPerPallet
+      const saldo     = Math.max(g.meta - g.real, 0)
+      const carrosDia = arredonda((saldo / diasRestantes / hlPlt) / 26)
       const semCarros = weeksInfo.map((w, wi) => {
         if (w.diasRest === 0) return null
         const metaSem  = g.meta * (w.pct / 100)
@@ -533,8 +534,11 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
         const saldoSem = Math.max(metaSem - realSem, 0)
         return arredonda((saldoSem / w.diasRest / hlPlt) / 26)
       })
-      return { ...g, hlPlt, saldo, semCarros }
+      return { ...g, hlPlt, saldo, carrosDia, semCarros }
     })
+
+  const totalPltDia    = grupos.reduce((s, g) => s + (g.hlPlt > 0 ? Math.max(g.meta - g.real, 0) / diasRestantes / g.hlPlt : 0), 0)
+  const totalCarrosDia = arredonda(totalPltDia / 26)
 
   const totalCarrosSem = weeksInfo.map((w, wi) => {
     if (w.diasRest === 0) return null
@@ -563,9 +567,10 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
               <th className="px-4 py-2 text-left text-cobeb-navy font-semibold whitespace-nowrap">Segmento</th>
               <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Saldo (HL)</th>
               <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">HL/Plt</th>
+              <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Carros/Dia</th>
               {weeksInfo.map(w => (
                 <th key={w.sem} className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">
-                  Carros/Dia S{w.sem}
+                  S{w.sem}
                   <span className="block text-[9px] font-normal text-slate-400">{w.pct}%</span>
                 </th>
               ))}
@@ -578,6 +583,11 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
                 <td className="px-3 py-2.5 text-right text-slate-500">{fmtHL(g.saldo)}</td>
                 <td className="px-3 py-2.5 text-right text-slate-400">
                   {g.hlPlt.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+                <td className="px-3 py-2.5 text-right">
+                  {g.carrosDia > 0
+                    ? <span className="font-black text-cobeb-navy text-sm">{g.carrosDia}</span>
+                    : <span className="text-emerald-600 font-semibold">—</span>}
                 </td>
                 {g.semCarros.map((c, i) => (
                   <td key={i} className="px-3 py-2.5 text-right">
@@ -594,6 +604,7 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
           <tfoot>
             <tr className="bg-[#EBF5FF]/80 border-t-2 border-cobeb-navy/30">
               <td className="px-4 py-2.5 font-black text-cobeb-navy text-xs" colSpan={3}>Total</td>
+              <td className="px-3 py-2.5 text-right font-black text-cobeb-navy text-sm">{totalCarrosDia}</td>
               {totalCarrosSem.map((c, i) => (
                 <td key={i} className="px-3 py-2.5 text-right font-black text-cobeb-navy text-sm">
                   {c === null ? <span className="text-slate-300">—</span> : c}
