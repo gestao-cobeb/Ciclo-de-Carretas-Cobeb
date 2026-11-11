@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
-import { Target, RotateCcw, Plus, ToggleLeft, ToggleRight, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react'
+import { Target, RotateCcw, Plus, ToggleLeft, ToggleRight, ChevronLeft, ChevronRight, BarChart3, Beer, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 
 const CHAVE_VIAGENS = 'planejado_viagens'
 
@@ -563,6 +564,170 @@ function MetaVolumeUnidades() {
   )
 }
 
+function ChoppLitros() {
+  const { profile } = useAuth()
+  const isAdminTotal = profile?.acesso_total === true
+
+  const [lista,    setLista]    = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [codigo,   setCodigo]   = useState('')
+  const [descricao, setDescricao] = useState('')
+  const [litros,   setLitros]   = useState('')
+  const [buscando, setBuscando] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [excluindo, setExcluindo] = useState(null)
+  const [erro,     setErro]     = useState('')
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('chopp_litros')
+      .select('codigo, descricao, litros_por_barril')
+      .order('codigo')
+    setLista(data ?? [])
+    setLoading(false)
+  }
+
+  // Puxa a descrição do catálogo ao sair do campo de código
+  async function buscarDescricao() {
+    const cod = codigo.trim()
+    if (!cod || descricao.trim()) return
+    setBuscando(true)
+    const { data } = await supabase
+      .from('produtos_catalogo')
+      .select('descricao')
+      .eq('codigo', cod)
+      .maybeSingle()
+    if (data?.descricao) setDescricao(data.descricao)
+    setBuscando(false)
+  }
+
+  async function adicionar() {
+    setErro('')
+    const cod = codigo.trim()
+    const l   = parseFloat(String(litros).replace(',', '.'))
+    if (!cod)            { setErro('Informe o código do chopp.'); return }
+    if (!(l > 0))        { setErro('Informe os litros por barril (maior que zero).'); return }
+    setSalvando(true)
+    const { error } = await supabase.from('chopp_litros').upsert({
+      codigo:            cod,
+      descricao:         descricao.trim() || null,
+      litros_por_barril: l,
+      criado_por:        profile?.id ?? null,
+    })
+    setSalvando(false)
+    if (error) { setErro(error.message); return }
+    setCodigo(''); setDescricao(''); setLitros('')
+    load()
+  }
+
+  async function excluir(cod) {
+    if (!window.confirm(`Remover o código ${cod} do de-para de litros?`)) return
+    setExcluindo(cod)
+    const { error } = await supabase.from('chopp_litros').delete().eq('codigo', cod)
+    setExcluindo(null)
+    if (error) { alert('Erro ao excluir: ' + error.message); return }
+    setLista(prev => prev.filter(r => r.codigo !== cod))
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-5">
+      <div className="mb-4">
+        <p className="text-cobeb-text font-semibold text-sm">De-para de Litros do Chopp</p>
+        <p className="text-slate-500 text-xs mt-0.5">
+          Código → litros por barril. Usado no módulo Demanda de Chopp para converter unidades em litros.
+        </p>
+      </div>
+
+      {/* Adicionar — só admin total */}
+      {isAdminTotal ? (
+        <div className="space-y-2 mb-4">
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Código"
+              value={codigo}
+              onChange={e => setCodigo(e.target.value)}
+              onBlur={buscarDescricao}
+              className="w-28 text-sm border border-cobeb-border rounded-xl px-3 py-2 focus:outline-none focus:border-cobeb-blue transition-colors"
+            />
+            <input
+              type="text"
+              placeholder={buscando ? 'Buscando...' : 'Descrição (auto do catálogo)'}
+              value={descricao}
+              onChange={e => setDescricao(e.target.value)}
+              className="flex-1 text-sm border border-cobeb-border rounded-xl px-3 py-2 focus:outline-none focus:border-cobeb-blue transition-colors"
+            />
+          </div>
+          <div className="flex gap-2">
+            <div className="flex items-center gap-1.5 w-40">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="Litros/barril"
+                value={litros}
+                onChange={e => setLitros(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && adicionar()}
+                className="w-full text-sm border border-cobeb-border rounded-xl px-3 py-2 text-right focus:outline-none focus:border-cobeb-blue transition-colors [appearance:textfield]"
+              />
+              <span className="text-xs text-slate-400 shrink-0">L</span>
+            </div>
+            <button
+              onClick={adicionar}
+              disabled={salvando}
+              className="flex-1 px-4 py-2 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors flex items-center justify-center gap-1.5">
+              <Plus size={14} /> {salvando ? 'Salvando...' : 'Adicionar / Atualizar'}
+            </button>
+          </div>
+          {erro && <p className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-2.5 text-red-500 text-sm">{erro}</p>}
+        </div>
+      ) : (
+        <p className="text-slate-400 text-xs bg-[#EBF5FF] border border-cobeb-border rounded-xl px-4 py-3 mb-4">
+          Apenas o acesso total pode cadastrar o de-para de litros.
+        </p>
+      )}
+
+      {loading ? (
+        <div className="flex justify-center py-6">
+          <div className="w-5 h-5 border-2 border-cobeb-navy border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : lista.length === 0 ? (
+        <p className="text-slate-400 text-sm text-center py-4">Nenhum código cadastrado.</p>
+      ) : (
+        <div className="space-y-2">
+          {lista.map(r => (
+            <div key={r.codigo} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-cobeb-border bg-[#EBF5FF]/50">
+              <div className="min-w-0">
+                <p className="text-sm text-cobeb-text font-medium truncate">
+                  <span className="font-mono text-cobeb-navy">{r.codigo}</span>
+                  {r.descricao ? ` — ${r.descricao}` : ''}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {Number(r.litros_por_barril).toLocaleString('pt-BR')} L por barril
+                </p>
+              </div>
+              {isAdminTotal && (
+                <button
+                  onClick={() => excluir(r.codigo)}
+                  disabled={excluindo === r.codigo}
+                  className="text-slate-400 hover:text-red-500 transition-colors shrink-0 p-1"
+                  title="Remover">
+                  {excluindo === r.codigo
+                    ? <div className="w-4 h-4 border-2 border-red-300 border-t-red-500 rounded-full animate-spin" />
+                    : <Trash2 size={16} />}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Metas() {
   return (
     <div className="px-5 py-4 max-w-2xl space-y-5">
@@ -578,6 +743,12 @@ export default function Metas() {
       </div>
       <MetaVolumePuxada />
       <MetaVolumeUnidades />
+
+      <div className="flex items-center gap-2 mt-6 mb-1">
+        <Beer size={15} className="text-yellow-500" />
+        <p className="text-cobeb-text font-semibold text-sm">Demanda de Chopp</p>
+      </div>
+      <ChoppLitros />
 
       <div className="flex items-center gap-2 mt-6 mb-1">
         <RotateCcw size={15} className="text-purple-600" />

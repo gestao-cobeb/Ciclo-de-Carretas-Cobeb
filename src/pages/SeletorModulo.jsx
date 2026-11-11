@@ -142,7 +142,7 @@ export const MODULOS = [
     key:   'demanda_chopp',
     rota:  '/demanda-chopp',
     label: 'Demanda de Chopp',
-    desc:  'Demanda e volume puxado de chopp por semana',
+    desc:  'Solicitar demanda e comparar com o puxado por semana',
     Icon:  Beer,
     cor:   'bg-yellow-500',
     borda: 'border-yellow-500/30',
