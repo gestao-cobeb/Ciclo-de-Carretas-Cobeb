@@ -575,13 +575,13 @@ function VolumePuxado({ ano, mes, semana, unidades, deParaMap }) {
                   const dif = l.puxL - l.demL
                   return (
                     <tr key={l.codigo}>
-                      <td className="py-2 px-1">
-                        <p className="text-cobeb-text truncate max-w-[9rem]">{l.descricao}</p>
-                        <p className="text-[10px] text-slate-400 font-mono">{l.codigo}</p>
+                      <td className="py-2.5 px-1 align-top">
+                        <p className="text-sm font-mono font-bold text-cobeb-navy leading-tight">{l.codigo}</p>
+                        <p className="text-[13px] text-cobeb-text leading-snug break-words mt-0.5">{l.descricao}</p>
                       </td>
-                      <td className="py-2 px-1 text-right text-slate-600">{fmtL(l.demL)}</td>
-                      <td className="py-2 px-1 text-right text-slate-600">{fmtL(l.puxL)}</td>
-                      <td className={`py-2 px-1 text-right font-semibold ${dif < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                      <td className="py-2.5 px-1 text-right text-slate-600 whitespace-nowrap align-top">{fmtL(l.demL)}</td>
+                      <td className="py-2.5 px-1 text-right text-slate-600 whitespace-nowrap align-top">{fmtL(l.puxL)}</td>
+                      <td className={`py-2.5 px-1 text-right font-semibold whitespace-nowrap align-top ${dif < 0 ? 'text-red-500' : 'text-green-600'}`}>
                         {dif > 0 ? '+' : ''}{fmtL(dif)}
                       </td>
                     </tr>
