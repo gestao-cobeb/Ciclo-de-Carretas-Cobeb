@@ -567,7 +567,7 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-xs">
+        <table className="min-w-full text-xs">
           <thead>
             <tr className="bg-[#EBF5FF]/60 border-b border-cobeb-border">
               <th className="px-4 py-2 text-left text-cobeb-navy font-semibold whitespace-nowrap">Segmento</th>
