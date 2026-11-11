@@ -493,7 +493,8 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
       return { ...g, saldo, hlPorDia, paletsPorDia, carrosPorDia }
     })
 
-  const totalCarros = grupos.reduce((s, g) => s + g.carrosPorDia, 0)
+  const totalPaletsPorDia = grupos.reduce((s, g) => s + g.paletsPorDia, 0)
+  const totalCarros = Math.ceil(totalPaletsPorDia / 26)
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
