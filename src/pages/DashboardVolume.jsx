@@ -15,6 +15,15 @@ const SEGMENTOS_FOLHA = [
 // Chaves que possuem meta configurada (nível 2)
 const META_KEYS = ['Cerveja OW', 'RGB', 'NAB', 'NAB Zero']
 
+// Mapeamento segmento folha → grupo do card de carros por segmento
+const SEG_TO_GRUPO = {
+  'OW Core': 'Cerveja OW', 'OW Match': 'Cerveja OW', 'OW High End': 'Cerveja OW', 'OW Zero Álcool': 'Cerveja OW',
+  'Garrafa Meia Core': 'Garrafa Meia', 'Garrafa Meia HE': 'Garrafa Meia',
+  'Garrafa Inteira Core': 'Garrafa Inteira', 'Garrafa Inteira HE': 'Garrafa Inteira',
+  'Garrafa 1L Core': 'Garrafa 1L', 'Garrafa 1L HE': 'Garrafa 1L',
+  'NAB': 'NAB', 'NAB Zero': 'NAB',
+}
+
 const MESES = [
   'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
   'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
@@ -455,7 +464,7 @@ function CardCarrosPorDia({ saldoHL, diasRestantes, hlPerPallet }) {
 
 // ── Card Carros por Dia por Segmento ─────────────────────────────────────────
 
-function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unitFactor, saldoHL }) {
+function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unitFactor, hlPerPalletSeg }) {
   if (diasRestantes === 0) return null
 
   const mf = k => (metas[k] || 0) * unitFactor
@@ -486,14 +495,16 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
   ]
     .filter(g => g.meta > 0)
     .map(g => {
+      const hlPlt       = hlPerPalletSeg[g.label] || hlPerPallet
       const saldo       = Math.max(g.meta - g.real, 0)
       const hlPorDia    = saldo / diasRestantes
-      const paletsPorDia = hlPerPallet > 0 ? hlPorDia / hlPerPallet : 0
+      const paletsPorDia = hlPlt > 0 ? hlPorDia / hlPlt : 0
       const carrosPorDia = Math.ceil(paletsPorDia / 26)
-      return { ...g, saldo, hlPorDia, paletsPorDia, carrosPorDia }
+      return { ...g, hlPlt, saldo, hlPorDia, paletsPorDia, carrosPorDia }
     })
 
-  const totalCarros = Math.ceil((saldoHL / diasRestantes) / hlPerPallet / 26)
+  const totalPaletsPorDia = grupos.reduce((s, g) => s + g.paletsPorDia, 0)
+  const totalCarros = Math.ceil(totalPaletsPorDia / 26)
 
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm overflow-hidden">
@@ -511,6 +522,7 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
               <th className="px-4 py-2 text-left text-cobeb-navy font-semibold whitespace-nowrap">Segmento</th>
               <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Saldo (HL)</th>
               <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">HL/Dia</th>
+              <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">HL/Plt</th>
               <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Plt/Dia</th>
               <th className="px-3 py-2 text-right text-cobeb-navy font-semibold whitespace-nowrap">Carros/Dia</th>
             </tr>
@@ -521,6 +533,9 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
                 <td className="px-4 py-2.5 text-cobeb-text whitespace-nowrap">{g.label}</td>
                 <td className="px-3 py-2.5 text-right text-slate-500">{fmtHL(g.saldo)}</td>
                 <td className="px-3 py-2.5 text-right text-slate-500">{fmtHL(g.hlPorDia)}</td>
+                <td className="px-3 py-2.5 text-right text-slate-400">
+                  {g.hlPlt.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
                 <td className="px-3 py-2.5 text-right text-slate-500">
                   {g.paletsPorDia.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })} plt
                 </td>
@@ -534,7 +549,7 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
           </tbody>
           <tfoot>
             <tr className="bg-[#EBF5FF]/80 border-t-2 border-cobeb-navy/30">
-              <td className="px-4 py-2.5 font-black text-cobeb-navy text-xs" colSpan={4}>Total</td>
+              <td className="px-4 py-2.5 font-black text-cobeb-navy text-xs" colSpan={5}>Total</td>
               <td className="px-3 py-2.5 text-right font-black text-cobeb-navy text-sm">{totalCarros}</td>
             </tr>
           </tfoot>
@@ -553,7 +568,8 @@ export default function DashboardVolume() {
   const [loading,      setLoading]      = useState(true)
   const [metaConfig,   setMetaConfig]   = useState(null)
   const [hlData,       setHlData]       = useState({})
-  const [hlPerPallet,  setHlPerPallet]  = useState(1.44)
+  const [hlPerPallet,    setHlPerPallet]    = useState(1.44)
+  const [hlPerPalletSeg, setHlPerPalletSeg] = useState({})
   const [filtroUnidade, setFiltroUnidade] = useState(null)
   const [unidadesList,  setUnidadesList]  = useState([])
   const [unitPctConfig, setUnitPctConfig] = useState({})
@@ -641,13 +657,25 @@ export default function DashboardVolume() {
       }
 
       let totalPlt = 0, totalHLR = 0
+      const grpPlt = {}, grpHL = {}
       pedsAll.filter(p => p.status !== 'cancelado').forEach(p => {
         const cat = catMap[p.cod_produto]
         if (!cat) return
         const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
-        if (hl > 0) { totalPlt += p.qtde_pallets || 0; totalHLR += hl }
+        if (hl <= 0) return
+        totalPlt += p.qtde_pallets || 0
+        totalHLR += hl
+        const seg   = classifySegmento(p.cod_produto, cat.tipo_marca ?? '', cat.embalagem ?? '', zeroCervSet, zeroNabSet, highEndSet)
+        const grupo = SEG_TO_GRUPO[seg]
+        if (grupo) {
+          grpPlt[grupo] = (grpPlt[grupo] || 0) + (p.qtde_pallets || 0)
+          grpHL[grupo]  = (grpHL[grupo]  || 0) + hl
+        }
       })
       if (totalPlt > 0 && totalHLR > 0) setHlPerPallet(totalHLR / totalPlt)
+      const perSeg = {}
+      Object.keys(grpPlt).forEach(g => { if (grpPlt[g] > 0) perSeg[g] = grpHL[g] / grpPlt[g] })
+      setHlPerPalletSeg(perSeg)
 
       pedsRealRef.current = pedsAll.filter(p => p.viagem_id != null || p.status === 'realizado')
       catMapRef.current   = catMap
@@ -813,7 +841,7 @@ export default function DashboardVolume() {
                   diasRestantes={diasRestantes}
                   hlPerPallet={hlPerPallet}
                   unitFactor={unitFactor}
-                  saldoHL={saldoTotalHL}
+                  hlPerPalletSeg={hlPerPalletSeg}
                 />
               </>
             )}
