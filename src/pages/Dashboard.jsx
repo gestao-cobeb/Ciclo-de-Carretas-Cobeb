@@ -1681,6 +1681,105 @@ function GraficoValorFabrica({ rawPeds, agrupamento, filtros, filtroUnidade, fil
   )
 }
 
+function TooltipViagemVsBlitz({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  const viagens = payload.find(p => p.dataKey === 'viagens')?.value
+  const blitz   = payload.find(p => p.dataKey === 'blitz')?.value
+  const pct     = viagens ? Math.round((blitz ?? 0) / viagens * 100) : 0
+  return (
+    <div style={{
+      background: '#fff', border: '1px solid #BFDBFE',
+      borderRadius: 12, padding: '10px 14px', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,.08)',
+    }}>
+      <p style={{ fontWeight: 600, color: '#1E3A6E', marginBottom: 4 }}>{label}</p>
+      {viagens != null && <p style={{ color: '#003DA5' }}>Viagens: <strong>{viagens}</strong></p>}
+      {blitz   != null && <p style={{ color: '#7C3AED' }}>Blitz: <strong>{blitz}</strong></p>}
+      {viagens > 0 && <p style={{ color: '#94A3B8', marginTop: 4 }}>{pct}% com blitz</p>}
+    </div>
+  )
+}
+
+function GraficoViagemVsBlitz({ data, filtros }) {
+  const totalViagens = data.reduce((s, d) => s + (d.viagens ?? 0), 0)
+  const totalBlitz   = data.reduce((s, d) => s + (d.blitz   ?? 0), 0)
+  const semDados     = !data.length || data.every(d => !d.viagens && !d.blitz)
+  const pctGeral     = totalViagens ? Math.round(totalBlitz / totalViagens * 100) : 0
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+      <div className="flex items-start justify-between gap-3 mb-2">
+        <div>
+          <h2 className="text-cobeb-text font-semibold text-sm mb-1.5">
+            Viagens vs Blitz de Puxada
+          </h2>
+          {!semDados && (
+            <div className="flex flex-wrap gap-1.5">
+              <span className="text-[11px] font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border rounded-lg px-2 py-0.5">
+                Viagens: {totalViagens}
+              </span>
+              <span className="text-[11px] font-semibold text-violet-700 bg-violet-50 border border-violet-200 rounded-lg px-2 py-0.5">
+                Blitz: {totalBlitz}
+              </span>
+            </div>
+          )}
+        </div>
+        {!semDados && totalViagens > 0 && (
+          <span className="shrink-0 text-xs font-semibold text-cobeb-navy bg-cobeb-sky border border-cobeb-border rounded-lg px-2.5 py-1">
+            {pctGeral}% com blitz
+          </span>
+        )}
+      </div>
+      <FiltrosTags filtros={filtros} />
+
+      <div className="flex flex-wrap gap-4 mb-3">
+        <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+          <span className="w-2.5 h-2.5 rounded-sm bg-[#003DA5] inline-block" />
+          Viagens com tarefa
+        </span>
+        <span className="flex items-center gap-1.5 text-[10px] text-slate-500">
+          <span className="w-2.5 h-2.5 rounded-sm bg-violet-500 inline-block" />
+          Blitz realizadas
+        </span>
+      </div>
+
+      {semDados ? (
+        <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
+          Sem dados para o período
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={data} margin={{ top: 20, right: 12, left: 4, bottom: 32 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
+            <XAxis
+              dataKey="day"
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={{ stroke: '#BFDBFE' }}
+              angle={-35}
+              textAnchor="end"
+              interval={0}
+            />
+            <YAxis
+              allowDecimals={false}
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={false}
+              width={32}
+            />
+            <Tooltip content={<TooltipViagemVsBlitz />} cursor={{ fill: '#EBF5FF' }} />
+            <Bar dataKey="viagens" name="Viagens" fill="#003DA5" radius={[4, 4, 0, 0]} maxBarSize={28}>
+              <LabelList dataKey="viagens" content={renderCountLabel} />
+            </Bar>
+            <Bar dataKey="blitz" name="Blitz" fill="#7C3AED" radius={[4, 4, 0, 0]} maxBarSize={28}>
+              <LabelList dataKey="blitz" content={renderCountLabel} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
 // ── Estilos ───────────────────────────────────────────────────────────────────
 
 const selCls   = 'bg-white border border-cobeb-border rounded-xl px-3 py-2 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue appearance-none cursor-pointer w-full'
@@ -1706,6 +1805,7 @@ export default function Dashboard({ mode = 'armazem' }) {
   const [pedPorDia,           setPedPorDia]           = useState({})
   const [realizadoViagens,    setRealizadoViagens]    = useState([])
   const [rawPeds,             setRawPeds]             = useState([])
+  const [tarefasBlitz,        setTarefasBlitz]        = useState([])
   const [precosMap,           setPrecosMap]           = useState({ Pratic: {}, Cheia: {} })
   const [catMap,              setCatMap]              = useState({})
 
@@ -1839,7 +1939,7 @@ export default function Dashboard({ mode = 'armazem' }) {
   async function carregar() {
     setLoading(true)
 
-    const [{ data: vData }, { data: rawPedsData }, { data: realizadoRaw }] = await Promise.all([
+    const [{ data: vData }, { data: rawPedsData }, { data: realizadoRaw }, { data: tarefasData }] = await Promise.all([
       supabase
         .from('viagens')
         .select(`
@@ -1872,6 +1972,12 @@ export default function Dashboard({ mode = 'armazem' }) {
         .not('codigo_fabrica', 'is', null)
         .gte('data_puxada', dataInicio)
         .lte('data_puxada', dataFim),
+      supabase
+        .from('tarefas')
+        .select('id, viagem_id, blitz_concluida, created_at')
+        .not('viagem_id', 'is', null)
+        .gte('created_at', dataInicio + 'T00:00:00')
+        .lte('created_at', dataFim + 'T23:59:59'),
     ])
 
     const ppdMap = {}
@@ -1883,6 +1989,7 @@ export default function Dashboard({ mode = 'armazem' }) {
     setPedPorDia(ppdMap)
     setRawPeds(rawPedsData ?? [])
     setRealizadoViagens(realizadoRaw ?? [])
+    setTarefasBlitz(tarefasData ?? [])
 
     // catálogo carregado sob demanda: só os SKUs do período atual
     const uniqueSkus = [...new Set((rawPedsData ?? []).map(p => p.cod_produto).filter(Boolean))]
@@ -1993,6 +2100,60 @@ export default function Dashboard({ mode = 'armazem' }) {
   const dadosTMAFab     = useMemo(() => groupRows(rows, r => r._tmaFab,  filtroAgrupamento), [rows, filtroAgrupamento])
   const dadosAguardo    = useMemo(() => groupRows(rows, r => r._aguardo, filtroAgrupamento), [rows, filtroAgrupamento])
   const dadosHistograma  = useMemo(() => groupBySlot(rows), [rows])
+
+  const dadosViagemVsBlitz = useMemo(() => {
+    const rowIds = new Set(rows.map(v => v.id))
+    const tf = tarefasBlitz.filter(t => t.viagem_id && rowIds.has(t.viagem_id))
+
+    const makeKey = created_at => {
+      if (!created_at) return null
+      const d = new Date(created_at)
+      if (filtroAgrupamento === 'dia') {
+        const dd = String(d.getDate()).padStart(2, '0')
+        const mm = String(d.getMonth() + 1).padStart(2, '0')
+        return `${dd}/${mm}`
+      }
+      if (filtroAgrupamento === 'semana') return LABEL_SEMANA[(d.getDay() + 6) % 7]
+      if (filtroAgrupamento === 'mes')    return LABEL_MES[d.getMonth()]
+      return String(d.getFullYear())
+    }
+
+    const map = {}
+    tf.forEach(t => {
+      const key = makeKey(t.created_at)
+      if (!key) return
+      if (!map[key]) map[key] = { viagens: 0, blitz: 0 }
+      map[key].viagens++
+      if (t.blitz_concluida) map[key].blitz++
+    })
+
+    if (filtroAgrupamento === 'semana') {
+      return LABEL_SEMANA.map(label => ({
+        day: label,
+        viagens: map[label]?.viagens ?? null,
+        blitz:   map[label]?.blitz   ?? null,
+      }))
+    }
+    if (filtroAgrupamento === 'mes') {
+      return LABEL_MES.map(label => ({
+        day: label,
+        viagens: map[label]?.viagens ?? null,
+        blitz:   map[label]?.blitz   ?? null,
+      }))
+    }
+    if (filtroAgrupamento === 'dia') {
+      return Object.entries(map)
+        .sort(([a], [b]) => {
+          const [da, ma] = a.split('/')
+          const [db, mb] = b.split('/')
+          return ma !== mb ? ma.localeCompare(mb) : da.localeCompare(db)
+        })
+        .map(([day, counts]) => ({ day, ...counts }))
+    }
+    return Object.entries(map)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([day, counts]) => ({ day, ...counts }))
+  }, [rows, tarefasBlitz, filtroAgrupamento])
 
   const dadosOciosidade = useMemo(() => {
     // Placas que passaram em todos os filtros ativos (inclusive unidade)
@@ -2256,6 +2417,7 @@ export default function Dashboard({ mode = 'armazem' }) {
                   filtros={descFiltros}
                 />
                 <GraficoHistograma data={dadosHistograma} filtros={descFiltros} />
+                <GraficoViagemVsBlitz data={dadosViagemVsBlitz} filtros={descFiltros} />
               </>
             )}
             {mode === 'puxada' && (
