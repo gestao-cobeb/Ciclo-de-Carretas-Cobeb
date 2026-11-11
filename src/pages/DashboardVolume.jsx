@@ -507,9 +507,7 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
   const weeksInfo = [1, 2, 3, 4].map((sem, i) => {
     const { ini, fim } = semanaLimites(sem, year, month)
     const diasRest     = diasUteisRange(year, month, Math.max(ini, today.getDate()), fim)
-    // Para semanas passadas usa o total de dias da semana (mostra o que era necessário pelo plano)
-    const diasCalc     = diasRest > 0 ? diasRest : diasUteisRange(year, month, ini, fim)
-    return { sem, pct: semPcts[i], diasRest, diasCalc }
+    return { sem, pct: semPcts[i], diasRest }
   })
 
   function arredonda(raw) {
@@ -529,11 +527,11 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
       const saldo     = Math.max(g.meta - g.real, 0)
       const carrosDia = arredonda((saldo / diasRestantes / hlPlt) / 26)
       const semCarros = weeksInfo.map((w, wi) => {
-        if (w.diasCalc === 0) return null
+        if (w.diasRest === 0) return null
         const metaSem  = g.meta * (w.pct / 100)
         const realSem  = grupoRealSem[g.label]?.[wi] || 0
         const saldoSem = Math.max(metaSem - realSem, 0)
-        return arredonda((saldoSem / w.diasCalc / hlPlt) / 26)
+        return arredonda((saldoSem / w.diasRest / hlPlt) / 26)
       })
       return { ...g, hlPlt, saldo, carrosDia, semCarros }
     })
@@ -542,12 +540,12 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
   const totalCarrosDia = arredonda(totalPltDia / 26)
 
   const totalCarrosSem = weeksInfo.map((w, wi) => {
-    if (w.diasCalc === 0) return null
+    if (w.diasRest === 0) return null
     const totalPlt = grupos.reduce((s, g) => {
       const metaSem  = g.meta * (w.pct / 100)
       const realSem  = grupoRealSem[g.label]?.[wi] || 0
       const saldoSem = Math.max(metaSem - realSem, 0)
-      return s + (g.hlPlt > 0 ? saldoSem / w.diasCalc / g.hlPlt : 0)
+      return s + (g.hlPlt > 0 ? saldoSem / w.diasRest / g.hlPlt : 0)
     }, 0)
     return arredonda(totalPlt / 26)
   })
