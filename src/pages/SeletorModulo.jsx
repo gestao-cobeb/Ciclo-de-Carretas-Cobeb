@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, BarChart2, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet, Forklift, RotateCcw, Activity } from 'lucide-react'
+import { LayoutDashboard, BarChart2, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet, Forklift, RotateCcw, Activity, Beer } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -137,6 +137,17 @@ export const MODULOS = [
     borda: 'border-cyan-600/30',
     texto: 'text-cyan-700',
     fundo: 'bg-cyan-600/5 hover:bg-cyan-600/10',
+  },
+  {
+    key:   'demanda_chopp',
+    rota:  '/demanda-chopp',
+    label: 'Demanda de Chopp',
+    desc:  'Demanda e volume puxado de chopp por semana',
+    Icon:  Beer,
+    cor:   'bg-yellow-500',
+    borda: 'border-yellow-500/30',
+    texto: 'text-yellow-700',
+    fundo: 'bg-yellow-500/5 hover:bg-yellow-500/10',
   },
 ]
 
