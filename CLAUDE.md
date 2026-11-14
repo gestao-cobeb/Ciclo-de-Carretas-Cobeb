@@ -174,6 +174,43 @@ de `last_seen_at`** (JS e nativo) e o nativo vence quando está rodando. Corrigi
 o JS não resolve o APK em background. Qualquer regra de "o motorista está ativo?"
 precisa valer nos dois.
 
+## "Chegada na Revenda" offline — portaria órfã e viagem presa (14/11/2026)
+
+**Sintoma:** card de monitoramento preso em `retornando` ("Aguardando GPS")
+com a portaria do MESMO veículo já CONCLUÍDA. O `viagens_status_log` (script
+101) provou que `aguardando_conferencia` **nunca existiu** naquela viagem.
+
+**Causa:** o motorista registrou "Chegada na Revenda" offline. O INSERT da
+portaria sobreviveu, mas o UPDATE da viagem (status→`aguardando_conferencia`,
+`dt_chegada_revenda`, `numero_nf`) não aplicou. O app confia no `tryDB`, que
+faz `return !error` (`Viagem.jsx:380`) — e no Supabase um UPDATE que acerta
+**ZERO linhas não retorna erro**. Então `dbOk` vira `true`, a portaria é
+criada, a tela do motorista avança otimista, e a viagem no banco não muda.
+Depois o motorista fecha `retornando → concluida` por cima (o botão de
+encerrar só exige portaria concluída, `Viagem.jsx:1201`), deixando a viagem
+`concluida` com `dt_chegada_revenda` e `numero_nf` nulos → TMV da revenda
+quebrado. O comentário em `Viagem.jsx:401` jurava que portaria e viagem
+"sobem juntos" — mas não garante: online o `dbOk` mente; offline são duas
+entradas independentes na fila (`offline.js`) e o `syncOffline` só limpa a
+fila se o loop inteiro não estourar.
+
+**Correção (banco — vale pra TODO APK já instalado, scripts 117/118):**
+trigger `BEFORE INSERT` em `portaria_atendimentos` que rejeita o atendimento
+do fluxo do motorista (`tipo='normal'` + `viagem_id`) quando a viagem não
+está em `aguardando_conferencia`. Mata a corrente inteira: sem portaria
+órfã, o botão de encerrar nem habilita. Marketplace/transferência
+(`viagem_id` NULL, tipo próprio) não são afetados. O `118` repara dados já
+corrompidos (backfill de `dt_chegada_revenda`/`numero_nf` a partir da
+portaria — a fonte confiável do que aconteceu).
+
+**A lição, que vale pro próximo:** integridade de dado se garante no
+**BANCO**, não no app. Confiar no cliente pra manter invariante é frágil —
+foi exatamente a promessa só-no-cliente que falhou. E `!error` no
+supabase-js **NÃO** prova que algo mudou: UPDATE de 0 linhas é "sucesso".
+Quem precisa saber se gravou tem que conferir linhas afetadas (`.select()`
+no update e checar o retorno). Pendente pro próximo APK (só UX): desabilitar
+"Chegada na Revenda" offline e trocar o `tryDB` por essa verificação.
+
 ## O que este arquivo NÃO cobre (e eu não inventei)
 
 Não estudei as regras de negócio do sistema — NRI, o cálculo dos tempos, o
