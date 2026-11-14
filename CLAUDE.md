@@ -133,6 +133,47 @@ viagem por posição cacheada/desatualizada seria erro de negócio.
 `sincronizar()` quer saber "o motorista está ativo?" — última posição conhecida
 serve. Geofence quer saber "o motorista está AQUI agora?" — só posição fresca.
 
+---
+
+### "Sem sinal" DE NOVO — o gêmeo nativo do bug acima (v1.0.38, 14/11/2026)
+
+**O que confundiu:** a correção acima foi aplicada só no JS (`useRastreamento.js`).
+Mas com o APK rodando em background, **quem escreve `motorista_last_seen_at` é o
+serviço nativo** (`CobebGpsService.java`), não o JS — o `sincronizar()` checa
+`CobebGps.isRunning()` e, se o nativo está vivo, **retorna sem fazer nada**
+(`useRastreamento.js:91-97`). Ou seja: toda a proteção de cache do JS fica
+inerte enquanto o nativo roda. O nativo era o escritor oficial e **nunca tinha
+recebido o mesmo tratamento**.
+
+**Causa raiz:** `syncAgora()` fazia `if (loc == null) return;`. `lastLocation`
+só era preenchido pelo callback do `FusedLocationProvider`, nunca semeado. A cada
+restart (START_STICKY **ou** o watchdog de 15 min em `CobebGpsWorker`, que reinicia
+sem extras → `restorePrefs()` restaura token/viagem mas **não** posição),
+`lastLocation` voltava a null. Motorista parado na fábrica sob cobertura (doca,
+galpão) não recebe fix de alta precisão → `syncAgora` abortava a cada 30s →
+**nada ia ao Supabase, com 4G perfeito**. Notificação de pé (serviço vivo),
+`last_seen_at` congelado → "sem sinal".
+
+**Correções (`CobebGpsService.java`):**
+
+1. **Semeia `lastLocation` no start/restart** — via `restaurarUltimaPos()` (prefs,
+   chaves `lastPosLat`/`lastPosLng`/`lastPosTime`, espelho nativo do
+   `cobeb_last_gps_pos` do JS) e `fusedClient.getLastLocation()`. O serviço reporta
+   imediatamente após reiniciar, sem esperar satélite.
+
+2. **`syncAgora()`/`patchViagem()` aceitam `loc == null`** — sem posição (ou fix
+   >10 min), envia **só `last_seen_at`**: prova de que o motorista está ativo, sem
+   pôr ponto velho no mapa. A guarda de 10 min de frescor que já existia foi mantida.
+
+**O que NÃO mudou (de novo):** geofence de chegada/saída continua exigindo fix
+fresco — ele é do lado JS (`BackgroundGeolocation`) e não depende do `lastLocation`
+do nativo. A prioridade segue `PRIORITY_HIGH_ACCURACY`.
+
+**Regra para o próximo:** a mesma de cima, mas lembre que **existem DOIS escritores
+de `last_seen_at`** (JS e nativo) e o nativo vence quando está rodando. Corrigir só
+o JS não resolve o APK em background. Qualquer regra de "o motorista está ativo?"
+precisa valer nos dois.
+
 ## O que este arquivo NÃO cobre (e eu não inventei)
 
 Não estudei as regras de negócio do sistema — NRI, o cálculo dos tempos, o

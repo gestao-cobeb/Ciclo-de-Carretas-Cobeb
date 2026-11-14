@@ -222,6 +222,27 @@ public class CobebGpsService extends Service {
 
         fusedClient = LocationServices.getFusedLocationProviderClient(this);
 
+        // Correção v1.0.38: semeia lastLocation com a última posição conhecida
+        // para que o serviço reporte imediatamente após um restart (START_STICKY
+        // ou watchdog), mesmo parado em galpão/doca sem fix fresco. Antes disso,
+        // lastLocation ficava null após o restart e syncAgora não enviava nada —
+        // o motorista aparecia "sem sinal" com 4G perfeito. Gêmeo nativo do bug
+        // de "sem sinal" já corrigido no JS (useRastreamento.js).
+        Location semente = restaurarUltimaPos();
+        if (semente != null) lastLocation = semente;
+        try {
+            fusedClient.getLastLocation().addOnSuccessListener(loc -> {
+                if (loc == null) return;
+                Location cur = lastLocation;
+                if (cur == null || loc.getTime() >= cur.getTime()) {
+                    lastLocation = loc;
+                    salvarUltimaPos(loc);
+                }
+            });
+        } catch (SecurityException e) {
+            Log.w(TAG, "getLastLocation sem permissao: " + e.getMessage());
+        }
+
         // Task 3: setWaitForAccurateLocation(false) garante entrega rápida sem
         // bloquear em áreas com GPS ruim (galpão, zona rural sem satélites)
         LocationRequest request = new LocationRequest.Builder(LOCATION_INTERVAL_MS)
@@ -237,6 +258,7 @@ public class CobebGpsService extends Service {
                 Location loc = result.getLastLocation();
                 if (loc != null) {
                     lastLocation = loc;
+                    salvarUltimaPos(loc); // persiste para semear após restart
                     // Enfileira no executor — nunca abre thread nova por callback
                     if (syncExecutor != null && !syncExecutor.isShutdown()) {
                         syncExecutor.execute(CobebGpsService.this::syncAgora);
@@ -298,8 +320,11 @@ public class CobebGpsService extends Service {
     // ── Core sync ─────────────────────────────────────────────────────────────
 
     private void syncAgora() {
+        // Correção v1.0.38: loc pode ser null (serviço reiniciado em área sem fix).
+        // Ainda assim enviamos last_seen_at para provar que o motorista está ativo —
+        // "o motorista está online?" não exige posição fresca. O geofence de
+        // chegada/saída continua exigindo fix fresco (lado JS), de propósito.
         Location loc = lastLocation;
-        if (loc == null) return;
 
         try {
             refreshTokenIfNeeded();
@@ -333,12 +358,16 @@ public class CobebGpsService extends Service {
 
         SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US);
         sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
-        String now   = sdf.format(new Date());
-        String posEm = sdf.format(new Date(loc.getTime()));
-        boolean fixFresco = (System.currentTimeMillis() - loc.getTime()) < 10 * 60 * 1000L;
+        String now = sdf.format(new Date());
+
+        // Sem posição, ou fix velho (>10 min): envia só last_seen_at — prova de que
+        // o motorista está ativo sem colocar um ponto desatualizado no mapa.
+        boolean temPos    = loc != null;
+        boolean fixFresco = temPos && (System.currentTimeMillis() - loc.getTime()) < 10 * 60 * 1000L;
 
         String body;
         if (fixFresco) {
+            String posEm = sdf.format(new Date(loc.getTime()));
             body = String.format(Locale.US,
                     "{\"motorista_lat\":%f,\"motorista_lng\":%f,"
                     + "\"motorista_last_seen_at\":\"%s\","
@@ -364,7 +393,8 @@ public class CobebGpsService extends Service {
         try (OutputStream os = conn.getOutputStream()) { os.write(bytes); }
 
         int code = conn.getResponseCode();
-        Log.d(TAG, "PATCH HTTP " + code + " lat=" + loc.getLatitude() + " fixFresco=" + fixFresco);
+        Log.d(TAG, "PATCH HTTP " + code + " lat=" + (temPos ? loc.getLatitude() : "null")
+                + " fixFresco=" + fixFresco);
         conn.disconnect();
         return code;
     }
@@ -619,6 +649,35 @@ public class CobebGpsService extends Service {
         viagemId     = p.getString("viagemId",     null);
         motoristaId  = p.getString("motoristaId",  null);
         Log.i(TAG, "Restaurado de prefs: viagemId=" + viagemId);
+    }
+
+    // Correção v1.0.38: última posição GPS boa, persistida para semear lastLocation
+    // após um restart do serviço. Guardada como String para preservar a precisão
+    // (SharedPreferences não tem putDouble). Espelho nativo do cobeb_last_gps_pos do JS.
+    private void salvarUltimaPos(Location loc) {
+        if (loc == null) return;
+        getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                .putString("lastPosLat", Double.toString(loc.getLatitude()))
+                .putString("lastPosLng", Double.toString(loc.getLongitude()))
+                .putLong("lastPosTime", loc.getTime())
+                .apply();
+    }
+
+    private Location restaurarUltimaPos() {
+        SharedPreferences p = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        String latS = p.getString("lastPosLat", null);
+        String lngS = p.getString("lastPosLng", null);
+        long   t    = p.getLong("lastPosTime", 0L);
+        if (latS == null || lngS == null || t == 0L) return null;
+        try {
+            Location loc = new Location("prefs");
+            loc.setLatitude(Double.parseDouble(latS));
+            loc.setLongitude(Double.parseDouble(lngS));
+            loc.setTime(t);
+            return loc;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     // Chamado apenas por CobebGpsPlugin.stopTracking() — encerramento explícito
