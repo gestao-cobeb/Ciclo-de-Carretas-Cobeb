@@ -14,6 +14,11 @@ function fmtData(iso) {
   return d && m && a ? `${d}/${m}/${a}` : iso
 }
 
+const RESP_FURO = {
+  fabrica: { label: 'Fábrica', cls: 'bg-red-100 text-red-700 border-red-200' },
+  revenda: { label: 'Revenda', cls: 'bg-amber-100 text-amber-700 border-amber-200' },
+}
+
 export default function JustificativaFuro() {
   const { profile, signOut, modoVisao, setModoVisao } = useAuth()
   const navigate = useNavigate()
@@ -27,6 +32,7 @@ export default function JustificativaFuro() {
   const [filtData,    setFiltData]    = useState('')
   const [filtUnidade, setFiltUnidade] = useState('')
   const [filtFabrica, setFiltFabrica] = useState('')
+  const [filtResp,    setFiltResp]    = useState('')
   const [search,      setSearch]      = useState('')
 
   // feedback de salvamento por célula
@@ -45,7 +51,7 @@ export default function JustificativaFuro() {
         .order('data_puxada', { ascending: false })
         .order('numero_pedido'),
       supabase.from('unidades').select('id, nome, codigo').order('nome'),
-      supabase.from('motivos_furo').select('id, descricao').eq('ativo', true).order('descricao'),
+      supabase.from('motivos_furo').select('id, descricao, responsabilidade').eq('ativo', true).order('descricao'),
     ])
 
     const pedList = peds ?? []
@@ -119,11 +125,19 @@ export default function JustificativaFuro() {
     [linhas]
   )
 
+  // motivo_id -> responsabilidade ('fabrica' | 'revenda')
+  const respByMotivo = useMemo(
+    () => Object.fromEntries(motivos.map(m => [m.id, m.responsabilidade])),
+    [motivos]
+  )
+  const respDaLinha = l => respByMotivo[just[l.id]?.motivo_id] ?? null
+
   const filtradas = useMemo(() => {
     let r = linhas
     if (filtData)    r = r.filter(l => l.data_puxada === filtData)
     if (filtUnidade) r = r.filter(l => l.unidade_id === filtUnidade)
     if (filtFabrica) r = r.filter(l => l.fabrica === filtFabrica)
+    if (filtResp)    r = r.filter(l => (respByMotivo[just[l.id]?.motivo_id] ?? null) === filtResp)
     if (search.trim()) {
       const q = search.trim().toLowerCase()
       r = r.filter(l =>
@@ -133,7 +147,7 @@ export default function JustificativaFuro() {
       )
     }
     return r
-  }, [linhas, filtData, filtUnidade, filtFabrica, search])
+  }, [linhas, filtData, filtUnidade, filtFabrica, filtResp, search, respByMotivo, just])
 
   function piscarSalvo(pedidoId) {
     setSalvos(s => ({ ...s, [pedidoId]: true }))
@@ -206,6 +220,12 @@ export default function JustificativaFuro() {
             <option value="">Todas as fábricas</option>
             {fabricasOpc.map(f => <option key={f} value={f}>{f}</option>)}
           </select>
+          <select value={filtResp} onChange={e => setFiltResp(e.target.value)}
+            className="text-sm border border-cobeb-border rounded-xl px-3 py-2 focus:outline-none focus:border-cobeb-blue">
+            <option value="">Toda responsabilidade</option>
+            <option value="fabrica">Fábrica</option>
+            <option value="revenda">Revenda</option>
+          </select>
           <div className="relative flex-1 min-w-[180px]">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
@@ -241,6 +261,7 @@ export default function JustificativaFuro() {
                   <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">Qtde (cx)</th>
                   <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">Paletes</th>
                   <th className="px-3 py-2.5 font-semibold whitespace-nowrap">Motivo do furo</th>
+                  <th className="px-3 py-2.5 font-semibold whitespace-nowrap">Responsabilidade</th>
                   <th className="px-3 py-2.5 font-semibold whitespace-nowrap">Observação</th>
                 </tr>
               </thead>
@@ -270,6 +291,15 @@ export default function JustificativaFuro() {
                             <option value={j.motivo_id}>(motivo inativo)</option>
                           )}
                         </select>
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {(() => {
+                          const resp = respDaLinha(l)
+                          const cfg = resp && RESP_FURO[resp]
+                          return cfg
+                            ? <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${cfg.cls}`}>{cfg.label}</span>
+                            : <span className="text-slate-300 text-xs">—</span>
+                        })()}
                       </td>
                       <td className="px-3 py-2">
                         <div className="relative">

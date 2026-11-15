@@ -227,12 +227,20 @@ function MotivosBlitz() {
   )
 }
 
+const RESP_FURO = [
+  { value: 'fabrica', label: 'Fábrica', cls: 'bg-red-100 text-red-700 border-red-200' },
+  { value: 'revenda', label: 'Revenda', cls: 'bg-amber-100 text-amber-700 border-amber-200' },
+]
+const respLabel = v => RESP_FURO.find(r => r.value === v)?.label ?? 'Sem classificação'
+
 function MotivosFuro() {
   const [motivos,  setMotivos]  = useState([])
   const [loading,  setLoading]  = useState(true)
   const [novoDesc, setNovoDesc] = useState('')
+  const [novaResp, setNovaResp] = useState('fabrica')
   const [salvando, setSalvando] = useState(false)
   const [excluindo, setExcluindo] = useState(null)
+  const [mudandoResp, setMudandoResp] = useState(null)
 
   useEffect(() => { load() }, [])
 
@@ -240,7 +248,8 @@ function MotivosFuro() {
     setLoading(true)
     const { data } = await supabase
       .from('motivos_furo')
-      .select('id, descricao, ativo')
+      .select('id, descricao, ativo, responsabilidade')
+      .order('responsabilidade')
       .order('descricao')
     setMotivos(data ?? [])
     setLoading(false)
@@ -248,13 +257,23 @@ function MotivosFuro() {
 
   async function adicionar() {
     const desc = novoDesc.trim()
-    if (!desc) return
+    if (!desc || !novaResp) return
     setSalvando(true)
-    const { error } = await supabase.from('motivos_furo').insert({ descricao: desc, ativo: true })
+    const { error } = await supabase.from('motivos_furo')
+      .insert({ descricao: desc, ativo: true, responsabilidade: novaResp })
     setSalvando(false)
     if (error) { alert('Erro: ' + error.message); return }
     setNovoDesc('')
     load()
+  }
+
+  async function mudarResp(motivo, resp) {
+    setMudandoResp(motivo.id)
+    const { error } = await supabase.from('motivos_furo')
+      .update({ responsabilidade: resp }).eq('id', motivo.id)
+    setMudandoResp(null)
+    if (error) { alert('Erro: ' + error.message); return }
+    setMotivos(prev => prev.map(m => m.id === motivo.id ? { ...m, responsabilidade: resp } : m))
   }
 
   async function excluir(motivo) {
@@ -266,23 +285,36 @@ function MotivosFuro() {
     setMotivos(prev => prev.filter(m => m.id !== motivo.id))
   }
 
+  // Agrupa por responsabilidade: Fábrica, Revenda e os ainda sem classificação
+  const grupos = [
+    { key: 'fabrica', label: 'Responsabilidade: Fábrica' },
+    { key: 'revenda', label: 'Responsabilidade: Revenda' },
+    { key: null,      label: 'Sem classificação' },
+  ]
+
   return (
     <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-5">
       <div className="mb-4">
         <p className="text-cobeb-text font-semibold text-sm">Motivos de Furo</p>
-        <p className="text-slate-500 text-xs mt-0.5">Motivos disponíveis no módulo Justificativa de Furo</p>
+        <p className="text-slate-500 text-xs mt-0.5">Motivos disponíveis no módulo Justificativa de Furo, separados por responsabilidade (Fábrica / Revenda)</p>
       </div>
 
       {/* Adicionar */}
-      <div className="flex gap-2 mb-4">
+      <div className="flex flex-wrap gap-2 mb-4">
         <input
           type="text"
           placeholder="Ex: Falta de veículo, Ruptura de estoque, Grade cheia..."
           value={novoDesc}
           onChange={e => setNovoDesc(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && adicionar()}
-          className="flex-1 text-sm border border-cobeb-border rounded-xl px-3 py-2 focus:outline-none focus:border-cobeb-blue transition-colors"
+          className="flex-1 min-w-[180px] text-sm border border-cobeb-border rounded-xl px-3 py-2 focus:outline-none focus:border-cobeb-blue transition-colors"
         />
+        <select
+          value={novaResp}
+          onChange={e => setNovaResp(e.target.value)}
+          className="text-sm border border-cobeb-border rounded-xl px-3 py-2 focus:outline-none focus:border-cobeb-blue bg-white">
+          {RESP_FURO.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
         <button
           onClick={adicionar}
           disabled={salvando || !novoDesc.trim()}
@@ -298,21 +330,40 @@ function MotivosFuro() {
       ) : motivos.length === 0 ? (
         <p className="text-slate-400 text-sm text-center py-4">Nenhum motivo cadastrado.</p>
       ) : (
-        <div className="space-y-2">
-          {motivos.map(m => (
-            <div key={m.id} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-cobeb-border bg-[#EBF5FF]/50">
-              <span className="text-sm text-cobeb-text">{m.descricao}</span>
-              <button
-                onClick={() => excluir(m)}
-                disabled={excluindo === m.id}
-                className="text-slate-400 hover:text-red-500 transition-colors shrink-0 p-1"
-                title="Excluir">
-                {excluindo === m.id
-                  ? <div className="w-4 h-4 border-2 border-red-300 border-t-red-500 rounded-full animate-spin" />
-                  : <Trash2 size={16} />}
-              </button>
-            </div>
-          ))}
+        <div className="space-y-4">
+          {grupos.map(g => {
+            const itens = motivos.filter(m => (m.responsabilidade ?? null) === g.key)
+            if (itens.length === 0) return null
+            return (
+              <div key={g.label}>
+                <p className={`text-[11px] font-semibold uppercase tracking-wide mb-1.5 ${g.key ? 'text-slate-500' : 'text-red-500'}`}>{g.label}</p>
+                <div className="space-y-2">
+                  {itens.map(m => (
+                    <div key={m.id} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-cobeb-border bg-[#EBF5FF]/50">
+                      <span className="text-sm text-cobeb-text flex-1 truncate">{m.descricao}</span>
+                      <select
+                        value={m.responsabilidade ?? ''}
+                        disabled={mudandoResp === m.id}
+                        onChange={e => mudarResp(m, e.target.value)}
+                        className="text-xs border border-cobeb-border rounded-lg px-2 py-1 focus:outline-none focus:border-cobeb-blue bg-white shrink-0">
+                        <option value="" disabled>Classificar…</option>
+                        {RESP_FURO.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
+                      <button
+                        onClick={() => excluir(m)}
+                        disabled={excluindo === m.id}
+                        className="text-slate-400 hover:text-red-500 transition-colors shrink-0 p-1"
+                        title="Excluir">
+                        {excluindo === m.id
+                          ? <div className="w-4 h-4 border-2 border-red-300 border-t-red-500 rounded-full animate-spin" />
+                          : <Trash2 size={16} />}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
     </div>
