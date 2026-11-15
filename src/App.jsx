@@ -24,6 +24,7 @@ import OperadoresPage from './pages/OperadoresPage'
 import Retrabalho from './pages/Retrabalho'
 import Monitoramento from './pages/Monitoramento'
 import DemandaChopp from './pages/DemandaChopp'
+import JustificativaFuro from './pages/JustificativaFuro'
 
 // Perfis que têm acesso a qualquer guia do dashboard — adicione aqui para garantir
 // que novas guias fiquem acessíveis sem mudança adicional nas rotas.
@@ -51,6 +52,7 @@ const MODO_ROTA = {
   retrabalho:    '/retrabalho',
   monitoramento: '/monitoramento',
   demanda_chopp: '/demanda-chopp',
+  justificativa_furo: '/justificativa-furo',
 }
 
 function Spinner() {
@@ -152,6 +154,9 @@ function AppRoutes() {
       />
       <Route path="/demanda-chopp"
         element={<ProtectedRoute allowedRoles={['admin']}><DemandaChopp /></ProtectedRoute>}
+      />
+      <Route path="/justificativa-furo"
+        element={<ProtectedRoute allowedRoles={['admin']}><JustificativaFuro /></ProtectedRoute>}
       />
 
       <Route path="/"  element={<Navigate to={home} replace />} />

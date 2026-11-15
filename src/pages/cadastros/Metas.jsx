@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Target, RotateCcw, Plus, ToggleLeft, ToggleRight, ChevronLeft, ChevronRight, BarChart3, Beer, Trash2 } from 'lucide-react'
+import { Target, RotateCcw, Plus, ToggleLeft, ToggleRight, ChevronLeft, ChevronRight, BarChart3, Beer, Trash2, AlertTriangle } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -218,6 +218,98 @@ function MotivosBlitz() {
                   : m.ativo
                     ? <ToggleRight size={18} className="text-green-500" />
                     : <ToggleLeft size={18} />}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MotivosFuro() {
+  const [motivos,  setMotivos]  = useState([])
+  const [loading,  setLoading]  = useState(true)
+  const [novoDesc, setNovoDesc] = useState('')
+  const [salvando, setSalvando] = useState(false)
+  const [excluindo, setExcluindo] = useState(null)
+
+  useEffect(() => { load() }, [])
+
+  async function load() {
+    setLoading(true)
+    const { data } = await supabase
+      .from('motivos_furo')
+      .select('id, descricao, ativo')
+      .order('descricao')
+    setMotivos(data ?? [])
+    setLoading(false)
+  }
+
+  async function adicionar() {
+    const desc = novoDesc.trim()
+    if (!desc) return
+    setSalvando(true)
+    const { error } = await supabase.from('motivos_furo').insert({ descricao: desc, ativo: true })
+    setSalvando(false)
+    if (error) { alert('Erro: ' + error.message); return }
+    setNovoDesc('')
+    load()
+  }
+
+  async function excluir(motivo) {
+    if (!confirm(`Excluir o motivo "${motivo.descricao}"?`)) return
+    setExcluindo(motivo.id)
+    const { error } = await supabase.from('motivos_furo').delete().eq('id', motivo.id)
+    setExcluindo(null)
+    if (error) { alert('Erro: ' + error.message); return }
+    setMotivos(prev => prev.filter(m => m.id !== motivo.id))
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-5">
+      <div className="mb-4">
+        <p className="text-cobeb-text font-semibold text-sm">Motivos de Furo</p>
+        <p className="text-slate-500 text-xs mt-0.5">Motivos disponíveis no módulo Justificativa de Furo</p>
+      </div>
+
+      {/* Adicionar */}
+      <div className="flex gap-2 mb-4">
+        <input
+          type="text"
+          placeholder="Ex: Falta de veículo, Ruptura de estoque, Grade cheia..."
+          value={novoDesc}
+          onChange={e => setNovoDesc(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && adicionar()}
+          className="flex-1 text-sm border border-cobeb-border rounded-xl px-3 py-2 focus:outline-none focus:border-cobeb-blue transition-colors"
+        />
+        <button
+          onClick={adicionar}
+          disabled={salvando || !novoDesc.trim()}
+          className="px-4 py-2 bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-40 text-white text-sm font-semibold rounded-xl transition-colors flex items-center gap-1.5">
+          <Plus size={14} /> Adicionar
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-6">
+          <div className="w-5 h-5 border-2 border-cobeb-navy border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : motivos.length === 0 ? (
+        <p className="text-slate-400 text-sm text-center py-4">Nenhum motivo cadastrado.</p>
+      ) : (
+        <div className="space-y-2">
+          {motivos.map(m => (
+            <div key={m.id} className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl border border-cobeb-border bg-[#EBF5FF]/50">
+              <span className="text-sm text-cobeb-text">{m.descricao}</span>
+              <button
+                onClick={() => excluir(m)}
+                disabled={excluindo === m.id}
+                className="text-slate-400 hover:text-red-500 transition-colors shrink-0 p-1"
+                title="Excluir">
+                {excluindo === m.id
+                  ? <div className="w-4 h-4 border-2 border-red-300 border-t-red-500 rounded-full animate-spin" />
+                  : <Trash2 size={16} />}
               </button>
             </div>
           ))}
@@ -755,6 +847,12 @@ export default function Metas() {
         <p className="text-cobeb-text font-semibold text-sm">Blitz de Puxada</p>
       </div>
       <MotivosBlitz />
+
+      <div className="flex items-center gap-2 mt-6 mb-1">
+        <AlertTriangle size={15} className="text-red-600" />
+        <p className="text-cobeb-text font-semibold text-sm">Furo de Pedido</p>
+      </div>
+      <MotivosFuro />
     </div>
   )
 }

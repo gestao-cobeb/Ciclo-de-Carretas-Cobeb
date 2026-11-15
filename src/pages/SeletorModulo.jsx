@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, BarChart2, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet, Forklift, RotateCcw, Activity, Beer } from 'lucide-react'
+import { LayoutDashboard, BarChart2, Truck, ClipboardList, Shield, Monitor, LogOut, Wifi, Table2, Users, FileSpreadsheet, Forklift, RotateCcw, Activity, Beer, AlertTriangle } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 
@@ -148,6 +148,17 @@ export const MODULOS = [
     borda: 'border-yellow-500/30',
     texto: 'text-yellow-700',
     fundo: 'bg-yellow-500/5 hover:bg-yellow-500/10',
+  },
+  {
+    key:   'justificativa_furo',
+    rota:  '/justificativa-furo',
+    label: 'Justificativa de Furo',
+    desc:  'Motivo e observação dos pedidos marcados como furo',
+    Icon:  AlertTriangle,
+    cor:   'bg-red-600',
+    borda: 'border-red-600/30',
+    texto: 'text-red-700',
+    fundo: 'bg-red-600/5 hover:bg-red-600/10',
   },
 ]
 
