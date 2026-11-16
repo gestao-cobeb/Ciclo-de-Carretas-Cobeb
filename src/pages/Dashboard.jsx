@@ -557,7 +557,7 @@ function renderHlLabelH({ x, y, width, height, value }) {
   if (!value) return null
   return (
     <text x={x + width + 6} y={y + height / 2 + 3}
-      fontSize={10} fontWeight={600} fill="#B91C1C">
+      fontSize={10} fontWeight={600} fill="#1E3A6E">
       {fmtHl0(value)}
     </text>
   )
@@ -736,6 +736,113 @@ function GraficoFuroMotivosResp({ motivos, resp, totalResp, filtros }) {
             <div className="space-y-1.5 mt-2">
               {resp.map((r, i) => {
                 const pct = totalResp > 0 ? (r.hl / totalResp) * 100 : 0
+                return (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: r.color }} />
+                      <span className="text-cobeb-text font-medium">{r.name}</span>
+                    </span>
+                    <span className="text-slate-500 font-semibold whitespace-nowrap">
+                      {fmtPct1(pct)} · {fmtHl1(r.hl)} hl
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PlacaTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const p = payload[0].payload
+  return (
+    <div style={furoTooltipStyle}>
+      <p style={{ fontWeight: 600, color: '#1E3A6E', marginBottom: 2 }}>{p.placa}</p>
+      <p style={{ color: p.cor, fontWeight: 700 }}>{fmtHl1(p.hl)} hl</p>
+    </div>
+  )
+}
+
+function GraficoFuroCavalo({ placas, ffspot, totalFF, motivoOpts, motivoSel, onMotivoChange, filtros }) {
+  const semPlacas = placas.length === 0
+  const alturaPl  = Math.max(200, placas.length * 40 + 24)
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {/* Furo por placa de cavalo (HL) — com filtro local de motivo */}
+      <div className="lg:col-span-2 bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+          <h2 className="text-cobeb-text font-semibold text-sm">
+            Furo por Placa de Cavalo — Volume (hl)
+          </h2>
+          <select
+            value={motivoSel}
+            onChange={e => onMotivoChange(e.target.value)}
+            className="text-xs border border-cobeb-border rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-cobeb-blue bg-white text-cobeb-text">
+            <option value="">Todos os motivos</option>
+            {motivoOpts.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+          </select>
+        </div>
+        <FiltrosTags filtros={filtros} />
+        {semPlacas ? (
+          <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
+            {motivoSel ? 'Sem furos para este motivo' : 'Sem furos no período'}
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={alturaPl}>
+            <BarChart data={placas} layout="vertical" margin={{ top: 4, right: 52, left: 8, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" horizontal={false} />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 10, fill: '#94A3B8' }}
+                tickLine={false}
+                axisLine={{ stroke: '#BFDBFE' }}
+                tickFormatter={fmtHl0}
+              />
+              <YAxis
+                type="category"
+                dataKey="placa"
+                width={110}
+                tick={{ fontSize: 10, fill: '#1E3A6E' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip content={<PlacaTooltip />} cursor={{ fill: '#F5F3FF' }} />
+              <Bar dataKey="hl" radius={[0, 4, 4, 0]} maxBarSize={28}>
+                {placas.map((p, i) => <Cell key={i} fill={p.cor} />)}
+                <LabelList dataKey="hl" content={renderHlLabelH} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Pizza FF × SPOT */}
+      <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 flex flex-col">
+        <h2 className="text-cobeb-text font-semibold text-sm">Furo por Frota</h2>
+        <p className="text-[11px] text-slate-400 mb-3">FF × SPOT (hl)</p>
+        {totalFF === 0 ? (
+          <div className="flex-1 flex items-center justify-center min-h-52 text-slate-400 text-sm">
+            {motivoSel ? 'Sem furos para este motivo' : 'Sem furos no período'}
+          </div>
+        ) : (
+          <>
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie data={ffspot} dataKey="hl" nameKey="name" cx="50%" cy="50%"
+                  innerRadius={48} outerRadius={78} paddingAngle={2}>
+                  {ffspot.map((r, i) => <Cell key={i} fill={r.color} />)}
+                </Pie>
+                <Tooltip content={<RespTooltip total={totalFF} />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="space-y-1.5 mt-2">
+              {ffspot.map((r, i) => {
+                const pct = totalFF > 0 ? (r.hl / totalFF) * 100 : 0
                 return (
                   <div key={i} className="flex items-center justify-between text-xs">
                     <span className="flex items-center gap-2">
@@ -2101,8 +2208,9 @@ export default function Dashboard({ mode = 'armazem' }) {
   const [tarefasBlitz,        setTarefasBlitz]        = useState([])
   const [precosMap,           setPrecosMap]           = useState({ Pratic: {}, Cheia: {} })
   const [catMap,              setCatMap]              = useState({})
-  const [furoJustMap,         setFuroJustMap]         = useState({})   // pedido_id (furo) -> motivo_id
+  const [furoJustMap,         setFuroJustMap]         = useState({})   // pedido_id (furo) -> { motivo_id, cavalo_id }
   const [motivosFuro,         setMotivosFuro]         = useState([])   // { id, descricao, responsabilidade }
+  const [furoMotivoSel,       setFuroMotivoSel]       = useState('')   // filtro local do gráfico de placas (motivo)
 
   // opções dos filtros
   const [optUnidades,  setOptUnidades]  = useState([])
@@ -2287,15 +2395,15 @@ export default function Dashboard({ mode = 'armazem' }) {
     setPedPorDia(ppdMap)
     setRawPeds(rawPedsData ?? [])
 
-    // Justificativas dos furos do período (pedido_id -> motivo_id) p/ gráficos de furo
+    // Justificativas dos furos do período (pedido_id -> { motivo_id, cavalo_id }) p/ gráficos de furo
     const furoIds = (rawPedsData ?? []).filter(p => p.status === 'furo').map(p => p.id)
     const jMap = {}
     if (furoIds.length) {
       const { data: jData } = await supabase
         .from('pedido_furo_justificativa')
-        .select('pedido_id, motivo_id')
+        .select('pedido_id, motivo_id, cavalo_id')
         .in('pedido_id', furoIds)
-      ;(jData ?? []).forEach(j => { jMap[j.pedido_id] = j.motivo_id })
+      ;(jData ?? []).forEach(j => { jMap[j.pedido_id] = { motivo_id: j.motivo_id, cavalo_id: j.cavalo_id } })
     }
     setFuroJustMap(jMap)
     setRealizadoViagens(realizadoRaw ?? [])
@@ -2541,7 +2649,7 @@ export default function Dashboard({ mode = 'armazem' }) {
       const hl = (Number(p.qtde_pallets) || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
       if (hl <= 0) return
 
-      const motivoId = furoJustMap[p.id]
+      const motivoId = furoJustMap[p.id]?.motivo_id
       const mot      = motivoId ? motMap[motivoId] : null
       const label    = mot?.descricao ?? 'Sem justificativa'
       porMotivo[label] = (porMotivo[label] || 0) + hl
@@ -2565,6 +2673,66 @@ export default function Dashboard({ mode = 'armazem' }) {
     const totalResp = porResp.fabrica + porResp.revenda + porResp.sem
     return { motivos, resp, totalResp }
   }, [rawPeds, catMap, motivosFuro, furoJustMap, filtroUnidade, fabCodigoFuro])
+
+  // Base por furo com placa/tipo (FF/SPOT) + motivo — respeita período/CD/fábrica,
+  // mas NÃO o filtro local de motivo (p/ as opções do dropdown ficarem estáveis).
+  const furoCavaloBase = useMemo(() => {
+    const motMap = Object.fromEntries(motivosFuro.map(m => [m.id, m]))
+    const cavMap = Object.fromEntries(todoCavalos.map(c => [c.id, c]))
+    const list   = []
+    const motSet = new Map()                       // value -> label
+
+    rawPeds.forEach(p => {
+      if (p.status !== 'furo') return
+      if (filtroUnidade && p.unidade_id !== filtroUnidade) return
+      if (fabCodigoFuro && p.codigo_fabrica !== fabCodigoFuro) return
+      const cat = catMap[p.cod_produto]
+      if (!cat) return
+      const hl = (Number(p.qtde_pallets) || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
+      if (hl <= 0) return
+
+      const j        = furoJustMap[p.id]
+      const motivoId = j?.motivo_id || null
+      const motValue = motivoId || '__sem__'
+      const motLabel = motivoId ? (motMap[motivoId]?.descricao ?? '(motivo inativo)') : 'Sem justificativa'
+      motSet.set(motValue, motLabel)
+
+      const cav = j?.cavalo_id ? cavMap[j.cavalo_id] : null
+      list.push({ hl, motValue, placa: cav?.placa ?? null, tipo: cav?.tipo ?? null })
+    })
+
+    const motivoOpts = [...motSet.entries()]
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label))
+    return { list, motivoOpts }
+  }, [rawPeds, catMap, motivosFuro, todoCavalos, furoJustMap, filtroUnidade, fabCodigoFuro])
+
+  const dadosFuroCavalo = useMemo(() => {
+    const { list } = furoCavaloBase
+    const filtered = furoMotivoSel ? list.filter(f => f.motValue === furoMotivoSel) : list
+
+    const porPlaca = {}
+    const porTipo  = { FF: 0, SPOT: 0, sem: 0 }
+    filtered.forEach(f => {
+      const label = f.placa ?? 'Sem placa'
+      porPlaca[label] = (porPlaca[label] || 0) + f.hl
+      if (f.tipo === 'FF')        porTipo.FF   += f.hl
+      else if (f.tipo === 'SPOT') porTipo.SPOT += f.hl
+      else                        porTipo.sem  += f.hl
+    })
+
+    const placas = Object.entries(porPlaca)
+      .map(([placa, hl]) => ({ placa, hl, cor: placa === 'Sem placa' ? '#94A3B8' : '#7C3AED' }))
+      .sort((a, b) => b.hl - a.hl)
+
+    const ffspot = [
+      { name: 'FF',        hl: porTipo.FF,   color: '#003DA5' },
+      { name: 'SPOT',      hl: porTipo.SPOT, color: '#F59E0B' },
+      { name: 'Sem placa', hl: porTipo.sem,  color: '#94A3B8' },
+    ].filter(r => r.hl > 0)
+
+    return { placas, ffspot, totalFF: porTipo.FF + porTipo.SPOT + porTipo.sem }
+  }, [furoCavaloBase, furoMotivoSel])
 
   const descFiltrosFuro = useMemo(() => {
     const fmt = iso => {
@@ -2811,6 +2979,15 @@ export default function Dashboard({ mode = 'armazem' }) {
                   motivos={dadosFuroDetalhe.motivos}
                   resp={dadosFuroDetalhe.resp}
                   totalResp={dadosFuroDetalhe.totalResp}
+                  filtros={descFiltrosFuro}
+                />
+                <GraficoFuroCavalo
+                  placas={dadosFuroCavalo.placas}
+                  ffspot={dadosFuroCavalo.ffspot}
+                  totalFF={dadosFuroCavalo.totalFF}
+                  motivoOpts={furoCavaloBase.motivoOpts}
+                  motivoSel={furoMotivoSel}
+                  onMotivoChange={setFuroMotivoSel}
                   filtros={descFiltrosFuro}
                 />
                 <GraficoOciosidade data={dadosOciosidade} filtros={descFiltros} />
