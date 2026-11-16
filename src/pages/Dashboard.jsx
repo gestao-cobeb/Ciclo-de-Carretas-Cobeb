@@ -144,6 +144,72 @@ function calcPlanejaVsReal(rows, n, agrupamento, dataInicio, dataFim, pedPorDia 
   return []
 }
 
+// % de furo por período: HL furado ÷ HL de todos os pedidos (não-cancelados) do período.
+// Segue o mesmo agrupamento/rótulo do Planejado vs Real. NÃO usa turno/frota/cavalo —
+// a guia de justificativa de furo não tem essa informação.
+function calcFuroPct(peds, catMap, agrupamento, filtroUnidade, fabCodigo) {
+  const hlOf = p => {
+    const cat = catMap[p.cod_produto]
+    if (!cat) return 0
+    return (Number(p.qtde_pallets) || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
+  }
+  // iso (AAAA-MM-DD) -> { furo, total }
+  const byDay = {}
+  peds.forEach(p => {
+    if (filtroUnidade && p.unidade_id !== filtroUnidade) return
+    if (fabCodigo && p.codigo_fabrica !== fabCodigo) return
+    const iso = p.data_puxada?.slice(0, 10)
+    if (!iso) return
+    const hl = hlOf(p)
+    if (hl <= 0) return
+    if (!byDay[iso]) byDay[iso] = { furo: 0, total: 0 }
+    byDay[iso].total += hl
+    if (p.status === 'furo') byDay[iso].furo += hl
+  })
+
+  const pack = (furo, total) => ({
+    furoHL:  furo,
+    totalHL: total,
+    pct:     total > 0 ? (furo / total) * 100 : null,
+  })
+
+  if (agrupamento === 'dia') {
+    return Object.entries(byDay)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([iso, { furo, total }]) => {
+        const [, mm, dd] = iso.split('-')
+        return { day: `${dd}/${mm}`, ...pack(furo, total) }
+      })
+  }
+  if (agrupamento === 'semana') {
+    const acc = Array.from({ length: 7 }, () => ({ furo: 0, total: 0 }))
+    Object.entries(byDay).forEach(([iso, { furo, total }]) => {
+      const i = (new Date(iso).getDay() + 6) % 7
+      acc[i].furo += furo; acc[i].total += total
+    })
+    return LABEL_SEMANA.map((label, i) => ({ day: label, ...pack(acc[i].furo, acc[i].total) }))
+  }
+  if (agrupamento === 'mes') {
+    const acc = {}
+    Object.entries(byDay).forEach(([iso, { furo, total }]) => {
+      const m = new Date(iso).getMonth()
+      if (!acc[m]) acc[m] = { furo: 0, total: 0 }
+      acc[m].furo += furo; acc[m].total += total
+    })
+    return LABEL_MES.map((label, i) => ({ day: label, ...pack(acc[i]?.furo || 0, acc[i]?.total || 0) }))
+  }
+  // ano
+  const acc = {}
+  Object.entries(byDay).forEach(([iso, { furo, total }]) => {
+    const y = iso.slice(0, 4)
+    if (!acc[y]) acc[y] = { furo: 0, total: 0 }
+    acc[y].furo += furo; acc[y].total += total
+  })
+  return Object.entries(acc)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([y, { furo, total }]) => ({ day: y, ...pack(furo, total) }))
+}
+
 function getRowsForPeriod(rows, agrupamento, day) {
   if (agrupamento === 'dia') {
     const [dd, mm] = day.split('/')
@@ -459,6 +525,233 @@ function FiltrosTags({ filtros }) {
           {tag}
         </span>
       ))}
+    </div>
+  )
+}
+
+// ── Gráficos de Furo de Puxada ───────────────────────────────────────────────
+// Paleta: furo = vermelho (#EF4444), responsabilidade Fábrica = vermelho / Revenda
+// = âmbar (#F59E0B) — espelha o RESP_FURO da tela Justificativa de Furo. "Sem
+// justificativa" = slate (#94A3B8). Linha de referência da média em navy.
+
+const fmtHl1  = n => Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+const fmtHl0  = n => Number(n || 0).toLocaleString('pt-BR', { maximumFractionDigits: 0 })
+const fmtPct1 = n => (n == null ? '—' : `${Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%`)
+
+const furoTooltipStyle = {
+  background: '#fff', border: '1px solid #BFDBFE',
+  borderRadius: 12, padding: '10px 14px', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,.08)',
+}
+
+function renderPctLabel({ x, y, width, value }) {
+  if (value == null) return null
+  return (
+    <text x={x + width / 2} y={y - 5}
+      textAnchor="middle" fontSize={10} fontWeight={600} fill="#B91C1C">
+      {fmtPct1(value)}
+    </text>
+  )
+}
+
+function renderHlLabelH({ x, y, width, height, value }) {
+  if (!value) return null
+  return (
+    <text x={x + width + 6} y={y + height / 2 + 3}
+      fontSize={10} fontWeight={600} fill="#B91C1C">
+      {fmtHl0(value)}
+    </text>
+  )
+}
+
+function FuroPctTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null
+  const p = payload[0].payload
+  return (
+    <div style={furoTooltipStyle}>
+      <p style={{ fontWeight: 600, color: '#1E3A6E', marginBottom: 4 }}>{label}</p>
+      <p style={{ color: '#EF4444', fontWeight: 700 }}>{fmtPct1(p.pct)} de furo</p>
+      <p style={{ color: '#94A3B8', marginTop: 2 }}>{fmtHl1(p.furoHL)} hl furado · {fmtHl1(p.totalHL)} hl pedido</p>
+    </div>
+  )
+}
+
+function MotivoTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const p = payload[0].payload
+  return (
+    <div style={furoTooltipStyle}>
+      <p style={{ fontWeight: 600, color: '#1E3A6E', marginBottom: 2 }}>{p.motivo}</p>
+      <p style={{ color: p.cor, fontWeight: 700 }}>{fmtHl1(p.hl)} hl</p>
+    </div>
+  )
+}
+
+function RespTooltip({ active, payload, total }) {
+  if (!active || !payload?.length) return null
+  const p = payload[0].payload
+  const pct = total > 0 ? (p.hl / total) * 100 : 0
+  return (
+    <div style={furoTooltipStyle}>
+      <p style={{ fontWeight: 600, color: '#1E3A6E', marginBottom: 2 }}>{p.name}</p>
+      <p style={{ color: p.color, fontWeight: 700 }}>{fmtPct1(pct)}</p>
+      <p style={{ color: '#94A3B8', marginTop: 2 }}>{fmtHl1(p.hl)} hl</p>
+    </div>
+  )
+}
+
+function GraficoFuroPct({ data, filtros, lbl }) {
+  const totFuro = data.reduce((s, d) => s + (d.furoHL || 0), 0)
+  const totAll  = data.reduce((s, d) => s + (d.totalHL || 0), 0)
+  const overall = totAll > 0 ? (totFuro / totAll) * 100 : null
+  const semDados = totAll === 0
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="text-cobeb-text font-semibold text-sm">
+          % de Furo de Puxada {lbl} — Volume Furado ÷ Volume Pedido (hl)
+        </h2>
+        {overall != null && (
+          <span className="shrink-0 text-xs font-semibold text-red-700 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1">
+            Furo: {fmtPct1(overall)}
+          </span>
+        )}
+      </div>
+      <FiltrosTags filtros={filtros} />
+
+      {semDados ? (
+        <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
+          Sem dados para o período
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={280}>
+          <BarChart data={data} margin={{ top: 20, right: 12, left: 4, bottom: 32 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
+            <XAxis
+              dataKey="day"
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={{ stroke: '#BFDBFE' }}
+              angle={-35}
+              textAnchor="end"
+              interval={0}
+            />
+            <YAxis
+              tickFormatter={v => `${v}%`}
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={false}
+              width={44}
+            />
+            <Tooltip content={<FuroPctTooltip />} cursor={{ fill: '#FEF2F2' }} />
+            {overall != null && (
+              <ReferenceLine
+                y={overall}
+                stroke="#003DA5"
+                strokeDasharray="5 3"
+                strokeWidth={1.5}
+                label={{
+                  value: `⌀ ${fmtPct1(overall)}`,
+                  position: 'insideTopRight',
+                  fontSize: 10,
+                  fill: '#003DA5',
+                  fontWeight: 600,
+                }}
+              />
+            )}
+            <Bar dataKey="pct" fill="#EF4444" radius={[4, 4, 0, 0]} maxBarSize={44}>
+              <LabelList dataKey="pct" content={renderPctLabel} />
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
+function GraficoFuroMotivosResp({ motivos, resp, totalResp, filtros }) {
+  const semMotivos = motivos.length === 0
+  const alturaMot  = Math.max(200, motivos.length * 40 + 24)
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+      {/* Maiores motivos de furo em HL */}
+      <div className="lg:col-span-2 bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+        <h2 className="text-cobeb-text font-semibold text-sm mb-4">
+          Maiores Motivos de Furo — Volume (hl)
+        </h2>
+        <FiltrosTags filtros={filtros} />
+        {semMotivos ? (
+          <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
+            Sem furos no período
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={alturaMot}>
+            <BarChart data={motivos} layout="vertical" margin={{ top: 4, right: 52, left: 8, bottom: 4 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" horizontal={false} />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 10, fill: '#94A3B8' }}
+                tickLine={false}
+                axisLine={{ stroke: '#BFDBFE' }}
+                tickFormatter={fmtHl0}
+              />
+              <YAxis
+                type="category"
+                dataKey="motivo"
+                width={150}
+                tick={{ fontSize: 10, fill: '#1E3A6E' }}
+                tickLine={false}
+                axisLine={false}
+              />
+              <Tooltip content={<MotivoTooltip />} cursor={{ fill: '#FEF2F2' }} />
+              <Bar dataKey="hl" radius={[0, 4, 4, 0]} maxBarSize={28}>
+                {motivos.map((m, i) => <Cell key={i} fill={m.cor} />)}
+                <LabelList dataKey="hl" content={renderHlLabelH} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* Impacto Revenda × Fábrica — pizza */}
+      <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4 flex flex-col">
+        <h2 className="text-cobeb-text font-semibold text-sm">Impacto do Furo</h2>
+        <p className="text-[11px] text-slate-400 mb-3">Revenda × Fábrica (hl)</p>
+        {totalResp === 0 ? (
+          <div className="flex-1 flex items-center justify-center min-h-52 text-slate-400 text-sm">
+            Sem furos no período
+          </div>
+        ) : (
+          <>
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie data={resp} dataKey="hl" nameKey="name" cx="50%" cy="50%"
+                  innerRadius={48} outerRadius={78} paddingAngle={2}>
+                  {resp.map((r, i) => <Cell key={i} fill={r.color} />)}
+                </Pie>
+                <Tooltip content={<RespTooltip total={totalResp} />} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="space-y-1.5 mt-2">
+              {resp.map((r, i) => {
+                const pct = totalResp > 0 ? (r.hl / totalResp) * 100 : 0
+                return (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: r.color }} />
+                      <span className="text-cobeb-text font-medium">{r.name}</span>
+                    </span>
+                    <span className="text-slate-500 font-semibold whitespace-nowrap">
+                      {fmtPct1(pct)} · {fmtHl1(r.hl)} hl
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -1808,6 +2101,8 @@ export default function Dashboard({ mode = 'armazem' }) {
   const [tarefasBlitz,        setTarefasBlitz]        = useState([])
   const [precosMap,           setPrecosMap]           = useState({ Pratic: {}, Cheia: {} })
   const [catMap,              setCatMap]              = useState({})
+  const [furoJustMap,         setFuroJustMap]         = useState({})   // pedido_id (furo) -> motivo_id
+  const [motivosFuro,         setMotivosFuro]         = useState([])   // { id, descricao, responsabilidade }
 
   // opções dos filtros
   const [optUnidades,  setOptUnidades]  = useState([])
@@ -1830,7 +2125,7 @@ export default function Dashboard({ mode = 'armazem' }) {
   // opções dos selects — carregadas uma vez
   useEffect(() => {
     async function loadOpts() {
-      const [{ data: u }, { data: f }, { data: c }, { data: turnData }, { data: todoCav }, { data: todoCar }, { data: precosData }] = await Promise.all([
+      const [{ data: u }, { data: f }, { data: c }, { data: turnData }, { data: todoCav }, { data: todoCar }, { data: precosData }, { data: motData }] = await Promise.all([
         supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
         supabase.from('unidades').select('id, nome, codigo_ambev').eq('tipo', 'fabrica').eq('ativo', true).order('nome'),
         supabase.from('cavalos').select('id, placa, tipo').eq('ativo', true).order('placa'),
@@ -1838,12 +2133,15 @@ export default function Dashboard({ mode = 'armazem' }) {
         supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('carretas').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('precos_fabrica').select('codigo, tabela, preco_total, data_vigencia, data_fim_vigencia').not('data_vigencia', 'is', null).order('data_vigencia', { ascending: false }).limit(100000),
+        // Motivos de furo — TODOS (inclusive inativos) p/ mapear responsabilidade de justificativas antigas
+        supabase.from('motivos_furo').select('id, descricao, responsabilidade'),
       ])
       if (u) setOptUnidades(u)
       if (f) setOptFabricas(f)
       if (c) setOptCavalos(c)
       if (todoCav) setTodoCavalos(todoCav)
       if (todoCar) setTodaCarretas(todoCar)
+      if (motData) setMotivosFuro(motData)
       if (turnData) {
         const tMap = {}
         turnData.forEach(t => {
@@ -1955,7 +2253,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         .order('dt_saida_revenda'),
       supabase
         .from('pedidos')
-        .select('data_puxada, qtde_pallets, qtde_skus, embalagem, cod_produto, status, viagem_id, codigo_fabrica, unidade_id')
+        .select('id, data_puxada, qtde_pallets, qtde_skus, embalagem, cod_produto, status, viagem_id, codigo_fabrica, unidade_id')
         .gte('data_puxada', dataInicio)
         .lte('data_puxada', dataFim)
         .not('qtde_pallets', 'is', null)
@@ -1988,6 +2286,18 @@ export default function Dashboard({ mode = 'armazem' }) {
     })
     setPedPorDia(ppdMap)
     setRawPeds(rawPedsData ?? [])
+
+    // Justificativas dos furos do período (pedido_id -> motivo_id) p/ gráficos de furo
+    const furoIds = (rawPedsData ?? []).filter(p => p.status === 'furo').map(p => p.id)
+    const jMap = {}
+    if (furoIds.length) {
+      const { data: jData } = await supabase
+        .from('pedido_furo_justificativa')
+        .select('pedido_id, motivo_id')
+        .in('pedido_id', furoIds)
+      ;(jData ?? []).forEach(j => { jMap[j.pedido_id] = j.motivo_id })
+    }
+    setFuroJustMap(jMap)
     setRealizadoViagens(realizadoRaw ?? [])
     setTarefasBlitz(tarefasData ?? [])
 
@@ -1996,7 +2306,7 @@ export default function Dashboard({ mode = 'armazem' }) {
     if (uniqueSkus.length) {
       const { data: catData } = await supabase
         .from('produtos_catalogo')
-        .select('codigo, descricao, tipo_marca, caixas_pallet')
+        .select('codigo, descricao, tipo_marca, caixas_pallet, nr_fator_conversao')
         .in('codigo', uniqueSkus)
       if (catData) {
         const cMap = {}
@@ -2203,6 +2513,80 @@ export default function Dashboard({ mode = 'armazem' }) {
 
     return result.sort((a, b) => b.value - a.value)
   }, [rows, viagens, portariaMap, filtroUnidade])
+
+  // ── Furo de puxada ──────────────────────────────────────────────────────────
+  // Respeita período + CD + fábrica; ignora turno/frota/cavalo (a guia de
+  // justificativa de furo não tem essa informação).
+  const fabCodigoFuro = useMemo(
+    () => filtroFabrica ? (optFabricas.find(f => f.id === filtroFabrica)?.codigo_ambev ?? null) : null,
+    [filtroFabrica, optFabricas]
+  )
+
+  const dadosFuroPct = useMemo(
+    () => calcFuroPct(rawPeds, catMap, filtroAgrupamento, filtroUnidade, fabCodigoFuro),
+    [rawPeds, catMap, filtroAgrupamento, filtroUnidade, fabCodigoFuro]
+  )
+
+  const dadosFuroDetalhe = useMemo(() => {
+    const motMap = Object.fromEntries(motivosFuro.map(m => [m.id, m]))
+    const porMotivo = {}                           // descrição -> hl
+    const porResp   = { fabrica: 0, revenda: 0, sem: 0 }
+
+    rawPeds.forEach(p => {
+      if (p.status !== 'furo') return
+      if (filtroUnidade && p.unidade_id !== filtroUnidade) return
+      if (fabCodigoFuro && p.codigo_fabrica !== fabCodigoFuro) return
+      const cat = catMap[p.cod_produto]
+      if (!cat) return
+      const hl = (Number(p.qtde_pallets) || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
+      if (hl <= 0) return
+
+      const motivoId = furoJustMap[p.id]
+      const mot      = motivoId ? motMap[motivoId] : null
+      const label    = mot?.descricao ?? 'Sem justificativa'
+      porMotivo[label] = (porMotivo[label] || 0) + hl
+
+      const r = mot?.responsabilidade
+      if (r === 'fabrica')      porResp.fabrica += hl
+      else if (r === 'revenda') porResp.revenda += hl
+      else                      porResp.sem     += hl
+    })
+
+    const motivos = Object.entries(porMotivo)
+      .map(([motivo, hl]) => ({ motivo, hl, cor: motivo === 'Sem justificativa' ? '#94A3B8' : '#EF4444' }))
+      .sort((a, b) => b.hl - a.hl)
+
+    const resp = [
+      { name: 'Fábrica',           hl: porResp.fabrica, color: '#EF4444' },
+      { name: 'Revenda',           hl: porResp.revenda, color: '#F59E0B' },
+      { name: 'Sem justificativa', hl: porResp.sem,     color: '#94A3B8' },
+    ].filter(r => r.hl > 0)
+
+    const totalResp = porResp.fabrica + porResp.revenda + porResp.sem
+    return { motivos, resp, totalResp }
+  }, [rawPeds, catMap, motivosFuro, furoJustMap, filtroUnidade, fabCodigoFuro])
+
+  const descFiltrosFuro = useMemo(() => {
+    const fmt = iso => {
+      if (!iso) return ''
+      const [y, m, d] = iso.split('-')
+      return `${d}/${m}/${y.slice(2)}`
+    }
+    const tags = []
+    if (filtroAgrupamento === 'semana')    tags.push(`Semana: ${fmt(dataInicio)} – ${fmt(dataFim)}`)
+    else if (filtroAgrupamento === 'mes')  tags.push(`Meses de ${dataInicio ? dataInicio.split('-')[0] : ''}`)
+    else if (filtroAgrupamento === 'ano')  tags.push('Todos os anos')
+    else                                   tags.push(`${fmt(dataInicio)} – ${fmt(dataFim)}`)
+    if (filtroUnidade) {
+      const u = optUnidades.find(u => u.id === filtroUnidade)
+      if (u) tags.push(`CD: ${u.nome}`)
+    }
+    if (filtroFabrica) {
+      const f = optFabricas.find(f => f.id === filtroFabrica)
+      if (f) tags.push(`Fábrica: ${f.nome}`)
+    }
+    return tags
+  }, [filtroAgrupamento, dataInicio, dataFim, filtroUnidade, filtroFabrica, optUnidades, optFabricas])
 
   const descFiltros = useMemo(() => {
     const fmt = iso => {
@@ -2422,6 +2806,13 @@ export default function Dashboard({ mode = 'armazem' }) {
             )}
             {mode === 'puxada' && (
               <>
+                <GraficoFuroPct data={dadosFuroPct} filtros={descFiltrosFuro} lbl={lbl} />
+                <GraficoFuroMotivosResp
+                  motivos={dadosFuroDetalhe.motivos}
+                  resp={dadosFuroDetalhe.resp}
+                  totalResp={dadosFuroDetalhe.totalResp}
+                  filtros={descFiltrosFuro}
+                />
                 <GraficoOciosidade data={dadosOciosidade} filtros={descFiltros} />
                 <GraficoPlanejaVsReal
                   rows={rowsPVR}
