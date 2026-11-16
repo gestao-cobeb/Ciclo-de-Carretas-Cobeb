@@ -25,7 +25,8 @@ export default function JustificativaFuro() {
 
   const [linhas,   setLinhas]   = useState([])   // uma linha por pedido (SKU) com status furo
   const [motivos,  setMotivos]  = useState([])   // motivos ativos (dropdown)
-  const [just,     setJust]     = useState({})   // pedido_id -> { motivo_id, observacao }
+  const [cavalos,  setCavalos]  = useState([])   // cavalos cadastrados (dropdown de placa)
+  const [just,     setJust]     = useState({})   // pedido_id -> { motivo_id, observacao, cavalo_id }
   const [loading,  setLoading]  = useState(true)
 
   // filtros
@@ -44,7 +45,7 @@ export default function JustificativaFuro() {
   async function load() {
     setLoading(true)
 
-    const [{ data: peds }, { data: unis }, { data: mots }] = await Promise.all([
+    const [{ data: peds }, { data: unis }, { data: mots }, { data: cavs }] = await Promise.all([
       supabase.from('pedidos')
         .select('id, data_puxada, numero_pedido, fabrica, unidade_id, cod_produto, descricao, qtde_pallets, qtde_skus')
         .eq('status', 'furo')
@@ -52,6 +53,7 @@ export default function JustificativaFuro() {
         .order('numero_pedido'),
       supabase.from('unidades').select('id, nome, codigo').order('nome'),
       supabase.from('motivos_furo').select('id, descricao, responsabilidade').eq('ativo', true).order('descricao'),
+      supabase.from('cavalos').select('id, placa').eq('ativo', true).order('placa'),
     ])
 
     const pedList = peds ?? []
@@ -74,9 +76,9 @@ export default function JustificativaFuro() {
     if (ids.length) {
       const { data: js } = await supabase
         .from('pedido_furo_justificativa')
-        .select('pedido_id, motivo_id, observacao')
+        .select('pedido_id, motivo_id, observacao, cavalo_id')
         .in('pedido_id', ids)
-      ;(js ?? []).forEach(j => { jMap[j.pedido_id] = { motivo_id: j.motivo_id ?? '', observacao: j.observacao ?? '' } })
+      ;(js ?? []).forEach(j => { jMap[j.pedido_id] = { motivo_id: j.motivo_id ?? '', observacao: j.observacao ?? '', cavalo_id: j.cavalo_id ?? '' } })
     }
 
     const rows = pedList.map(p => {
@@ -104,6 +106,7 @@ export default function JustificativaFuro() {
 
     setLinhas(rows)
     setMotivos(mots ?? [])
+    setCavalos(cavs ?? [])
     setJust(jMap)
     setLoading(false)
   }
@@ -158,7 +161,7 @@ export default function JustificativaFuro() {
   }
 
   async function salvar(pedidoId, patch) {
-    const atual = just[pedidoId] ?? { motivo_id: '', observacao: '' }
+    const atual = just[pedidoId] ?? { motivo_id: '', observacao: '', cavalo_id: '' }
     const novo  = { ...atual, ...patch }
     setJust(j => ({ ...j, [pedidoId]: novo }))
 
@@ -167,6 +170,7 @@ export default function JustificativaFuro() {
       .upsert({
         pedido_id:      pedidoId,
         motivo_id:      novo.motivo_id || null,
+        cavalo_id:      novo.cavalo_id || null,
         observacao:     novo.observacao?.trim() ? novo.observacao.trim() : null,
         atualizado_em:  new Date().toISOString(),
         atualizado_por: profile?.id ?? null,
@@ -260,6 +264,7 @@ export default function JustificativaFuro() {
                   <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">Qtde (hl)</th>
                   <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">Qtde (cx)</th>
                   <th className="px-3 py-2.5 font-semibold text-right whitespace-nowrap">Paletes</th>
+                  <th className="px-3 py-2.5 font-semibold whitespace-nowrap">Cavalo</th>
                   <th className="px-3 py-2.5 font-semibold whitespace-nowrap">Motivo do furo</th>
                   <th className="px-3 py-2.5 font-semibold whitespace-nowrap">Responsabilidade</th>
                   <th className="px-3 py-2.5 font-semibold whitespace-nowrap">Observação</th>
@@ -267,7 +272,7 @@ export default function JustificativaFuro() {
               </thead>
               <tbody>
                 {filtradas.map((l, i) => {
-                  const j = just[l.id] ?? { motivo_id: '', observacao: '' }
+                  const j = just[l.id] ?? { motivo_id: '', observacao: '', cavalo_id: '' }
                   return (
                     <tr key={l.id} className={`border-t border-cobeb-border ${i % 2 ? 'bg-[#EBF5FF]/40' : 'bg-white'}`}>
                       <td className="px-3 py-2 whitespace-nowrap text-cobeb-text">{fmtData(l.data_puxada)}</td>
@@ -279,6 +284,19 @@ export default function JustificativaFuro() {
                       <td className="px-3 py-2 text-right whitespace-nowrap text-cobeb-text">{fmtHl(l.hl)}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap text-cobeb-text">{fmtInt(l.cx)}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap text-cobeb-text">{fmtPlt(l.pallets)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <select
+                          value={j.cavalo_id}
+                          onChange={e => salvar(l.id, { cavalo_id: e.target.value })}
+                          className="text-sm border border-cobeb-border rounded-lg px-2 py-1.5 min-w-[120px] focus:outline-none focus:border-cobeb-blue bg-white">
+                          <option value="">Selecione…</option>
+                          {cavalos.map(c => <option key={c.id} value={c.id}>{c.placa}</option>)}
+                          {/* Cavalo salvo que foi desativado/removido depois: ainda mostra o rótulo */}
+                          {j.cavalo_id && !cavalos.some(c => c.id === j.cavalo_id) && (
+                            <option value={j.cavalo_id}>(cavalo inativo)</option>
+                          )}
+                        </select>
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">
                         <select
                           value={j.motivo_id}
