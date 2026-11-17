@@ -1159,6 +1159,215 @@ function GraficoStatusFrota({ todoCavalos, todaCarretas, viagens, filtroUnidade,
   )
 }
 
+// ── Tabela Disponibilidade (controle quinzenal de OK/NOK por cavalo) ──────────
+// Filtros PRÓPRIOS (não seguem os da página): CD, Frota e quinzena.
+// Linha = cavalo · colunas = dias da quinzena · célula = OK (disponível) / NOK.
+// Regra: no máx. 1 dia NOK na quinzena → verde → bônus R$ 500; acima → vermelho.
+// Persistência: uma linha em disponibilidade_cavalos = 1 dia NOK (ver SQL 122).
+
+const MESES_DISP = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro']
+const padD = n => String(n).padStart(2, '0')
+const BONUS_DISP = 500
+
+function gerarQuinzenas(qtdMeses = 8) {
+  const hoje = new Date()
+  const out = []
+  for (let i = 0; i < qtdMeses; i++) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
+    const ano = d.getFullYear()
+    const mes = d.getMonth() // 0-based
+    const ultimoDia = new Date(ano, mes + 1, 0).getDate()
+    // 2ª primeiro para a quinzena mais recente ficar no topo do select
+    out.push({ key: `${ano}-${mes + 1}-2`, label: `2ª quinzena · ${MESES_DISP[mes]}/${ano}`, ano, mes, ini: 16, fim: ultimoDia })
+    out.push({ key: `${ano}-${mes + 1}-1`, label: `1ª quinzena · ${MESES_DISP[mes]}/${ano}`, ano, mes, ini: 1, fim: 15 })
+  }
+  return out
+}
+
+function quinzenaAtualKey() {
+  const d = new Date()
+  const metade = d.getDate() <= 15 ? 1 : 2
+  return `${d.getFullYear()}-${d.getMonth() + 1}-${metade}`
+}
+
+function TabelaDisponibilidade({ todoCavalos, optUnidades }) {
+  const quinzenas = useMemo(() => gerarQuinzenas(), [])
+  const [quinzenaKey, setQuinzenaKey] = useState(quinzenaAtualKey())
+  const [dispUnidade, setDispUnidade] = useState('')
+  const [dispFrota,   setDispFrota]   = useState('')
+  const [nok,  setNok]  = useState(new Set()) // chaves `${cavaloId}|${YYYY-MM-DD}`
+  const [carregando, setCarregando] = useState(false)
+
+  const quinzena = quinzenas.find(q => q.key === quinzenaKey) ?? quinzenas[0]
+
+  const dias = useMemo(() => {
+    const arr = []
+    for (let d = quinzena.ini; d <= quinzena.fim; d++) {
+      arr.push({ dia: d, dateKey: `${quinzena.ano}-${padD(quinzena.mes + 1)}-${padD(d)}` })
+    }
+    return arr
+  }, [quinzena])
+
+  // Carrega os dias NOK da quinzena selecionada (todos os cavalos; filtra no cliente)
+  useEffect(() => {
+    let cancelado = false
+    async function load() {
+      setCarregando(true)
+      const ini = `${quinzena.ano}-${padD(quinzena.mes + 1)}-${padD(quinzena.ini)}`
+      const fim = `${quinzena.ano}-${padD(quinzena.mes + 1)}-${padD(quinzena.fim)}`
+      const { data } = await supabase
+        .from('disponibilidade_cavalos')
+        .select('cavalo_id, data')
+        .gte('data', ini)
+        .lte('data', fim)
+      if (cancelado) return
+      const s = new Set()
+      ;(data ?? []).forEach(r => s.add(`${r.cavalo_id}|${r.data}`))
+      setNok(s)
+      setCarregando(false)
+    }
+    load()
+    return () => { cancelado = true }
+  }, [quinzena.key])
+
+  const cavalos = useMemo(() => {
+    let lista = todoCavalos.filter(c => !c.desligado)
+    if (dispFrota)   lista = lista.filter(c => c.tipo === dispFrota)
+    if (dispUnidade) lista = lista.filter(c => c.unidade_id === dispUnidade)
+    return lista
+  }, [todoCavalos, dispFrota, dispUnidade])
+
+  async function toggle(cavaloId, dateKey) {
+    const k = `${cavaloId}|${dateKey}`
+    const eraNok = nok.has(k)
+    // otimista
+    setNok(prev => {
+      const n = new Set(prev)
+      if (eraNok) n.delete(k); else n.add(k)
+      return n
+    })
+    const reverter = () => setNok(prev => {
+      const n = new Set(prev)
+      if (eraNok) n.add(k); else n.delete(k)
+      return n
+    })
+    if (eraNok) {
+      const { error } = await supabase.from('disponibilidade_cavalos')
+        .delete().eq('cavalo_id', cavaloId).eq('data', dateKey)
+      if (error) { reverter(); alert('Não foi possível salvar: ' + error.message) }
+    } else {
+      const { error } = await supabase.from('disponibilidade_cavalos')
+        .insert({ cavalo_id: cavaloId, data: dateKey })
+      if (error) { reverter(); alert('Não foi possível salvar: ' + error.message) }
+    }
+  }
+
+  const contaNok = cavaloId => dias.reduce((acc, d) => acc + (nok.has(`${cavaloId}|${d.dateKey}`) ? 1 : 0), 0)
+  const elegiveis = cavalos.filter(c => contaNok(c.id) <= 1).length
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+        <h2 className="text-cobeb-text font-semibold text-sm">Disponibilidade — Cavalos</h2>
+        <span className="text-[11px] text-slate-400">
+          {elegiveis} de {cavalos.length} elegíveis · Total {`R$ ${(elegiveis * BONUS_DISP).toLocaleString('pt-BR')}`}
+        </span>
+      </div>
+      <p className="text-slate-400 text-[11px] mb-3">
+        Clique numa célula para alternar OK / NOK. Até 1 dia NOK na quinzena mantém o bônus de R$ {BONUS_DISP}.
+      </p>
+
+      {/* Filtros próprios */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4">
+        <select value={quinzenaKey} onChange={e => setQuinzenaKey(e.target.value)} className={selCls}>
+          {quinzenas.map(q => <option key={q.key} value={q.key}>{q.label}</option>)}
+        </select>
+        <select value={dispUnidade} onChange={e => setDispUnidade(e.target.value)} className={selCls}>
+          <option value="">Todos os CDs</option>
+          {optUnidades.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+        </select>
+        <div className="flex gap-1.5">
+          {[['', 'Todos'], ['FF', 'FF'], ['SPOT', 'SPOT']].map(([val, label]) => (
+            <button key={val} onClick={() => setDispFrota(val)}
+              className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-colors ${
+                dispFrota === val
+                  ? 'bg-cobeb-navy text-white border-cobeb-navy'
+                  : 'bg-white text-slate-500 border-cobeb-border hover:border-cobeb-blue/40'
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {carregando ? (
+        <div className="flex justify-center py-10">
+          <div className="w-5 h-5 border-2 border-cobeb-navy border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : cavalos.length === 0 ? (
+        <div className="flex items-center justify-center h-24 text-slate-400 text-sm">Sem cavalos para o filtro aplicado</div>
+      ) : (
+        <div className="overflow-x-auto -mx-1 px-1">
+          <table className="border-collapse text-xs">
+            <thead>
+              <tr>
+                <th className="sticky left-0 z-10 bg-white text-left font-semibold text-slate-500 px-2 py-2 border-b border-cobeb-border">Cavalo</th>
+                {dias.map(d => (
+                  <th key={d.dateKey} className="px-1 py-2 text-center font-semibold text-slate-400 border-b border-cobeb-border min-w-[34px]">{padD(d.dia)}</th>
+                ))}
+                <th className="px-2 py-2 text-center font-semibold text-slate-500 border-b border-cobeb-border">NOK</th>
+                <th className="px-2 py-2 text-center font-semibold text-slate-500 border-b border-cobeb-border">Bônus</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cavalos.map(c => {
+                const total = contaNok(c.id)
+                const ok = total <= 1
+                return (
+                  <tr key={c.id} className="hover:bg-slate-50/60">
+                    <td className="sticky left-0 z-10 bg-white px-2 py-1.5 border-b border-slate-100 whitespace-nowrap">
+                      <span className="font-mono font-bold text-cobeb-text tracking-wider">{c.placa}</span>
+                      <span className="ml-1.5 text-[10px] text-slate-400">{c.tipo}</span>
+                    </td>
+                    {dias.map(d => {
+                      const isNok = nok.has(`${c.id}|${d.dateKey}`)
+                      return (
+                        <td key={d.dateKey} className="px-0.5 py-1 text-center border-b border-slate-100">
+                          <button
+                            onClick={() => toggle(c.id, d.dateKey)}
+                            title={`${padD(d.dia)}/${padD(quinzena.mes + 1)} — ${isNok ? 'Indisponível (NOK)' : 'Disponível (OK)'}`}
+                            className={`w-full min-w-[30px] py-1 rounded-md text-[10px] font-bold border transition-colors ${
+                              isNok
+                                ? 'bg-red-500/10 text-red-600 border-red-400/40 hover:bg-red-500/20'
+                                : 'bg-green-500/10 text-green-600 border-green-400/30 hover:bg-green-500/20'
+                            }`}>
+                            {isNok ? 'NOK' : 'OK'}
+                          </button>
+                        </td>
+                      )
+                    })}
+                    <td className={`px-2 py-1.5 text-center font-bold border-b border-slate-100 ${ok ? 'text-green-600' : 'text-red-600'}`}>
+                      {total}
+                    </td>
+                    <td className="px-2 py-1.5 text-center border-b border-slate-100">
+                      <span className={`font-semibold px-2 py-0.5 rounded-full text-[11px] ${
+                        ok ? 'bg-green-500/10 text-green-600 border border-green-500/20'
+                           : 'bg-red-500/10 text-red-500 border border-red-500/20'
+                      }`}>
+                        {ok ? `R$ ${BONUS_DISP}` : 'R$ 0'}
+                      </span>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function isoPeriodMatch(isoDate, agrupamento, day) {
   if (!isoDate) return false
   if (agrupamento === 'dia') {
@@ -2238,7 +2447,7 @@ export default function Dashboard({ mode = 'armazem' }) {
         supabase.from('unidades').select('id, nome, codigo_ambev').eq('tipo', 'fabrica').eq('ativo', true).order('nome'),
         supabase.from('cavalos').select('id, placa, tipo').eq('ativo', true).order('placa'),
         supabase.from('turnos').select('unidade_id, nome, hora_inicio, hora_fim').eq('ativo', true),
-        supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
+        supabase.from('cavalos').select('id, placa, tipo, ativo, em_manutencao, desligado, unidade_id').order('placa'),
         supabase.from('carretas').select('id, placa, tipo, ativo, em_manutencao, desligado').order('placa'),
         supabase.from('precos_fabrica').select('codigo, tabela, preco_total, data_vigencia, data_fim_vigencia').not('data_vigencia', 'is', null).order('data_vigencia', { ascending: false }).limit(100000),
         // Motivos de furo — TODOS (inclusive inativos) p/ mapear responsabilidade de justificativas antigas
@@ -3020,6 +3229,10 @@ export default function Dashboard({ mode = 'armazem' }) {
                   filtroUnidade={filtroUnidade}
                   filtroFrota={filtroFrota}
                   filtroCavalo={filtroCavalo}
+                />
+                <TabelaDisponibilidade
+                  todoCavalos={todoCavalos}
+                  optUnidades={optUnidades}
                 />
               </>
             )}

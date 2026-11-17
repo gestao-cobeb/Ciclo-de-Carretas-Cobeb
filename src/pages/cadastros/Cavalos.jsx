@@ -59,6 +59,8 @@ export default function Cavalos() {
   const [editando, setEditando] = useState(null)
   const [placa, setPlaca] = useState('')
   const [tipo, setTipo] = useState('FF')
+  const [unidadeId, setUnidadeId] = useState('')
+  const [optUnidades, setOptUnidades] = useState([])
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [confirmar,   setConfirmar]   = useState(null)
@@ -86,15 +88,17 @@ export default function Cavalos() {
 
   const carregar = async () => {
     setLoading(true)
-    const [{ data: c }, { data: m }] = await Promise.all([
+    const [{ data: c }, { data: m }, { data: u }] = await Promise.all([
       supabase.from('cavalos').select('*').order('placa'),
       supabase
         .from('manutencoes_cavalos')
         .select('*, responsavel:profiles(nome)')
         .eq('status', 'em_manutencao'),
+      supabase.from('unidades').select('id, nome').eq('tipo', 'revenda').eq('ativo', true).order('nome'),
     ])
     if (c) setLista(c)
     if (m) setManutencoesAtivas(m)
+    if (u) setOptUnidades(u)
     setLoading(false)
   }
 
@@ -117,8 +121,8 @@ export default function Cavalos() {
 
   // ── Cadastro ────────────────────────────────────────────────────────────────
 
-  const abrirNovo = () => { setEditando(null); setPlaca(''); setTipo('FF'); setErro(''); setModal(true) }
-  const abrirEditar = (c) => { setEditando(c); setPlaca(c.placa); setTipo(c.tipo); setErro(''); setModal(true) }
+  const abrirNovo = () => { setEditando(null); setPlaca(''); setTipo('FF'); setUnidadeId(''); setErro(''); setModal(true) }
+  const abrirEditar = (c) => { setEditando(c); setPlaca(c.placa); setTipo(c.tipo); setUnidadeId(c.unidade_id ?? ''); setErro(''); setModal(true) }
   const fechar = () => { setModal(false); setEditando(null) }
 
   const salvar = async (e) => {
@@ -127,11 +131,11 @@ export default function Cavalos() {
     setSalvando(true); setErro('')
     if (editando) {
       const { error } = await supabase.from('cavalos')
-        .update({ placa: placaFormatada, tipo }).eq('id', editando.id)
+        .update({ placa: placaFormatada, tipo, unidade_id: unidadeId || null }).eq('id', editando.id)
       if (error) setErro(error.message.includes('duplicate key') ? 'Já existe um cavalo com esta placa.' : error.message)
       else { await carregar(); fechar() }
     } else {
-      const { error } = await supabase.from('cavalos').insert({ placa: placaFormatada, tipo })
+      const { error } = await supabase.from('cavalos').insert({ placa: placaFormatada, tipo, unidade_id: unidadeId || null })
       if (error) setErro(error.message.includes('duplicate key') ? 'Já existe um cavalo com esta placa.' : error.message)
       else { await carregar(); fechar() }
     }
@@ -342,6 +346,11 @@ export default function Cavalos() {
                       <p className="text-cobeb-text font-bold text-base tracking-wider font-mono">{c.placa}</p>
                       <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <span className="text-[11px] bg-white border border-gray-200 text-slate-500 px-2 py-0.5 rounded-full font-medium">{c.tipo}</span>
+                        {c.unidade_id && (
+                          <span className="text-[11px] bg-cobeb-navy/5 border border-cobeb-navy/20 text-cobeb-navy px-2 py-0.5 rounded-full font-medium">
+                            {optUnidades.find(u => u.id === c.unidade_id)?.nome ?? 'CD'}
+                          </span>
+                        )}
                         {c.desligado ? (
                           <span className="text-[11px] px-2 py-0.5 rounded-full font-medium border bg-slate-100 text-slate-400 border-slate-300">
                             Não vinculado
@@ -549,6 +558,13 @@ export default function Cavalos() {
                 <option value="FF">FF — Frota Fixa</option>
                 <option value="SPOT">SPOT — Freteiro</option>
               </select>
+            </Field>
+            <Field label="CD (Unidade)">
+              <select value={unidadeId} onChange={e => setUnidadeId(e.target.value)} className={selectClass}>
+                <option value="">Sem CD definido</option>
+                {optUnidades.map(u => <option key={u.id} value={u.id}>{u.nome}</option>)}
+              </select>
+              <p className="text-slate-500 text-xs mt-1">CD base do veículo — usado no controle de disponibilidade.</p>
             </Field>
             {erro && (
               <p className="bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 text-red-400 text-sm">{erro}</p>
