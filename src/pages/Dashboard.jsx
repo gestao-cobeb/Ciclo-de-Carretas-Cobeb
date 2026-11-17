@@ -1231,7 +1231,7 @@ function TabelaDisponibilidade({ todoCavalos, optUnidades }) {
   }, [quinzena.key])
 
   const cavalos = useMemo(() => {
-    let lista = todoCavalos.filter(c => !c.desligado)
+    let lista = todoCavalos.filter(c => c.ativo && !c.desligado)
     if (dispFrota)   lista = lista.filter(c => c.tipo === dispFrota)
     if (dispUnidade) lista = lista.filter(c => c.unidade_id === dispUnidade)
     return lista
