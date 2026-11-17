@@ -1159,6 +1159,194 @@ function GraficoStatusFrota({ todoCavalos, todaCarretas, viagens, filtroUnidade,
   )
 }
 
+// ── Gráfico Aderência de Disponibilidade ──────────────────────────────────────
+// Para cada período: disponíveis ÷ total de cavalos ATIVOS (que batem CD+frota).
+// "Indisponível no dia" = cavalo com registro NOK na tabela disponibilidade_cavalos.
+// Obedece APENAS os filtros de data, CD e frota da página (não turno/fábrica/cavalo).
+// Segue o agrupamento (Dia/Semana/Mês/Ano); nos agrupados mostra a aderência média.
+
+function eachISODay(ini, fim) {
+  const out = []
+  const [y, m, d] = ini.split('-').map(Number)
+  const [fy, fm, fd] = fim.split('-').map(Number)
+  const cur = new Date(y, m - 1, d)
+  const end = new Date(fy, fm - 1, fd)
+  let guard = 0
+  while (cur <= end && guard < 4000) {
+    out.push(`${cur.getFullYear()}-${padD(cur.getMonth() + 1)}-${padD(cur.getDate())}`)
+    cur.setDate(cur.getDate() + 1)
+    guard++
+  }
+  return out
+}
+
+function DispTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null
+  const p = payload[0].payload
+  const frota = p.dias > 0 ? Math.round(p.total / p.dias) : p.total
+  return (
+    <div style={furoTooltipStyle}>
+      <p style={{ fontWeight: 600, marginBottom: 4, color: '#1E3A6E' }}>{p.day}</p>
+      <p>Aderência: <b style={{ color: '#16A34A' }}>{fmtPct1(p.pct)}</b></p>
+      {p.dias === 1
+        ? <p style={{ color: '#64748B' }}>{p.disp} de {p.total} disponíveis</p>
+        : <p style={{ color: '#64748B' }}>Média {(p.disp / p.dias).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} de {frota} disponíveis/dia</p>}
+    </div>
+  )
+}
+
+function GraficoDisponibilidade({ todoCavalos, optUnidades, filtroUnidade, filtroFrota, filtroAgrupamento, dataInicio, dataFim, lbl }) {
+  const [rows, setRows] = useState([])        // { cavalo_id, data } no período
+  const [carregando, setCarregando] = useState(false)
+
+  useEffect(() => {
+    if (!dataInicio || !dataFim) return
+    let cancelado = false
+    async function load() {
+      setCarregando(true)
+      const { data } = await supabase
+        .from('disponibilidade_cavalos')
+        .select('cavalo_id, data')
+        .gte('data', dataInicio)
+        .lte('data', dataFim)
+      if (cancelado) return
+      setRows(data ?? [])
+      setCarregando(false)
+    }
+    load()
+    return () => { cancelado = true }
+  }, [dataInicio, dataFim])
+
+  const eligibleIds = useMemo(() => {
+    let lista = todoCavalos.filter(c => c.ativo && !c.desligado)
+    if (filtroFrota)   lista = lista.filter(c => c.tipo === filtroFrota)
+    if (filtroUnidade) lista = lista.filter(c => c.unidade_id === filtroUnidade)
+    return new Set(lista.map(c => c.id))
+  }, [todoCavalos, filtroFrota, filtroUnidade])
+
+  const fleetSize = eligibleIds.size
+
+  const { data, overall } = useMemo(() => {
+    if (!dataInicio || !dataFim || fleetSize === 0) return { data: [], overall: null }
+
+    const nokByDay = {}
+    rows.forEach(r => { if (eligibleIds.has(r.cavalo_id)) nokByDay[r.data] = (nokByDay[r.data] || 0) + 1 })
+
+    const perDay = eachISODay(dataInicio, dataFim).map(iso => ({
+      iso,
+      disp:  Math.max(0, fleetSize - (nokByDay[iso] || 0)),
+      total: fleetSize,
+    }))
+
+    const sumDisp = perDay.reduce((s, d) => s + d.disp, 0)
+    const sumTot  = perDay.reduce((s, d) => s + d.total, 0)
+    const overallPct = sumTot > 0 ? (sumDisp / sumTot) * 100 : null
+
+    const mk = (disp, total, dias) => ({ disp, total, dias, pct: total > 0 ? (disp / total) * 100 : null })
+    let out
+
+    if (filtroAgrupamento === 'dia') {
+      out = perDay.map(({ iso, disp, total }) => {
+        const [, mm, dd] = iso.split('-')
+        return { day: `${dd}/${mm}`, ...mk(disp, total, 1) }
+      })
+    } else if (filtroAgrupamento === 'semana') {
+      const acc = Array.from({ length: 7 }, () => ({ disp: 0, total: 0, dias: 0 }))
+      perDay.forEach(({ iso, disp, total }) => {
+        const i = (new Date(iso).getDay() + 6) % 7
+        acc[i].disp += disp; acc[i].total += total; acc[i].dias++
+      })
+      out = LABEL_SEMANA.map((label, i) => ({ day: label, ...mk(acc[i].disp, acc[i].total, acc[i].dias) }))
+    } else if (filtroAgrupamento === 'mes') {
+      const acc = {}
+      perDay.forEach(({ iso, disp, total }) => {
+        const m = new Date(iso).getMonth()
+        if (!acc[m]) acc[m] = { disp: 0, total: 0, dias: 0 }
+        acc[m].disp += disp; acc[m].total += total; acc[m].dias++
+      })
+      out = LABEL_MES.map((label, i) => ({ day: label, ...mk(acc[i]?.disp || 0, acc[i]?.total || 0, acc[i]?.dias || 0) }))
+    } else {
+      const acc = {}
+      perDay.forEach(({ iso, disp, total }) => {
+        const y = iso.slice(0, 4)
+        if (!acc[y]) acc[y] = { disp: 0, total: 0, dias: 0 }
+        acc[y].disp += disp; acc[y].total += total; acc[y].dias++
+      })
+      out = Object.entries(acc).sort(([a], [b]) => a.localeCompare(b))
+        .map(([y, v]) => ({ day: y, ...mk(v.disp, v.total, v.dias) }))
+    }
+
+    return { data: out, overall: overallPct }
+  }, [rows, eligibleIds, fleetSize, filtroAgrupamento, dataInicio, dataFim])
+
+  const tags = []
+  if (filtroUnidade) tags.push(`CD: ${optUnidades.find(u => u.id === filtroUnidade)?.nome ?? ''}`)
+  if (filtroFrota)   tags.push(`Frota: ${filtroFrota}`)
+
+  const semDados = fleetSize === 0 || data.every(d => d.pct == null)
+
+  return (
+    <div className="bg-white rounded-2xl border border-cobeb-border shadow-sm p-4">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="text-cobeb-text font-semibold text-sm">
+          Aderência de Disponibilidade {lbl} — Disponíveis ÷ Ativos
+        </h2>
+        {overall != null && (
+          <span className="shrink-0 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1">
+            Aderência: {fmtPct1(overall)}
+          </span>
+        )}
+      </div>
+      <FiltrosTags filtros={tags} />
+
+      {carregando ? (
+        <div className="flex items-center justify-center h-52">
+          <div className="w-5 h-5 border-2 border-cobeb-navy border-t-transparent rounded-full animate-spin" />
+        </div>
+      ) : semDados ? (
+        <div className="flex items-center justify-center h-52 text-slate-400 text-sm">
+          {fleetSize === 0 ? 'Sem cavalos ativos para o filtro aplicado' : 'Sem dados para o período'}
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={280}>
+          <LineChart data={data} margin={{ top: 20, right: 16, left: 4, bottom: 32 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#BFDBFE" vertical={false} />
+            <XAxis
+              dataKey="day"
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={{ stroke: '#BFDBFE' }}
+              angle={-35}
+              textAnchor="end"
+              interval={0}
+            />
+            <YAxis
+              domain={[0, 100]}
+              tickFormatter={v => `${v}%`}
+              tick={{ fontSize: 10, fill: '#94A3B8' }}
+              tickLine={false}
+              axisLine={false}
+              width={44}
+            />
+            <Tooltip content={<DispTooltip />} />
+            {overall != null && (
+              <ReferenceLine
+                y={overall}
+                stroke="#003DA5"
+                strokeDasharray="5 3"
+                strokeWidth={1.5}
+                label={{ value: `⌀ ${fmtPct1(overall)}`, position: 'insideTopRight', fontSize: 10, fill: '#003DA5', fontWeight: 600 }}
+              />
+            )}
+            <Line type="monotone" dataKey="pct" stroke="#16A34A" strokeWidth={2}
+              dot={{ r: 3, fill: '#16A34A' }} activeDot={{ r: 5 }} connectNulls />
+          </LineChart>
+        </ResponsiveContainer>
+      )}
+    </div>
+  )
+}
+
 // ── Tabela Disponibilidade (controle quinzenal de OK/NOK por cavalo) ──────────
 // Filtros PRÓPRIOS (não seguem os da página): CD, Frota e quinzena.
 // Linha = cavalo · colunas = dias da quinzena · célula = OK (disponível) / NOK.
@@ -3229,6 +3417,16 @@ export default function Dashboard({ mode = 'armazem' }) {
                   filtroUnidade={filtroUnidade}
                   filtroFrota={filtroFrota}
                   filtroCavalo={filtroCavalo}
+                />
+                <GraficoDisponibilidade
+                  todoCavalos={todoCavalos}
+                  optUnidades={optUnidades}
+                  filtroUnidade={filtroUnidade}
+                  filtroFrota={filtroFrota}
+                  filtroAgrupamento={filtroAgrupamento}
+                  dataInicio={dataInicio}
+                  dataFim={dataFim}
+                  lbl={lbl}
                 />
                 <TabelaDisponibilidade
                   todoCavalos={todoCavalos}
