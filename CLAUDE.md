@@ -211,6 +211,49 @@ Quem precisa saber se gravou tem que conferir linhas afetadas (`.select()`
 no update e checar o retorno). Pendente pro próximo APK (só UX): desabilitar
 "Chegada na Revenda" offline e trocar o `tryDB` por essa verificação.
 
+## ⚠ O trio de acesso por unidade — `todas_unidades` cai calado (17/11/2026)
+
+Há **três** níveis de visibilidade por unidade em `public.profiles`, e toda
+função/policy que filtra LEITURA por unidade tem que honrar os três:
+
+- `acesso_total = true` → vê tudo (admin total, + poderes de escrita)
+- `todas_unidades = true` → vê os dados de **todas** as unidades (leitura
+  ampla), mas **não** é admin total; tipicamente tem `unidade_id = NULL`
+- `unidade_id = <UUID>` → vê só o CD dele
+
+**A armadilha:** um usuário `todas_unidades` tem `unidade_id = NULL`. Se o
+filtro só cobre `acesso_total = true OR x.unidade_id = mp.unidade_id`, a
+segunda parte vira `x.unidade_id = NULL` — **nunca verdadeiro** — e a função
+devolve **ZERO linhas, sem erro**. A tela fica vazia e parece "sem acesso",
+não bug. Funciona pra admin total e pra quem tem CD fixo, então passa batido.
+
+O padrão correto, sempre os **três** ramos:
+
+```sql
+WITH meu_perfil AS (
+  SELECT unidade_id, acesso_total, todas_unidades FROM public.profiles WHERE id = auth.uid()
+)
+... WHERE
+      mp.acesso_total   = true
+   OR mp.todas_unidades = true
+   OR (mp.unidade_id IS NOT NULL AND x.unidade_descarga_id = mp.unidade_id)
+```
+
+**Como isso já mordeu (duas vezes):**
+- `get_dados_viagens` (guia Dados) nasceu no 111 sem `todas_unidades` →
+  corrigido no **123**.
+- `get_painel_viagens` (Painel/Tempo Real) foi corrigido no **083**, mas o
+  **097** — mexendo noutra coisa (flag `tem_substituicao`) — recriou a função
+  a partir de uma **cópia antiga** e derrubou o `todas_unidades`. Uma
+  **regressão** que só reapareceu meses depois → corrigido no **124**.
+
+**Regra para o próximo:** ao recriar (`CREATE OR REPLACE` / `DROP+CREATE`)
+qualquer função ou policy que escopa por unidade — `get_painel_viagens`,
+`get_dados_viagens`, policies de `tarefas_operador`, etc. — **nunca** parta de
+uma versão antiga sem reconferir o trio. Se o diff remove uma linha
+`todas_unidades`, é regressão, não limpeza. A referência correta mora nos
+scripts **071**, **083**, **088**, **123** e **124**.
+
 ## O que este arquivo NÃO cobre (e eu não inventei)
 
 Não estudei as regras de negócio do sistema — NRI, o cálculo dos tempos, o
