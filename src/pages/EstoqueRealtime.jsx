@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw, ArrowLeftRight, MapPin, Send, Plus } from 'lucide-react'
+import { Forklift, LogOut, ChevronDown, ChevronUp, AlertTriangle, Clock, RefreshCw, Package, LayoutGrid, Map, Wifi, Building2, Home, Pencil, Check, X, RotateCcw, ArrowLeftRight, MapPin, Send, Plus, Trash2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import MapaRealtime from './MapaRealtime'
@@ -267,7 +267,9 @@ export default function EstoqueRealtime({ adminMode = false }) {
 
 function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unidades = [] }) {
   const cfg      = STATUS_CFG[viagem.status] ?? STATUS_CFG.iniciada
-  const produtos = viagem.produtos ?? []
+  // Produtos excluídos via BO somem do card (viram status='cancelado' +
+  // excluido_bo). Cancelados por SUBSTITUIÇÃO continuam aparecendo riscados.
+  const produtos = (viagem.produtos ?? []).filter(p => !p.excluido_bo)
 
   const [editHorario,  setEditHorario]  = useState(false)
   const [novoHorario,  setNovoHorario]  = useState('')
@@ -280,6 +282,9 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
 
   const [showModalAgendRev, setShowModalAgendRev] = useState(false)
   const [reenviandoPortaria, setReenviandoPortaria] = useState(false)
+
+  // Estado de exclusão de produto via BO
+  const [excluindo,        setExcluindo]        = useState(null)
 
   // Estado de substituição de produto
   const [substituindo,     setSubstituindo]     = useState(null)
@@ -361,6 +366,7 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
   }
 
   function abrirSubstituicao(itemId) {
+    setExcluindo(null)
     setSubstituindo(itemId)
     setSubCodigo('')
     setSubDescricao('')
@@ -479,6 +485,22 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
     setAdminLoading(false)
     if (error) { alert('Erro ao adicionar produto: ' + error.message); return }
     fecharAdicao()
+    onRefresh?.()
+  }
+
+  function abrirExclusao(itemId) {
+    setSubstituindo(null)
+    setExcluindo(itemId)
+  }
+
+  async function confirmarExclusao(itemId) {
+    setAdminLoading(true)
+    const { error } = await supabase.rpc('admin_excluir_produto_viagem', {
+      p_item_id: itemId,
+    })
+    setAdminLoading(false)
+    if (error) { alert('Erro ao excluir produto: ' + error.message); return }
+    setExcluindo(null)
     onRefresh?.()
   }
 
@@ -773,17 +795,29 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
                             {Number(p.qtde_skus).toLocaleString('pt-BR')} cx
                           </p>
                         </div>
-                        {podeSubstituir && p.id && !cancelado && substituindo !== p.id && (
-                          <span
-                            role="button"
-                            tabIndex={0}
-                            title="Substituir produto"
-                            onClick={() => abrirSubstituicao(p.id)}
-                            onKeyDown={e => e.key === 'Enter' && abrirSubstituicao(p.id)}
-                            className="mt-0.5 cursor-pointer text-slate-300 hover:text-orange-400 transition-colors"
-                          >
-                            <ArrowLeftRight size={11} />
-                          </span>
+                        {podeSubstituir && p.id && !cancelado && substituindo !== p.id && excluindo !== p.id && (
+                          <>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              title="Substituir produto"
+                              onClick={() => abrirSubstituicao(p.id)}
+                              onKeyDown={e => e.key === 'Enter' && abrirSubstituicao(p.id)}
+                              className="mt-0.5 cursor-pointer text-slate-300 hover:text-orange-400 transition-colors"
+                            >
+                              <ArrowLeftRight size={11} />
+                            </span>
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              title="Excluir produto do pedido"
+                              onClick={() => abrirExclusao(p.id)}
+                              onKeyDown={e => e.key === 'Enter' && abrirExclusao(p.id)}
+                              className="mt-0.5 cursor-pointer text-slate-300 hover:text-red-400 transition-colors"
+                            >
+                              <Trash2 size={11} />
+                            </span>
+                          </>
                         )}
                       </div>
                     </div>
@@ -874,6 +908,38 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
                               Cancelar
                             </button>
                           </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Confirmação de exclusão (inline) */}
+                    {excluindo === p.id && (
+                      <div className="px-4 pb-3.5 bg-red-50/70 border-t border-red-100">
+                        <p className="text-[9px] font-bold text-red-500 uppercase tracking-widest pt-2 mb-2">
+                          ↳ Excluir produto do pedido
+                        </p>
+                        <p className="text-[11px] text-slate-600 mb-2.5 leading-snug">
+                          Remove <span className="font-semibold">{p.descricao}</span> da carga.
+                          Some do app do motorista, da guia Pedidos e do volume no dashboard.
+                          Os demais produtos não são afetados.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => confirmarExclusao(p.id)}
+                            disabled={adminLoading}
+                            className="flex items-center gap-1.5 text-[11px] font-semibold text-white bg-red-500 hover:bg-red-600 disabled:opacity-40 px-3 py-1.5 rounded-lg transition-colors"
+                          >
+                            {adminLoading
+                              ? <div className="w-3 h-3 border border-white/40 border-t-white rounded-full animate-spin" />
+                              : <Trash2 size={11} />}
+                            Confirmar exclusão
+                          </button>
+                          <button
+                            onClick={() => setExcluindo(null)}
+                            className="text-[11px] text-slate-400 hover:text-slate-600 transition-colors px-2 py-1.5"
+                          >
+                            Cancelar
+                          </button>
                         </div>
                       </div>
                     )}
