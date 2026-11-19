@@ -127,7 +127,10 @@ export default function Pedidos() {
   // ── grouping ────────────────────────────────────────────────────────────────
 
   const agrupados = useMemo(() => {
-    let filtered = pedidos
+    // Itens cancelados (substituídos ou excluídos via BO no Painel) não fazem
+    // parte da carga — somem da lista e não entram nos totais, igual ao
+    // Dashboard Volume e ao app do motorista.
+    let filtered = pedidos.filter(p => p.status !== 'cancelado')
     if (filtData)    filtered = filtered.filter(p => p.data_puxada === filtData)
     if (filtUnidade) filtered = filtered.filter(p => p.unidade_id === filtUnidade)
     if (filtFabrica) filtered = filtered.filter(p => p.fabrica === filtFabrica)
@@ -565,6 +568,7 @@ export default function Pedidos() {
               {' '}de{' '}
               <span className="text-cobeb-text font-semibold">
                 {[...new Set(pedidos.filter(p => {
+                  if (p.status === 'cancelado') return false
                   if (filtData && p.data_puxada !== filtData) return false
                   if (filtUnidade && p.unidade_id !== filtUnidade) return false
                   if (filtFabrica && p.fabrica !== filtFabrica) return false
