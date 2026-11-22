@@ -1,8 +1,25 @@
 name: Deploy to GitHub Pages
 
+# Só quando o APP muda (22/11/2026, corte de minutos do Actions aprovado pelo
+# Lucas: 120 deploys em novembro, a maioria por commit de documentação, SQL ou
+# Android, que não mudam o site). Arquivo novo que entra no build? Acrescente.
+# Para publicar na mão: Actions → Deploy to GitHub Pages → Run workflow.
 on:
   push:
     branches: [main]
+    paths:
+      - "src/**"
+      - "public/**"
+      - "patches/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.js"
+      - "tailwind.config.js"
+      - "postcss.config.js"
+      - "gerar-config.mjs"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
