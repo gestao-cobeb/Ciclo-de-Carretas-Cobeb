@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build && node gerar-config.mjs",
     "preview": "vite preview",
+    "test": "node --test src/lib/planilha.test.js",
     "build:android": "cross-env VITE_BUILD_TARGET=android vite build && node gerar-config.mjs && npx cap sync android",
     "cap:open": "npx cap open android",
     "postinstall": "patch-package"
