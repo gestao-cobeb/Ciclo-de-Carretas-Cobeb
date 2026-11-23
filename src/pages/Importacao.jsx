@@ -7,6 +7,7 @@ import * as XLSX from 'xlsx'
 import AdminLayout from '../components/AdminLayout'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { lerLinhasComCelulas, textoIdCelula, numeroCelula } from '../lib/planilha'
 
 const FILE_PATTERN      = /^BASE_(\d{2})-(\d{2})-(\d{4})\.xlsx$/i
 const FILE_PATTERN_PROD = /^\d{2}\.\d{2}\.xlsx$/i
@@ -394,8 +395,10 @@ export default function Importacao() {
       try {
         const wb = XLSX.read(ev.target.result, { type: 'array', cellDates: false })
         const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false })
-        const dataRows = rows.slice(1).filter(r => r[0])
+        // texto formatado (como antes) + a célula original, para EAN/códigos e
+        // números não dependerem do formato de exibição. Ver src/lib/planilha.js.
+        const linhas = lerLinhasComCelulas(ws, XLSX.utils)
+        const dataRows = linhas.slice(1).filter(l => l.texto[0])
         if (!dataRows.length) { setFileErrorProd('Arquivo sem dados válidos.'); return }
         const arqOrigem = file.name.replace(/\.xlsx$/i, '')
         setPendingFileProd({ name: file.name, arqOrigem, data: dataRows, count: dataRows.length })
@@ -410,21 +413,21 @@ export default function Importacao() {
     if (!pendingFileProd) return
     setImportingProd(true); setImportResultProd(null)
     try {
-      const records = pendingFileProd.data.map(r => ({
-        codigo:             String(r[0] ?? '').trim(),
+      const records = pendingFileProd.data.map(({ texto: r, celulas: c }) => ({
+        codigo:             textoIdCelula(c[0]),
         descricao:          String(r[1] ?? '').trim(),
         tipo_marca:         String(r[4] ?? '').trim() || null,
         linha_marca:        String(r[5] ?? '').trim() || null,
         embalagem:          String(r[6] ?? '').trim() || null,
         marca:              String(r[7] ?? '').trim() || null,
-        peso_bruto:         parseFloat(r[12]) || null,
-        fator:              parseFloat(r[13]) || null,
+        peso_bruto:         numeroCelula(c[12]) || null,
+        fator:              numeroCelula(c[13]) || null,
         grupo:              String(r[17] ?? '').trim() || null,
-        ean:                String(r[19] ?? '').trim() || null,
-        caixas_pallet:      parseFloat(r[21]) || null,
-        nr_fator_conversao: parseFloat(r[14]) || null,
-        codigo_sap:         String(r[38] ?? '').trim() || null,
-        ncm:                String(r[40] ?? '').trim() || null,
+        ean:                textoIdCelula(c[19]) || null,
+        caixas_pallet:      numeroCelula(c[21]) || null,
+        nr_fator_conversao: numeroCelula(c[14]) || null,
+        codigo_sap:         textoIdCelula(c[38]) || null,
+        ncm:                textoIdCelula(c[40]) || null,
         subtipo:            String(r[47] ?? '').trim() || null,
         arquivo_origem:     pendingFileProd.arqOrigem,
         importado_por:      profile?.id,

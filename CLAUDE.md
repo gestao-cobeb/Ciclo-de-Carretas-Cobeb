@@ -254,6 +254,20 @@ uma versão antiga sem reconferir o trio. Se o diff remove uma linha
 `todas_unidades`, é regressão, não limpeza. A referência correta mora nos
 scripts **071**, **083**, **088**, **123** e **124**.
 
+## Importação de planilhas — texto formatado estraga número (23/11/2026)
+
+A importação de PRODUTOS lia com `sheet_to_json(..., raw:false)` — o texto
+que o Excel MOSTRA. EAN de 13 dígitos em formato "Geral" virava `7.89123E+12`
+(dígitos perdidos), `#,##0` virava `"1,234"` e o `parseFloat` dava `1`, e
+`0.00%` virava `"0.42%"` → 0,42 em vez de 0,0042. Correção em
+`src/lib/planilha.js` (teste: `npm test`): célula numérica vale `cell.v`;
+coluna de identificação sai com todos os dígitos; só célula de TEXTO é
+interpretada como texto. As outras 4 importações leem com `raw:true` e não
+têm esse defeito.
+
+**Regra para o próximo:** nunca leia número nem código de planilha pelo
+texto formatado (`raw:false`/`cell.w`).
+
 ## O que este arquivo NÃO cobre (e eu não inventei)
 
 Não estudei as regras de negócio do sistema — NRI, o cálculo dos tempos, o
