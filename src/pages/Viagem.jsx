@@ -150,7 +150,7 @@ export default function Viagem() {
       }
     }
     check()
-    const timer = setInterval(check, 30000)
+    const timer = setInterval(check, 60000) // reduzido 30s->60s p/ cortar egress/log ingestion
     return () => clearInterval(timer)
   }, [view, viagemAtiva?.id, viagemAtiva?.status])
 

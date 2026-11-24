@@ -52,7 +52,7 @@ export default function PortariaAdmin() {
   useEffect(() => { carregar() }, [])
 
   useEffect(() => {
-    const timer = setInterval(() => carregar(true), 30000)
+    const timer = setInterval(() => carregar(true), 60000) // reduzido 30s->60s p/ cortar egress/log ingestion
     return () => clearInterval(timer)
   }, [])
 

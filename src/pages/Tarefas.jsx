@@ -5,6 +5,7 @@ import {
   AlertCircle, Package, Truck, RefreshCw, Camera, AlertTriangle, Plus, X, FileText, LayoutGrid, ShoppingCart, ArrowLeftRight, RotateCcw,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
+import { comprimirImagem } from '../lib/comprimirImagem'
 import { useAuth } from '../contexts/AuthContext'
 import EmissaoNRI from './EmissaoNRI'
 import BlitzView from './BlitzView'
@@ -84,7 +85,7 @@ export default function Tarefas() {
   useEffect(() => { loadLista() }, [])
 
   useEffect(() => {
-    const timer = setInterval(() => loadLista(true), 30000)
+    const timer = setInterval(() => loadLista(true), 60000) // reduzido 30s->60s p/ cortar egress/log ingestion
     return () => clearInterval(timer)
   }, [])
 
@@ -454,13 +455,14 @@ export default function Tarefas() {
     const folderKey = anomForm?.folderKey
     if (!folderKey) return
 
-    const ext  = (file.name.split('.').pop() || 'jpg').toLowerCase()
+    const arquivo = await comprimirImagem(file)
+    const ext  = (arquivo.name.split('.').pop() || 'jpg').toLowerCase()
     const slot = ['frente', 'lateral', 'fundo', 'lote'][idx]
     const path = `${tarefaSel.id}/${folderKey}/${slot}.${ext}`
 
     const { error } = await supabase.storage
       .from('anomalias-fotos')
-      .upload(path, file, { upsert: true })
+      .upload(path, arquivo, { upsert: true })
 
     if (error) {
       setAnomaliaForm(f => {

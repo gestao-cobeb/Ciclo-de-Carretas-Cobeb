@@ -118,7 +118,7 @@ export default function MapaRealtime({ onVoltar }) {
 
   useEffect(() => {
     carregar()
-    const timer = setInterval(carregarViagens, 30000)
+    const timer = setInterval(carregarViagens, 60000) // reduzido 30s->60s p/ cortar egress/log ingestion
     return () => clearInterval(timer)
   }, [])
 

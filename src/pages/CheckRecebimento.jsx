@@ -48,7 +48,7 @@ export default function CheckRecebimento() {
   useEffect(() => { load() }, [])
 
   useEffect(() => {
-    const timer = setInterval(() => load(true), 30000)
+    const timer = setInterval(() => load(true), 60000) // reduzido 30s->60s p/ cortar egress/log ingestion
     return () => clearInterval(timer)
   }, [])
 

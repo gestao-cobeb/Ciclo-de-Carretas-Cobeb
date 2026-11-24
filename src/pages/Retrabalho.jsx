@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { comprimirImagem } from '../lib/comprimirImagem'
 import { useAuth } from '../contexts/AuthContext'
 
 function formatData(iso) {
@@ -887,9 +888,10 @@ function ApontamentoModal({ item, motivos, profileNome, onClose, onSave }) {
     const idx = fotos.length
     setFotos(prev => [...prev, { preview, path: null, uploading: true, erro: null }])
 
-    const ext  = (file.name.split('.').pop() || 'jpg').toLowerCase()
+    const arquivo = await comprimirImagem(file)
+    const ext  = (arquivo.name.split('.').pop() || 'jpg').toLowerCase()
     const path = `retrabalho/${item.id}/${Date.now()}_${idx}.${ext}`
-    const { error } = await supabase.storage.from('anomalias-fotos').upload(path, file, { upsert: true })
+    const { error } = await supabase.storage.from('anomalias-fotos').upload(path, arquivo, { upsert: true })
 
     setFotos(prev => prev.map((f, i) => i === idx
       ? error

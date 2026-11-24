@@ -92,7 +92,7 @@ export default function OperadoresPage() {
 
   useEffect(() => { loadTarefas() }, [])
   useEffect(() => {
-    const timer = setInterval(() => loadTarefas(true), 30000)
+    const timer = setInterval(() => loadTarefas(true), 60000) // reduzido 30s->60s p/ cortar egress/log ingestion
     return () => clearInterval(timer)
   }, [])
 

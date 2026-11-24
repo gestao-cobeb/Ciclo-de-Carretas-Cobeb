@@ -73,8 +73,8 @@ export default function EstoqueRealtime({ adminMode = false }) {
   useEffect(() => {
     loadData()
 
-    // Polling a cada 15s para manter painel atualizado
-    const timer = setInterval(() => loadData(true), 15000)
+    // Polling para manter painel atualizado (reduzido 15s->60s p/ cortar egress/log ingestion)
+    const timer = setInterval(() => loadData(true), 60000)
 
     // Supabase Realtime — funciona se a tabela viagens tiver Realtime habilitado
     channelRef.current = supabase

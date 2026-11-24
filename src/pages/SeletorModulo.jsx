@@ -187,7 +187,7 @@ export default function SeletorModulo() {
       setSinalLastSeen(mais_recente?.motorista_last_seen_at ?? null)
     }
     fetchSinal()
-    const timer = setInterval(fetchSinal, 30000)
+    const timer = setInterval(fetchSinal, 60000) // reduzido 30s->60s p/ cortar egress/log ingestion
     return () => clearInterval(timer)
   }, [])
 

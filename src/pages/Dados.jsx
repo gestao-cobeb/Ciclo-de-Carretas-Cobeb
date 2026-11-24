@@ -129,7 +129,7 @@ export default function Dados() {
 
   useEffect(() => { carregar() }, [])
   useEffect(() => {
-    const timer = setInterval(() => carregar(true), 30000)
+    const timer = setInterval(() => carregar(true), 120000) // revisão: reduzido 30s->120s p/ cortar egress/log ingestion
     return () => clearInterval(timer)
   }, [])
 

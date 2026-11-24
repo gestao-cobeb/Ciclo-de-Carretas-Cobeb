@@ -171,7 +171,7 @@ export default function PortariaPage() {
   useEffect(() => { carregar() }, [carregar])
 
   useEffect(() => {
-    const timer = setInterval(() => carregar(true), 15000)
+    const timer = setInterval(() => carregar(true), 60000) // reduzido 15s->60s p/ cortar egress/log ingestion
     return () => clearInterval(timer)
   }, [carregar])
 
