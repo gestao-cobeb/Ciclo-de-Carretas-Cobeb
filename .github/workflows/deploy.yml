@@ -57,9 +57,9 @@ jobs:
           VITE_APK_URL: ${{ secrets.VITE_APK_URL }}
           VITE_ORS_API_KEY: ${{ secrets.VITE_ORS_API_KEY }}
 
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with:
           path: dist
 
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@v5
         id: deployment
