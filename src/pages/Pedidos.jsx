@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   ChevronDown, ChevronUp, X, Search, RefreshCw,
   CheckCircle, Clock, Package, AlertTriangle, RotateCcw,
-  Unlink2, Truck,
+  Unlink2, Truck, Trash2, Plus,
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -56,6 +56,16 @@ export default function Pedidos() {
   const [viagensTransito,     setViagensTransito]     = useState([])
   const [loadingViagens,      setLoadingViagens]      = useState(false)
   const [vinculandoViagemId,  setVinculandoViagemId]  = useState(null)
+
+  // ajuste retroativo (BO) — admin total
+  const [excluindoItem,  setExcluindoItem]  = useState(null)   // item id em confirmação
+  const [boLoading,      setBoLoading]      = useState(false)
+  const [adicionandoKey, setAdicionandoKey] = useState(null)   // group key com form aberto
+  const [addCodigo,      setAddCodigo]      = useState('')
+  const [addDescricao,   setAddDescricao]   = useState('')
+  const [addQtde,        setAddQtde]        = useState('')
+  const [addBuscando,    setAddBuscando]    = useState(false)
+  const [addNaoEncontrado, setAddNaoEncontrado] = useState(false)
 
   useEffect(() => { loadData() }, [])
 
@@ -255,6 +265,68 @@ export default function Pedidos() {
     loadData()
   }
 
+  // ── ajuste retroativo (BO) — excluir / adicionar produto ────────────────────
+
+  async function confirmarExcluirItem(itemId) {
+    setBoLoading(true)
+    const { error } = await supabase.rpc('admin_excluir_produto_pedido', {
+      p_item_id: itemId,
+    })
+    setBoLoading(false)
+    setExcluindoItem(null)
+    if (error) { alert('Erro ao excluir produto: ' + error.message); return }
+    loadData()
+  }
+
+  function abrirAdicao(key) {
+    setExcluindoItem(null)
+    setAdicionandoKey(key)
+    setAddCodigo('')
+    setAddDescricao('')
+    setAddQtde('')
+    setAddBuscando(false)
+    setAddNaoEncontrado(false)
+  }
+
+  function fecharAdicao() {
+    setAdicionandoKey(null)
+    setAddNaoEncontrado(false)
+  }
+
+  async function buscarDescricaoAdicao(codigo) {
+    if (!codigo.trim()) return
+    setAddBuscando(true)
+    setAddDescricao('')
+    setAddNaoEncontrado(false)
+    const { data } = await supabase
+      .from('produtos_catalogo')
+      .select('descricao')
+      .eq('codigo', codigo.trim())
+      .maybeSingle()
+    setAddBuscando(false)
+    if (data?.descricao) {
+      setAddDescricao(data.descricao)
+      setAddNaoEncontrado(false)
+    } else {
+      setAddNaoEncontrado(true)
+    }
+  }
+
+  async function confirmarAdicao(refItemId) {
+    if (!addCodigo.trim() || !addDescricao.trim() || !addQtde) return
+    setBoLoading(true)
+    const { error } = await supabase.rpc('admin_adicionar_produto_pedido', {
+      p_ref_item_id: refItemId,
+      p_cod_produto: addCodigo.trim(),
+      p_descricao:   addDescricao.trim(),
+      p_qtde_pallets: Number(addQtde),
+    })
+    setBoLoading(false)
+    if (error) { alert('Erro ao adicionar produto: ' + error.message); return }
+    fecharAdicao()
+    loadData()
+  }
+
   // ── render ──────────────────────────────────────────────────────────────────
 
   const pillBase =
@@ -374,6 +446,11 @@ export default function Pedidos() {
               // desvincular: só para viagens ainda em transito ou iniciadas
               const podeDesvincular = isAdminTotal && vinculado
                 && (g.viagem_status === 'iniciada' || g.viagem_status === 'em_transito')
+
+              // ajuste retroativo (BO): só em pedidos que CONTAM no Dashboard
+              // (vinculado a viagem ou realizado manual). Em furo/pendente não
+              // faz sentido mexer no volume.
+              const podeAjustarBO = isAdminTotal && (vinculado || ehRealizado)
 
               const isMarcando = marcandoFuro.has(g.key) || marcandoRealizado.has(g.key)
 
@@ -505,36 +582,158 @@ export default function Pedidos() {
                           Pallets · Caixas
                         </span>
                       </div>
-                      {g.itens.map((item, i) => (
+                      {g.itens.map((item, i) => {
+                        const podeExcluir = podeAjustarBO && item.status !== 'furo'
+                        const emConfirmacao = excluindoItem === item.id
+                        return (
                         <div
                           key={item.id}
-                          className={`grid items-center gap-x-3 px-4 py-2.5 ${i < g.itens.length - 1 ? 'border-b border-[#0B1929]' : ''}`}
-                          style={{ gridTemplateColumns: '1fr auto' }}
+                          className={i < g.itens.length - 1 ? 'border-b border-[#0B1929]' : ''}
                         >
-                          <div className="min-w-0">
-                            <p className="text-cobeb-text text-xs font-medium truncate">{item.descricao}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-slate-500 text-[10px] font-mono">{item.cod_produto}</span>
-                              {item.embalagem && <span className="text-slate-500 text-[10px]">{item.embalagem}</span>}
-                              {item.curva && (
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none ${
-                                  item.curva === 'A' ? 'bg-cobeb-navy/10 text-cobeb-yellow' :
-                                  item.curva === 'B' ? 'bg-blue-500/20 text-blue-400' :
-                                  'bg-[#1E3A5F]/50 text-slate-500'
-                                }`}>{item.curva}</span>
-                              )}
+                          <div
+                            className="grid items-center gap-x-3 px-4 py-2.5"
+                            style={{ gridTemplateColumns: podeExcluir ? '1fr auto auto' : '1fr auto' }}
+                          >
+                            <div className="min-w-0">
+                              <p className="text-cobeb-text text-xs font-medium truncate">{item.descricao}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className="text-slate-500 text-[10px] font-mono">{item.cod_produto}</span>
+                                {item.embalagem && <span className="text-slate-500 text-[10px]">{item.embalagem}</span>}
+                                {item.curva && (
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded leading-none ${
+                                    item.curva === 'A' ? 'bg-cobeb-navy/10 text-cobeb-yellow' :
+                                    item.curva === 'B' ? 'bg-blue-500/20 text-blue-400' :
+                                    'bg-[#1E3A5F]/50 text-slate-500'
+                                  }`}>{item.curva}</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-cobeb-text text-xs font-semibold">
+                                {Number(item.qtde_pallets).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}
+                              </p>
+                              <p className="text-slate-500 text-[10px]">
+                                {Number(item.qtde_skus).toLocaleString('pt-BR')} cx
+                              </p>
+                            </div>
+                            {podeExcluir && (
+                              <button
+                                title="Remover produto"
+                                onClick={() => setExcluindoItem(emConfirmacao ? null : item.id)}
+                                className={`shrink-0 transition-colors ${emConfirmacao ? 'text-red-500' : 'text-slate-300 hover:text-red-400'}`}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Confirmação inline de exclusão */}
+                          {emConfirmacao && (
+                            <div className="px-4 pb-3 -mt-1">
+                              <div className="bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
+                                <p className="text-red-700 text-[11px] font-medium">
+                                  Remover este produto do pedido? Ele sai do volume do Dashboard. Não pode ser desfeito.
+                                </p>
+                                <div className="flex gap-2 mt-2">
+                                  <button
+                                    onClick={() => setExcluindoItem(null)}
+                                    disabled={boLoading}
+                                    className="flex-1 bg-white border border-cobeb-border text-slate-500 font-semibold py-2 rounded-lg text-xs disabled:opacity-50"
+                                  >
+                                    Cancelar
+                                  </button>
+                                  <button
+                                    onClick={() => confirmarExcluirItem(item.id)}
+                                    disabled={boLoading}
+                                    className="flex-1 bg-red-500 hover:bg-red-600 text-white font-semibold py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                  >
+                                    {boLoading
+                                      ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                      : <><Trash2 size={12} />Remover</>}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        )
+                      })}
+
+                      {/* Adicionar produto (ajuste retroativo — admin total) */}
+                      {podeAjustarBO && (
+                        adicionandoKey === g.key ? (
+                          <div className="px-4 py-3 bg-emerald-50/60 border-t border-[#0B1929] space-y-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                value={addCodigo}
+                                onChange={e => { setAddCodigo(e.target.value); setAddNaoEncontrado(false) }}
+                                onBlur={e => buscarDescricaoAdicao(e.target.value)}
+                                placeholder="Código do produto"
+                                className="flex-1 bg-white border border-cobeb-border rounded-lg px-3 py-2 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue"
+                              />
+                              <button
+                                onClick={() => buscarDescricaoAdicao(addCodigo)}
+                                disabled={addBuscando || !addCodigo.trim()}
+                                className="shrink-0 bg-cobeb-navy/10 text-cobeb-navy rounded-lg px-3 py-2 text-xs font-semibold disabled:opacity-40 flex items-center gap-1"
+                              >
+                                {addBuscando
+                                  ? <div className="w-3.5 h-3.5 border-2 border-cobeb-navy/40 border-t-cobeb-navy rounded-full animate-spin" />
+                                  : <Search size={13} />}
+                              </button>
+                            </div>
+                            {addDescricao && (
+                              <p className="text-emerald-700 text-[11px] font-medium px-1">{addDescricao}</p>
+                            )}
+                            {addNaoEncontrado && (
+                              <p className="text-amber-600 text-[11px] px-1">
+                                Código não encontrado no catálogo. Digite a descrição manualmente abaixo.
+                              </p>
+                            )}
+                            {(addNaoEncontrado || addDescricao) && (
+                              <input
+                                value={addDescricao}
+                                onChange={e => setAddDescricao(e.target.value)}
+                                placeholder="Descrição do produto"
+                                className="w-full bg-white border border-cobeb-border rounded-lg px-3 py-2 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue"
+                              />
+                            )}
+                            <input
+                              value={addQtde}
+                              onChange={e => setAddQtde(e.target.value)}
+                              type="number"
+                              min="0"
+                              step="0.001"
+                              placeholder="Quantidade de paletes"
+                              className="w-full bg-white border border-cobeb-border rounded-lg px-3 py-2 text-cobeb-text text-xs focus:outline-none focus:border-cobeb-blue"
+                            />
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                onClick={fecharAdicao}
+                                disabled={boLoading}
+                                className="flex-1 bg-white border border-cobeb-border text-slate-500 font-semibold py-2 rounded-lg text-xs disabled:opacity-50"
+                              >
+                                Cancelar
+                              </button>
+                              <button
+                                onClick={() => confirmarAdicao(g.itens[0].id)}
+                                disabled={boLoading || !addCodigo.trim() || !addDescricao.trim() || !addQtde}
+                                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2 rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40"
+                              >
+                                {boLoading
+                                  ? <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                                  : <><Plus size={13} />Adicionar</>}
+                              </button>
                             </div>
                           </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-cobeb-text text-xs font-semibold">
-                              {Number(item.qtde_pallets).toLocaleString('pt-BR', { maximumFractionDigits: 1 })}
-                            </p>
-                            <p className="text-slate-500 text-[10px]">
-                              {Number(item.qtde_skus).toLocaleString('pt-BR')} cx
-                            </p>
-                          </div>
-                        </div>
-                      ))}
+                        ) : (
+                          <button
+                            onClick={() => abrirAdicao(g.key)}
+                            className="w-full px-4 py-2.5 border-t border-[#0B1929] flex items-center justify-center gap-1.5 text-emerald-600 hover:bg-emerald-50/60 text-xs font-semibold transition-colors"
+                          >
+                            <Plus size={14} />Adicionar produto
+                          </button>
+                        )
+                      )}
 
                       {/* Totais */}
                       <div className="grid items-center gap-x-3 px-4 py-2.5 bg-[#EBF5FF]"
