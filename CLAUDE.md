@@ -46,6 +46,30 @@ da última tag até alguém publicar outra.
   Cobeb exige — trocar um pelo outro dá erro que fala de autenticação e manda
   procurar senha errada).
 
+### ⚠ Deploy do Pages — duas armadilhas (24/11/2026)
+
+A linha "Pages é automático no push" tem letra miúda que já custou tempo:
+
+- **O `deploy.yml` tem filtro `paths:`** (só `src/**`, `public/**`, `index.html`,
+  `package*.json`, os configs e o próprio workflow). Push que mexe **só** em
+  `sql/`, docs, `android/` ou `scripts/` **não republica o Pages** — e não é
+  erro, é de propósito (corte de minutos do Actions, aprovado pelo Lucas). Por
+  isso **commit vazio NÃO dispara** o deploy (não casa `paths:`). Para forçar sem
+  mudar código: **Actions → Deploy to GitHub Pages → Run workflow**
+  (`workflow_dispatch`), ou `gh workflow run deploy.yml --ref main`.
+
+- **Quando o passo final `deploy-pages` falha com "No artifacts named
+  github-pages were found" (0 artefatos)**, é quase sempre **consistência
+  eventual do GitHub** — o `upload-pages-artifact` passou (✓), o `deploy-pages`
+  ainda não enxergou o artefato. É transitório. **NUNCA conserte com
+  `gh run rerun --failed`**: cada rerun re-executa o build+upload **no mesmo
+  run** e **acumula** outro artefato `github-pages`, e aí o erro vira o oposto —
+  *"Multiple artifacts... unexpectedly found. Artifact count is 2"* — e trava de
+  vez. O certo é **disparar um run NOVO** (escopo de artefato limpo): mudar/empurrar
+  código de app, ou o `workflow_dispatch` acima. Medido nesta data: 1 falha
+  transitória virou 3 depois de dois `rerun --failed`; um `workflow_dispatch`
+  resolveu de primeira. O código no `main` nunca foi o problema.
+
 ## O que os defeitos deste sistema têm em comum
 
 Os três corrigidos em 02/09/2026 são a **mesma família**, e vale conhecê-la
