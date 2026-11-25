@@ -255,7 +255,7 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
 
       // Task 4: sync JS periódico — só envia PATCH se o nativo não estiver rodando
       sincronizar()
-      syncTimerRef.current = setInterval(sincronizar, 30000)
+      syncTimerRef.current = setInterval(sincronizar, 90000) // 30s->90s p/ cortar requisições (log ingestion)
 
       // Fallback de posição por rede (cell/WiFi): funciona em galpões e áreas sem GPS.
       // Task 4: enableHighAccuracy: true para maior precisão quando o JS assume
@@ -320,7 +320,7 @@ export function useRastreamento({ viagemId, statusRef, fabricasAlvo, isOnline, o
     } else {
       // Browser: sync JS periódico + watchPosition para geofence
       sincronizar()
-      syncTimerRef.current = setInterval(sincronizar, 30000)
+      syncTimerRef.current = setInterval(sincronizar, 90000) // 30s->90s p/ cortar requisições (log ingestion)
 
       if (!navigator.geolocation) return
       const watchId = navigator.geolocation.watchPosition(

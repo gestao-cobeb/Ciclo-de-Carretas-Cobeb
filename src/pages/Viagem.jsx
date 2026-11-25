@@ -375,15 +375,37 @@ export default function Viagem() {
     if (nf) updates.numero_nf = nf
     const updated = { ...viagemAtiva, ...updates }
 
+    // Chegada na Revenda (requireNF) NÃO pode ser registrada offline: gerava
+    // portaria órfã + viagem presa (bug 14/11). Barrada aqui como defesa; o botão
+    // também fica desabilitado quando offline.
+    if (etapa.requireNF && !isOnline) {
+      alert('Sem conexão. A Chegada na Revenda precisa ser registrada com internet. Tente novamente quando o sinal voltar.')
+      return
+    }
+
     const tryDB = async () => {
-      const { error } = await supabase.from('viagens').update(updates).eq('id', viagemAtiva.id)
-      return !error
+      // .select() + conferência de linhas: no Supabase, UPDATE que acerta ZERO
+      // linhas NÃO retorna erro. Sem isto, "sucesso" podia significar "nada mudou"
+      // — foi o que deixava a viagem presa e criava portaria órfã.
+      const { data, error } = await supabase
+        .from('viagens').update(updates).eq('id', viagemAtiva.id).select('id')
+      return !error && Array.isArray(data) && data.length > 0
     }
 
     let dbOk = false
-    if (isOnline && await tryDB()) {
-      setViagemAtiva(updated); cacheViagem(updated)
-      dbOk = true
+    if (isOnline) {
+      dbOk = await tryDB()
+      if (dbOk) {
+        setViagemAtiva(updated); cacheViagem(updated)
+      } else if (etapa.requireNF) {
+        // Online, mas o UPDATE não alterou a viagem (estado inesperado / trava do
+        // banco). NÃO avança e NÃO cria portaria — evita a portaria órfã.
+        alert('Não foi possível registrar a Chegada na Revenda: a viagem não está no estado esperado. Atualize o app e tente novamente; se continuar, avise o suporte.')
+        return
+      } else {
+        saveOfflineAction({ type: 'UPDATE_VIAGEM', viagem_id: viagemAtiva.id, updates })
+        setViagemAtiva(updated); cacheViagem(updated); setPendingSync(true)
+      }
     } else {
       saveOfflineAction({ type: 'UPDATE_VIAGEM', viagem_id: viagemAtiva.id, updates })
       setViagemAtiva(updated); cacheViagem(updated); setPendingSync(true)
@@ -397,9 +419,9 @@ export default function Viagem() {
     }
 
     if (etapa.requireNF) {
-      // A tarefa para o Conferente agora é criada pela Portaria ao registrar entrada.
-      // Portaria só vai ao banco se o UPDATE da viagem também foi — senão ambos ficam
-      // na fila offline e sobem juntos no sync, evitando portaria sem viagem atualizada.
+      // A tarefa para o Conferente é criada pela Portaria ao registrar entrada.
+      // Aqui já é garantido dbOk === true (chegada offline barrada e UPDATE de 0
+      // linhas abortado acima), então a portaria nunca fica órfã.
       const unidadeId  = agendamento?.revenda_id ?? viagemAtiva.unidade_descarga_id
       const portariaAtend = {
         viagem_id:       viagemAtiva.id,
@@ -410,19 +432,15 @@ export default function Viagem() {
         placa_carreta:   viagemAtiva.carreta?.placa ?? null,
         agendamento_id:  agendamento?.id ?? null,
       }
-      if (dbOk) {
-        const { error: portariaErr } = await supabase.from('portaria_atendimentos').insert(portariaAtend)
-        if (portariaErr) {
-          alert(
-            'Chegada registrada, mas houve um erro ao notificar a portaria.\n' +
-            'Informe à portaria para fazer a entrada manual com a placa ' +
-            (portariaAtend.placa_cavalo ?? '') + '.\n\nDetalhe: ' + portariaErr.message
-          )
-        } else if (agendamento?.id) {
-          await supabase.from('agendamentos').update({ status: 'realizado' }).eq('id', agendamento.id)
-        }
-      } else {
-        saveOfflineAction({ type: 'INSERT_PORTARIA', portariaAtend })
+      const { error: portariaErr } = await supabase.from('portaria_atendimentos').insert(portariaAtend)
+      if (portariaErr) {
+        alert(
+          'Chegada registrada, mas houve um erro ao notificar a portaria.\n' +
+          'Informe à portaria para fazer a entrada manual com a placa ' +
+          (portariaAtend.placa_cavalo ?? '') + '.\n\nDetalhe: ' + portariaErr.message
+        )
+      } else if (agendamento?.id) {
+        await supabase.from('agendamentos').update({ status: 'realizado' }).eq('id', agendamento.id)
       }
     }
 
@@ -619,6 +637,7 @@ export default function Viagem() {
               dispensando={dispensando}
               verificarBateria={rastreamento.verificarBateria}
               pedirIsencaoBateria={rastreamento.pedirIsencao}
+              isOnline={isOnline}
             />
         }
       </main>
@@ -1004,7 +1023,7 @@ const STATUS_GPS_LABEL = {
   retornando:  'Rastreando — retornando à revenda',
 }
 
-function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerificarTarefa, showNF, setShowNF, numeroNF, setNumeroNF, registrando, setRegistrando, registrarEtapa, agendamento, unidades, onAbrirAgendamento, onCancelarAgendamento, showModalAgendamento, onFecharModalAgendamento, onCriarAgendamento, onDefinirUnidade, onDispensar, dispensando, verificarBateria, pedirIsencaoBateria }) {
+function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerificarTarefa, showNF, setShowNF, numeroNF, setNumeroNF, registrando, setRegistrando, registrarEtapa, agendamento, unidades, onAbrirAgendamento, onCancelarAgendamento, showModalAgendamento, onFecharModalAgendamento, onCriarAgendamento, onDefinirUnidade, onDispensar, dispensando, verificarBateria, pedirIsencaoBateria, isOnline }) {
   const numerosUnicos = [...new Set(pedidos.map(p => p.numero_pedido))]
   const totalPallets  = pedidos.reduce((s, p) => s + (Number(p.qtde_pallets) || 0), 0)
   const totalSkus     = pedidos.reduce((s, p) => s + (Number(p.qtde_skus)    || 0), 0)
@@ -1021,6 +1040,11 @@ function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerifica
   const precisaAgendar = saidaRevenda && !chegadaRevenda && !agendamento
 
   async function handleEtapa(etapa) {
+    // Chegada na Revenda offline gerava portaria órfã + viagem presa (bug 14/11).
+    if (etapa.requireNF && !isOnline) {
+      alert('Sem conexão. A Chegada na Revenda precisa ser registrada com internet. Tente novamente quando o sinal voltar.')
+      return
+    }
     if (etapa.key === 'saida_revenda') { setShowModalUnidade(true); return }
     if (etapa.requireNF) { setShowNF(true); return }
     setRegistrando(true)
@@ -1198,12 +1222,17 @@ function ViagemAtiva({ viagem, pedidos, tarefaStatus, portariaStatus, onVerifica
 
               <button
                 onClick={() => handleEtapa(etapa)}
-                disabled={registrando || (etapa.closeCycle && portariaStatus !== 'concluido') || (etapa.key === 'chegada_revenda' && precisaAgendar)}
+                disabled={registrando || (etapa.closeCycle && portariaStatus !== 'concluido') || (etapa.key === 'chegada_revenda' && precisaAgendar) || (etapa.key === 'chegada_revenda' && !isOnline)}
                 className="w-full bg-cobeb-navy hover:bg-cobeb-blue disabled:opacity-50 text-white font-bold py-5 rounded-xl text-base transition-colors flex items-center justify-center gap-3">
                 {registrando
                   ? <><div className="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin" />Registrando...</>
                   : <><CheckCircle size={20} />{etapa.label}</>}
               </button>
+              {etapa.key === 'chegada_revenda' && !isOnline && (
+                <p className="text-xs text-amber-600 mt-2 text-center font-medium">
+                  Sem conexão — a Chegada na Revenda só pode ser registrada com internet.
+                </p>
+              )}
             </div>
           )
 

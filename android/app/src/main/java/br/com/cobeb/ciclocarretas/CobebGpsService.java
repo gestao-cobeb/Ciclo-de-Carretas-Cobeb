@@ -54,7 +54,7 @@ public class CobebGpsService extends Service {
     private static final int    NOTIFICATION_ID = 99201;
     static final String         PREFS_NAME      = "cobeb_gps_prefs";
 
-    private static final long SYNC_INTERVAL_S      = 30L;
+    private static final long SYNC_INTERVAL_S      = 90L;  // 30s->90s: corta ~2/3 das requisições (log ingestion) sem perder o "ativo" (sem-sinal só após >30min)
     private static final long LOCATION_INTERVAL_MS = 10_000L;
     private static final int  CONNECT_TIMEOUT_MS   = 10_000;
     private static final int  READ_TIMEOUT_MS      = 10_000;
