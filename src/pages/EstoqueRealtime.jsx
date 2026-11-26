@@ -304,15 +304,27 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
 
   const podeReverter    = isAdminTotal && ['na_fabrica', 'retornando', 'aguardando_conferencia'].includes(viagem.status)
   const podeSubstituir  = isAdminTotal && ['iniciada', 'em_transito', 'na_fabrica'].includes(viagem.status)
+  // Redirecionar destino só antes de o motorista chegar na unidade
+  // (aguardando_conferencia = "chegou na unidade"): depois disso a portaria
+  // e a conferência já estão vinculadas e trocar a unidade é incoerente.
+  const podeAlterarDestino = isAdminTotal && viagem.status !== 'aguardando_conferencia'
 
   async function salvarDestino() {
     if (!novaDest || novaDest === viagem.unidade_descarga_id) return
     setSavingDestino(true)
-    const { error } = await supabase
+    // .select() devolve as linhas afetadas: no Supabase um UPDATE que acerta
+    // ZERO linhas NÃO retorna erro (RLS/condição), então conferir !error não
+    // prova que gravou. Se nenhuma linha voltou, a troca não aconteceu.
+    const { data, error } = await supabase
       .from('viagens')
       .update({ unidade_descarga_id: novaDest })
       .eq('id', viagem.id)
+      .select('id')
     if (error) { alert('Erro ao redirecionar: ' + error.message); setSavingDestino(false); return }
+    if (!data || data.length === 0) {
+      alert('Não foi possível redirecionar: a viagem não foi atualizada (sem permissão ou fase inválida).')
+      setSavingDestino(false); return
+    }
     if (viagem.agendamento_id) {
       await supabase
         .from('agendamentos')
@@ -651,7 +663,7 @@ function ViagemCard({ viagem, expanded, onToggle, isAdminTotal, onRefresh, unida
             <span className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
               <MapPin size={9} />
               {viagem.unidade_descarga_nome}
-              {isAdminTotal && !editDestino && (
+              {podeAlterarDestino && !editDestino && (
                 <span
                   role="button"
                   tabIndex={0}
