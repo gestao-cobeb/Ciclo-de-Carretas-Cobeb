@@ -199,6 +199,11 @@ export default function DashboardComercial() {
         .neq('status', 'cancelado')
         .not('cod_produto', 'is', null)
         .gt('qtde_pallets', 0)
+        // Sem isto o Supabase corta em 1.000 linhas (teto padrão). Como não há
+        // .order(), o corte cai nos dias mais recentes — eles somem do resultado
+        // (ex.: estender o filtro até 27 não mudava nada). Espelha o .limit da
+        // consulta de preços, que já tratava o mesmo teto.
+        .limit(100000)
 
       if (unidades.length) q = q.in('unidade_id', unidades)
       if (fabricas.length) q = q.in('codigo_fabrica', fabricas)

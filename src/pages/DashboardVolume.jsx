@@ -706,7 +706,11 @@ export default function DashboardVolume() {
           .not('qtde_pallets', 'is', null)
           .gt('qtde_pallets', 0)
           .not('cod_produto', 'is', null)
-          .not('codigo_fabrica', 'is', null),
+          .not('codigo_fabrica', 'is', null)
+          // Sem .limit o Supabase corta em 1.000 linhas (teto padrão) e os dias
+          // mais recentes do mês somem — era isso que zerava o D0 de hoje e
+          // deixava o acumulado parado em dias atrás.
+          .limit(100000),
       ])
 
       setMetaConfig(cfgData?.valor?.[mesRef] ?? null)
