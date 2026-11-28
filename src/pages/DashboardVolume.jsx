@@ -626,6 +626,13 @@ function CardCarrosPorSegmento({ metas, hlData, diasRestantes, hlPerPallet, unit
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
+// Data local em YYYY-MM-DD. NÃO usar toISOString(): ele converte para UTC e,
+// à noite no horário de Brasília, "hoje" pula para o dia seguinte — o que
+// deslocava D0/D-1 em um dia. (O Dashboard Comercial já usa data local.)
+function localDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 export default function DashboardVolume() {
   const [year,  setYear]  = useState(() => new Date().getFullYear())
   const [month, setMonth] = useState(() => new Date().getMonth())
@@ -642,6 +649,7 @@ export default function DashboardVolume() {
   // Dados estáticos de classificação — carregados uma vez
   const staticRef   = useRef({ zeroCervSet: new Set(), zeroNabSet: new Set(), highEndSet: new Set(), cobebSet: new Set() })
   const pedsRealRef = useRef([])
+  const pedsAllRef  = useRef([])
   const catMapRef   = useRef({})
   const [staticLoaded, setStaticLoaded] = useState(false)
 
@@ -686,10 +694,6 @@ export default function DashboardVolume() {
       const monthStart = `${mesRef}-01`
       const lastDay    = new Date(year, month + 1, 0).getDate()
       const monthEnd   = `${mesRef}-${String(lastDay).padStart(2, '0')}`
-
-      const yesterday    = new Date()
-      yesterday.setDate(yesterday.getDate() - 1)
-      const yesterdayStr = yesterday.toISOString().slice(0, 10)
 
       const [{ data: cfgData }, { data: unitPctData }, { data: pedsData }] = await Promise.all([
         supabase.from('dashboard_configs').select('valor').eq('chave', 'meta_volume_puxada').maybeSingle(),
@@ -743,6 +747,10 @@ export default function DashboardVolume() {
       setHlPerPalletSeg(perSeg)
 
       pedsRealRef.current = pedsAll.filter(p => p.viagem_id != null || p.status === 'realizado')
+      // D0 ("marcado no dia") considera TODO o volume puxado hoje, vinculado ou
+      // não — a viagem ainda será feita. Só exclui cancelado. O acumulado do mês
+      // e o D-1 continuam só com vinculado/realizado (pedsRealRef).
+      pedsAllRef.current  = pedsAll.filter(p => p.status !== 'cancelado')
       catMapRef.current   = catMap
       computeHl(filtroUnidade)
       setLoading(false)
@@ -752,41 +760,47 @@ export default function DashboardVolume() {
 
   // Recomputa HL quando o filtro de unidade muda (sem re-fetch)
   useEffect(() => {
-    if (!pedsRealRef.current.length) return
+    if (!pedsRealRef.current.length && !pedsAllRef.current.length) return
     computeHl(filtroUnidade)
   }, [filtroUnidade])
 
   function computeHl(unitId) {
     const { zeroCervSet, zeroNabSet, highEndSet } = staticRef.current
-    const today        = new Date()
-    const todayStr     = today.toISOString().slice(0, 10)
-    const yesterday    = new Date(today); yesterday.setDate(today.getDate() - 1)
-    const yesterdayStr = yesterday.toISOString().slice(0, 10)
-    const peds = unitId
-      ? pedsRealRef.current.filter(p => p.unidade_id === unitId)
-      : pedsRealRef.current
+    const todayStr     = localDateStr(new Date())
+    const yesterday    = new Date(); yesterday.setDate(yesterday.getDate() - 1)
+    const yesterdayStr = localDateStr(yesterday)
+    const byUnit   = arr => unitId ? arr.filter(p => p.unidade_id === unitId) : arr
+    const pedsReal = byUnit(pedsRealRef.current)   // vinculado/realizado → acumulado + D-1
+    const pedsDia  = byUnit(pedsAllRef.current)    // todo não-cancelado   → D0 (marcado no dia)
     const cMap = catMapRef.current
     const result = {}
     SEGMENTOS_FOLHA.forEach(seg => { result[seg] = { total: 0, D1: 0, D0: 0, porDia: {} } })
-    peds.forEach(p => {
-      const cat = cMap[p.cod_produto]
-      if (!cat) return
-      const seg = classifySegmento(p.cod_produto, cat.tipo_marca ?? '', cat.embalagem ?? '', zeroCervSet, zeroNabSet, highEndSet)
-      if (!SEGMENTOS_FOLHA.includes(seg)) return
-      const hl = (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
-      if (hl <= 0) return
-      const ds = p.data_puxada?.slice(0, 10)
-      if (!ds) return
-      // Acumulado até D-1
+
+    const segDe = (p, cat) => classifySegmento(p.cod_produto, cat.tipo_marca ?? '', cat.embalagem ?? '', zeroCervSet, zeroNabSet, highEndSet)
+    const hlDe  = (p, cat) => (p.qtde_pallets || 0) * (cat.caixas_pallet || 0) * (cat.nr_fator_conversao || 0)
+
+    // Acumulado até D-1 e o próprio D-1: só volume vinculado/realizado
+    pedsReal.forEach(p => {
+      const cat = cMap[p.cod_produto]; if (!cat) return
+      const seg = segDe(p, cat);       if (!SEGMENTOS_FOLHA.includes(seg)) return
+      const hl  = hlDe(p, cat);        if (hl <= 0) return
+      const ds  = p.data_puxada?.slice(0, 10); if (!ds) return
       if (ds <= yesterdayStr) {
         result[seg].total += hl
         result[seg].porDia[ds] = (result[seg].porDia[ds] || 0) + hl
         if (ds === yesterdayStr) result[seg].D1 += hl
       }
-      if (ds === todayStr) {
-        result[seg].D0 += hl
-      }
     })
+
+    // D0: tudo que foi marcado HOJE, vinculado ou não (a viagem ainda será feita)
+    pedsDia.forEach(p => {
+      const cat = cMap[p.cod_produto]; if (!cat) return
+      const seg = segDe(p, cat);       if (!SEGMENTOS_FOLHA.includes(seg)) return
+      const hl  = hlDe(p, cat);        if (hl <= 0) return
+      const ds  = p.data_puxada?.slice(0, 10); if (!ds) return
+      if (ds === todayStr) result[seg].D0 += hl
+    })
+
     setHlData(result)
   }
 
