@@ -1611,6 +1611,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
       .gt('qtde_pallets', 0)
       .gte('data_puxada', dataInicio)
       .lte('data_puxada', dataFim)
+      .limit(100000)   // sem isto o Supabase corta em 1.000 linhas (teto padrão)
     if (filtroUnidade) realizadoQ = realizadoQ.eq('unidade_id', filtroUnidade)
 
     const [pedResult, realizadoResult] = await Promise.all([
@@ -1621,6 +1622,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
             .in('viagem_id', vids)
             .not('cod_produto', 'is', null)
             .gt('qtde_pallets', 0)
+            .limit(100000)   // sem isto o Supabase corta em 1.000 linhas (teto padrão)
         : Promise.resolve({ data: [] }),
       realizadoQ,
     ])
@@ -1707,6 +1709,7 @@ function GraficoPlanejaVsReal({ rows, agrupamento, dataInicio, dataFim, filtros,
       .gt('qtde_pallets', 0)
       .gte('data_puxada', dataInicio)
       .lte('data_puxada', dataFim)
+      .limit(100000)   // sem isto o Supabase corta em 1.000 linhas (teto padrão)
     if (filtroUnidade) q = q.eq('unidade_id', filtroUnidade)
 
     const { data: allPeds } = await q
@@ -2774,7 +2777,8 @@ export default function Dashboard({ mode = 'armazem' }) {
         .not('data_puxada', 'is', null)
         .not('codigo_fabrica', 'is', null)
         .gte('data_puxada', dataInicio)
-        .lte('data_puxada', dataFim),
+        .lte('data_puxada', dataFim)
+        .limit(100000),   // sem isto o Supabase corta em 1.000 linhas (teto padrão)
       supabase
         .from('tarefas')
         .select('id, viagem_id, blitz_concluida, created_at')
@@ -2838,7 +2842,8 @@ export default function Dashboard({ mode = 'armazem' }) {
         .from('pedidos')
         .select('viagem_id, codigo_fabrica')
         .in('viagem_id', vids)
-        .not('codigo_fabrica', 'is', null),
+        .not('codigo_fabrica', 'is', null)
+        .limit(100000),   // sem isto o Supabase corta em 1.000 linhas (teto padrão)
       supabase
         .from('viagens_dispersao')
         .select('viagem_id, metrica')
